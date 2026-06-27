@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "outcome-receipts"
+version = "0.1.0"
+description = "Draft funder outcome reports where every number is a receipt, with a fail-closed grounding gate."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Chelsea Kelly-Reif" }]
+keywords = [
+  "nonprofit",
+  "grant-reporting",
+  "outcomes",
+  "provenance",
+  "hallucination",
+  "human-services",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = []
+
+[project.scripts]
+receipts = "outcome_receipts.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "mypy>=1.8", "ruff>=0.5"]
+
+[project.urls]
+Homepage = "https://github.com/ChelseaKR/outcome-receipts"
+Documentation = "https://github.com/ChelseaKR/outcome-receipts/tree/main/docs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/outcome_receipts"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

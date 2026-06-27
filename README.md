@@ -1,0 +1,133 @@
+# outcome-receipts
+
+Draft funder outcome reports where **every number is a receipt**. The tool reads
+a nonprofit's own service data, computes each required figure with a deterministic
+query, and attaches to that figure a receipt: the exact query, the count of rows
+it drew from, a content hash of that data slice, and a timestamp. It then drafts
+a narrative around the receipted figures and runs a fail-closed grounding gate
+that refuses to export if any number in the narrative does not trace to a receipt.
+
+> **Status: v0.1, early but working.** The deterministic path runs end to end and
+> is tested: service-data CSV in, receipted figures out, a drafted narrative, and
+> a grounding gate that blocks export on any unverifiable number. No language
+> model is involved in v0.1. A committed eval ([eval/report.md](eval/report.md))
+> scores the gate. Track progress in [docs/ROADMAP.md](docs/ROADMAP.md); the build
+> is specified in [CLAUDE.md](CLAUDE.md).
+
+## The problem
+
+Funders are starting to reject reports that are "substantially AI-developed,"
+because a language model that writes plausible outcome numbers is a liability, not
+a help. The fix is not to ban the model; it is to make the numbers come from the
+data and prove it. The verify-or-flag idea is published, and one commercial tool
+markets deterministic record-cited reporting. The contribution here is the open,
+offline chain — compute with a receipt, draft, fail-closed grounding gate, export
+with a receipts manifest — plus the metric-mapping over messy real exports, and a
+privacy posture (aggregate, small-cell-aware) a human-services org can defend.
+
+## How it works
+
+1. **Compute.** Service data is loaded into an in-memory SQLite database, and each
+   metric is run as a SQL query. The value comes from the query, never from
+   generated text. Every figure carries a receipt.
+2. **Draft.** A report template's `{metric_id}` placeholders are filled with the
+   figures' display strings. v0.1's drafter writes no number of its own.
+3. **Ground.** The grounding gate finds every number in the narrative and binds
+   each to a figure whose display matches. A number that matches no figure is
+   unbound, and an unbound number blocks export. The gate is mechanical: it checks
+   that each number traces to a receipt, it does not ask a model whether the text
+   "looks faithful."
+4. **Export.** When the gate passes, the report and a JSON receipts manifest are
+   written, so a funder or auditor can trace every figure to the query and data
+   slice that produced it.
+
+The load-bearing invariant: **numbers never come from a model.** In a later
+version a model drafts the prose, but the grounding gate is the enforcement that
+every number in it still came from a receipt.
+
+## Usage
+
+Install (Python 3.11+):
+
+```sh
+make install
+```
+
+Run the bundled demo:
+
+```sh
+receipts run --config examples/housing-demo/report.toml --out out
+```
+
+```text
+figures computed: 4
+numbers in narrative: 4 (bound 4, unbound 0)
+
+grounding gate: PASS
+  report:   out/report.md
+  receipts: out/receipts.json
+```
+
+It writes `out/report.md` (the narrative plus a receipts manifest) and
+`out/receipts.json` (the machine-readable receipts). Check a narrative against the
+receipts at any time:
+
+```sh
+receipts audit --config examples/housing-demo/report.toml --narrative some-draft.md
+```
+
+If the narrative contains a number that no figure backs, `audit` reports it and
+exits non-zero, and `run` refuses to export.
+
+Score the gate on the committed fixtures:
+
+```sh
+receipts eval --config examples/housing-demo/report.toml
+```
+
+The committed result is in [eval/report.md](eval/report.md): the drafted
+narrative grounds 100% of its numbers, so the gate passes. That the gate catches
+an injected unverifiable number is shown by the merge-blocking test
+`tests/test_grounding_gate.py`.
+
+## What it does not do
+
+* It does **not let a model invent numbers.** Figures come from queries; the gate
+  enforces it.
+* It is **not a data warehouse or a BI tool.** It computes the figures a report
+  needs and proves them, then gets out of the way.
+* It does **not claim a new verification primitive.** The verify-or-flag idea is
+  published; the contribution is the open offline chain, the metric-mapping, and
+  the privacy posture.
+
+## Standards conformance
+
+This repo holds itself to the portfolio's shared engineering standards. The
+project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
+[docs/RESPONSIBLE-TECH-AUDITS.md](docs/RESPONSIBLE-TECH-AUDITS.md).
+
+| Standard | State |
+|----------|-------|
+| Responsible-Tech Framework | Applies — see docs/RESPONSIBLE-TECH-AUDITS.md |
+| Code Quality | Applies — ruff, mypy --strict, pytest, merge-blocking |
+| Documentation | Applies |
+| Quality & Metrics | Applies — committed eval with Wilson CIs, fail-closed gate |
+| AI Evaluation | Applies when the drafting seam lands (v0.3); v0.1 has no model in any path |
+| Security & Supply-Chain | Applies — hardening (SBOM, signed releases, pinned actions) lands toward 1.0 |
+| CI/CD | Applies — `make verify` mirrors CI |
+| Accessibility | N/A — headless CLI, no HTML/UI surface yet |
+| Internationalization | N/A — English-only at v0.1; report copy is externalizable in the spec |
+| Observability | N/A — library/CLI, no long-running service |
+
+## For Claude Code
+
+Read [CLAUDE.md](CLAUDE.md) first. It is the source of truth for scope,
+conventions, and the build plan, and it states the hard guardrails: numbers never
+come from the model, the grounding gate is fail-closed, small-cell suppression is
+a privacy invariant, and the honest framing of what is solved art versus the
+contribution. Then read [docs/ROADMAP.md](docs/ROADMAP.md) and build phase by
+phase.
+
+## License
+
+Apache-2.0.

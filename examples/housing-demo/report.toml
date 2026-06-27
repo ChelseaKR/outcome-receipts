@@ -1,0 +1,42 @@
+# A funder outcome report for a housing program. Every {placeholder} in the
+# template names a metric below; the drafter substitutes the metric's computed,
+# receipted figure, and the grounding gate refuses to export if any number in the
+# rendered narrative does not trace to a receipt.
+#
+#   receipts run --config examples/housing-demo/report.toml --out out
+
+[data]
+path = "services.csv"
+
+[report]
+title = "Housing Program Outcome Report"
+template = """
+In the reporting period, our housing program served {clients_served} clients. \
+Of the {exits} who exited the program, {exits_permanent} moved into permanent \
+housing, a permanent-housing rate of {pct_permanent}.
+"""
+
+[metrics.clients_served]
+description = "Distinct clients with any enrollment in the period."
+unit = "count"
+value_sql = "SELECT COUNT(DISTINCT client_id) FROM data"
+slice_sql = "SELECT client_id FROM data"
+
+[metrics.exits]
+description = "Enrollments that exited the program (an exit date is present)."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_date != ''"
+slice_sql = "SELECT * FROM data WHERE exit_date != ''"
+
+[metrics.exits_permanent]
+description = "Exits whose destination was permanent housing."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent'"
+
+[metrics.pct_permanent]
+description = "Share of exits that went to permanent housing."
+unit = "percent"
+decimals = 0
+value_sql = "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != ''"
+slice_sql = "SELECT * FROM data WHERE exit_date != ''"

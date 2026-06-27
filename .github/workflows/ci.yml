@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least-privilege default token.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to tags here for readability; pinned to commit SHAs
+      # before the first tagged release per the supply-chain standard.
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # Drive CI through the Makefile so it runs the same path as `make verify`.
+      - name: Install
+        run: make install
+      - name: Verify (ruff, mypy --strict, pytest)
+        run: make verify
+      - name: Eval report is current
+        run: |
+          make eval
+          git diff --exit-code eval/report.md
