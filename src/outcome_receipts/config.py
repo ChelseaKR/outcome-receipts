@@ -55,6 +55,7 @@ def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
         slice_sql=str(body["slice_sql"]),
         unit=unit,
         decimals=int(body.get("decimals", 0)),
+        definition=str(body.get("definition", "")),
     )
 
 

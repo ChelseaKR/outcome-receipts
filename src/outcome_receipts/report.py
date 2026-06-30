@@ -14,6 +14,7 @@ from outcome_receipts.charts import Chart
 from outcome_receipts.comparison import ComparisonResult
 from outcome_receipts.evaluate import EvalReport
 from outcome_receipts.models import Figure
+from outcome_receipts.provenance import Provenance, provenance_markdown, provenance_record
 
 
 def render_comparison_table(result: ComparisonResult) -> str:
@@ -75,18 +76,29 @@ def render_report(
     comparison: ComparisonResult | None = None,
     charts: Sequence[Chart] = (),
     chart_dir: str = "charts",
+    provenance: Provenance | None = None,
 ) -> str:
-    """Render the narrative, optional comparison and charts, then receipts."""
+    """Render the narrative, optional comparison and charts, provenance, receipts.
+
+    When ``provenance`` is given, a standard provenance block is embedded before
+    the receipts, stating that no number was written by a model and that the gate
+    bound every number before export. The receipts section then lists each figure
+    with its plain-language definition and the receipt that backs it.
+    """
 
     lines = [f"# {title}", "", narrative.strip()]
     if comparison is not None:
         lines.extend(["", render_comparison_table(comparison)])
     if charts:
         lines.extend(["", render_charts_section(charts, chart_dir=chart_dir)])
+    if provenance is not None:
+        lines.extend(["", provenance_markdown(provenance)])
     lines.extend(["", "## Receipts", ""])
     for figure in sorted(figures, key=lambda f: f.metric_id):
         receipt = figure.receipt
         lines.append(f"- **{figure.metric_id}** = {figure.display}")
+        if receipt.definition:
+            lines.append(f"  - definition: {receipt.definition}")
         lines.append(f"  - query: `{receipt.value_sql}`")
         lines.append(f"  - rows in slice: {receipt.row_count}")
         lines.append(f"  - slice hash: `{receipt.slice_hash}`")
@@ -94,16 +106,24 @@ def render_report(
     return "\n".join(lines) + "\n"
 
 
-def receipts_manifest(figures: Sequence[Figure]) -> str:
-    """Render the receipts as a JSON manifest for machine verification."""
+def receipts_manifest(
+    figures: Sequence[Figure], *, provenance: Provenance | None = None
+) -> str:
+    """Render the receipts as a JSON manifest for machine verification.
 
-    payload = {
+    When ``provenance`` is given, the manifest also carries the machine-readable
+    provenance attestation, so a consumer can check the no-model and gate-passed
+    claims without re-reading the prose.
+    """
+
+    payload: dict[str, object] = {
         "receipts": [
             {
                 "metric_id": f.receipt.metric_id,
                 "value": f.receipt.value,
                 "display": f.display,
                 "unit": f.receipt.unit,
+                "definition": f.receipt.definition,
                 "value_sql": f.receipt.value_sql,
                 "row_count": f.receipt.row_count,
                 "slice_hash": f.receipt.slice_hash,
@@ -112,6 +132,8 @@ def receipts_manifest(figures: Sequence[Figure]) -> str:
             for f in sorted(figures, key=lambda f: f.metric_id)
         ]
     }
+    if provenance is not None:
+        payload["provenance"] = provenance_record(provenance)
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
