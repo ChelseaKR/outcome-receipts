@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use outcome-receipts, please cite it using this metadata."
+title: "outcome-receipts"
+abstract: >-
+  Drafts funder outcome reports where every number is a receipt. The tool reads a
+  nonprofit's own service data, computes each required figure with a deterministic
+  query, and attaches to that figure a receipt: the exact query, the count of rows
+  it drew from, a content hash of that data slice, and a timestamp. It then drafts
+  a narrative around the receipted figures and runs a fail-closed grounding gate
+  that refuses to export if any number in the narrative does not trace to a
+  receipt. No language model is involved in v0.1.
+type: software
+authors:
+  - given-names: "Chelsea"
+    family-names: "Kelly-Reif"
+    email: "ckellyreif@gmail.com"
+    alias: "ChelseaKR"
+version: "0.1.0"
+date-released: "2026-06-27"
+license: "Apache-2.0"
+repository-code: "https://github.com/ChelseaKR/outcome-receipts"
+url: "https://github.com/ChelseaKR/outcome-receipts"
+keywords:
+  - "nonprofit"
+  - "grant-reporting"
+  - "outcomes"
+  - "provenance"
+  - "hallucination"
+  - "human-services"
