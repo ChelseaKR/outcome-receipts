@@ -72,3 +72,7 @@ def test_cli_run_writes_report_charts_and_manifest(tmp_path: Path) -> None:
     assert "| 12 | 14 | 2 | increase |" in report
     # The accessible data table carries the chart's grounded numbers.
     assert "| Permanent | 13 |" in report
+    # The provenance statement is embedded, and the trace view ships alongside.
+    assert "## Provenance" in report
+    assert "No figure was written by a language model" in report
+    assert (out / "trace.html").exists()

@@ -25,6 +25,13 @@ class MetricSpec:
     row count and the slice hash, the evidence that the value came from a specific
     set of records. ``unit`` selects formatting: ``count`` or ``percent``.
     ``format`` is an optional override of the default formatting for the unit.
+
+    ``description`` is a short label. ``definition`` is the precise, plain-language
+    statement of what the figure counts: the time window, who is in scope, and the
+    deduplication rule. The definition rides in the receipt and renders next to the
+    figure, so a reviewer can see and contest the choices a query encodes (a count
+    of "clients served" is only as fair as its definition) instead of inferring
+    them from the SQL.
     """
 
     metric_id: str
@@ -33,6 +40,7 @@ class MetricSpec:
     slice_sql: str
     unit: str = "count"
     decimals: int = 0
+    definition: str = ""
 
 
 @dataclass(frozen=True)
@@ -42,7 +50,9 @@ class Receipt:
     ``slice_hash`` is a BLAKE2b hash of the canonicalized rows the figure was
     computed over, so the same data reproduces the same receipt and a changed
     slice is detectable. ``computed_at`` comes from an injected clock so a
-    committed eval is reproducible.
+    committed eval is reproducible. ``definition`` carries the figure's
+    plain-language definition forward from its ``MetricSpec`` so the receipt is
+    self-describing without the spec on hand.
     """
 
     metric_id: str
@@ -52,6 +62,7 @@ class Receipt:
     value: float
     unit: str
     computed_at: str
+    definition: str = ""
 
 
 @dataclass(frozen=True)

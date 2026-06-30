@@ -24,36 +24,42 @@ each headline outcome from the first quarter to the second.
 
 [metrics.clients_served]
 description = "Distinct clients with any enrollment in the period."
+definition = "Each person enrolled in the housing program during the grant period, counted once by client_id even if they enrolled more than once. The unit is the person, not the enrollment."
 unit = "count"
 value_sql = "SELECT COUNT(DISTINCT client_id) FROM data"
 slice_sql = "SELECT client_id FROM data"
 
 [metrics.exits]
 description = "Enrollments that exited the program (an exit date is present)."
+definition = "Enrollments with a recorded exit date. The unit is the enrollment, so a client who exited two enrollments counts twice. A blank exit date is treated as still enrolled, not as an exit."
 unit = "count"
 value_sql = "SELECT COUNT(*) FROM data WHERE exit_date != ''"
 slice_sql = "SELECT * FROM data WHERE exit_date != ''"
 
 [metrics.exits_permanent]
 description = "Exits whose destination was permanent housing."
+definition = "Exits whose exit_destination is 'permanent'. Destination categories are taken as recorded; an unrecorded destination is not counted as permanent."
 unit = "count"
 value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
 slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent'"
 
 [metrics.exits_temporary]
 description = "Exits whose destination was temporary housing."
+definition = "Exits whose exit_destination is 'temporary'. A temporary exit is not a permanent-housing outcome and is reported separately."
 unit = "count"
 value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'temporary'"
 slice_sql = "SELECT * FROM data WHERE exit_destination = 'temporary'"
 
 [metrics.exits_unknown]
 description = "Exits whose destination was not recorded."
+definition = "Exits with an exit date but no recorded destination. They are shown so the destination categories sum to total exits and an unrecorded outcome is not silently dropped."
 unit = "count"
 value_sql = "SELECT COUNT(*) FROM data WHERE exit_date != '' AND exit_destination = 'unknown'"
 slice_sql = "SELECT * FROM data WHERE exit_date != '' AND exit_destination = 'unknown'"
 
 [metrics.pct_permanent]
 description = "Share of exits that went to permanent housing."
+definition = "Permanent-housing exits divided by all exits in the period, as a whole-number percent. The denominator is exits, not all enrolled clients, so a client still enrolled is not in it."
 unit = "percent"
 decimals = 0
 value_sql = "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != ''"
@@ -89,24 +95,28 @@ predicate = "enrolled_date >= '2025-04-01' AND enrolled_date < '2025-07-01'"
 
 [comparison.metrics.clients_served]
 description = "Distinct clients enrolled in the quarter."
+definition = "Distinct clients by client_id whose enrollment date falls in the quarter. A client enrolled in both quarters counts in each."
 unit = "count"
 value_sql = "SELECT COUNT(DISTINCT client_id) FROM data WHERE {period}"
 slice_sql = "SELECT client_id FROM data WHERE {period}"
 
 [comparison.metrics.exits]
 description = "Clients who exited, by quarter of enrollment."
+definition = "Enrollments with an exit date, grouped by the quarter the client enrolled in, not the quarter they exited."
 unit = "count"
 value_sql = "SELECT COUNT(*) FROM data WHERE exit_date != '' AND ({period})"
 slice_sql = "SELECT * FROM data WHERE exit_date != '' AND ({period})"
 
 [comparison.metrics.exits_permanent]
 description = "Permanent-housing exits, by quarter of enrollment."
+definition = "Permanent-housing exits grouped by the quarter the client enrolled in. Destination is taken as recorded."
 unit = "count"
 value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent' AND ({period})"
 slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent' AND ({period})"
 
 [comparison.metrics.pct_permanent]
 description = "Permanent-housing rate, by quarter of enrollment."
+definition = "Permanent-housing exits divided by all exits, within the quarter of enrollment, as a whole-number percent. The change between quarters is in percentage points."
 unit = "percent"
 decimals = 0
 value_sql = "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != '' AND ({period})"

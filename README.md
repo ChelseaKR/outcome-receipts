@@ -62,15 +62,18 @@ receipts run --config examples/housing-demo/report.toml --out out
 ```text
 figures computed: 4
 numbers in narrative: 4 (bound 4, unbound 0)
+chart and comparison numbers: 0 (bound 0, unbound 0)
 
 grounding gate: PASS
   report:   out/report.md
   receipts: out/receipts.json
+  trace:    out/trace.html
 ```
 
-It writes `out/report.md` (the narrative plus a receipts manifest) and
-`out/receipts.json` (the machine-readable receipts). Check a narrative against the
-receipts at any time:
+It writes `out/report.md` (the narrative, a provenance statement, and a receipts
+manifest), `out/receipts.json` (the machine-readable receipts and provenance
+record), and `out/trace.html` (a funder-facing view of the receipts, described
+below). Check a narrative against the receipts at any time:
 
 ```sh
 receipts audit --config examples/housing-demo/report.toml --narrative some-draft.md
@@ -121,6 +124,38 @@ narrative grounds 100% of its numbers, so the gate passes. That the gate catches
 an injected unverifiable number is shown by the merge-blocking test
 `tests/test_grounding_gate.py`.
 
+### The trace view, the provenance statement, and re-derivation
+
+Three things make the proof legible and checkable for the people who receive a
+report, none of which puts a model near a number.
+
+* **A definition on every metric.** A figure is only as fair as its definition, so
+  a metric can carry a plain-language `definition` (what window, who counts, the
+  deduplication rule). It rides in the receipt and renders next to the figure, so a
+  reviewer can see and contest the choice a query encodes without reading SQL.
+* **A trace view** (`out/trace.html`). The receipts manifest is JSON, which a grant
+  manager or program officer cannot read. The trace view renders the same receipts
+  as one self-contained, accessible HTML page: a summary table of every figure with
+  its value and definition, then the receipt behind each (the query, the row count,
+  the slice hash, the timestamp). It opens offline and needs no SQL or Python.
+* **A provenance statement.** Every export embeds a short, standard block stating
+  that each number was computed by a deterministic query, that no figure was
+  written by a model, and that the grounding gate bound every number before export.
+  The same attestation goes into the manifest as a machine-readable record.
+
+Re-derive a committed report to confirm it still holds:
+
+```sh
+receipts run --config examples/grant-report/report.toml --out out/grant
+receipts verify --config examples/grant-report/report.toml --receipts out/grant/receipts.json
+```
+
+`receipts verify` recomputes every figure from the spec and the cited data and
+checks each value, slice hash, row count, and query against the manifest. A
+mismatch is drift (the data changed, the spec changed, or the manifest was edited);
+verify reports each drifted receipt and exits non-zero, so a silent divergence
+cannot pass.
+
 ## What it does not do
 
 * It does **not let a model invent numbers.** Figures come from queries; the gate
@@ -146,7 +181,7 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | AI Evaluation | Applies when the drafting seam lands (v0.3); v0.1 has no model in any path |
 | Security & Supply-Chain | Applies — hardening (SBOM, signed releases, pinned actions) lands toward 1.0 |
 | CI/CD | Applies — `make verify` mirrors CI |
-| Accessibility | Applies to chart output — every chart ships an SVG with `role="img"`, `<title>`, and `<desc>`, paired with an equivalent data table; the CLI core stays headless |
+| Accessibility | Applies to the chart output and the trace view — every chart ships an SVG with `role="img"`, `<title>`, and `<desc>` paired with an equivalent data table, and the trace-view HTML is semantic and high-contrast (one `<h1>`, `lang` set, table headers with `scope`, a `<caption>`); the CLI core stays headless |
 | Internationalization | N/A — English-only at v0.1; report copy is externalizable in the spec |
 | Observability | N/A — library/CLI, no long-running service |
 

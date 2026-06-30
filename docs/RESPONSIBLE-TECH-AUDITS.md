@@ -21,9 +21,25 @@ on a reviewer noticing.
 A metric is only as fair as its definition. A query that counts "clients served"
 encodes choices (who counts, over what window) that can over- or under-represent
 groups. The tool does not hide those choices; it records the exact query in the
-receipt, so a reviewer can see and contest the definition. TODO: document common
-definitional traps (deduplication windows, exit-destination categories) and how
-the receipt surfaces them.
+receipt, so a reviewer can see and contest the definition.
+
+Each metric also carries a plain-language `definition` field that rides in the
+receipt and renders next to the figure, in the report, the trace view, and the
+manifest, so the choice is legible without reading SQL. The definitions in the
+bundled examples name the common traps directly:
+
+* **Deduplication window and unit.** "Clients served" is counted once per person
+  by `client_id`, so the unit is the person, not the enrollment; "exits" is counted
+  per enrollment, so one client who exited two enrollments counts twice. Stating
+  the unit keeps a person-count and an enrollment-count from being read as the same
+  thing.
+* **Exit-destination categories.** Destinations are taken as recorded. An
+  unrecorded destination is its own category, not folded into "permanent" or
+  dropped, so the destination categories sum to total exits and a missing outcome
+  is visible rather than silently favorable.
+* **Denominator scope.** A rate names its denominator. The permanent-housing rate
+  divides by exits, not by all enrolled clients, so a client still enrolled is not
+  counted against the outcome.
 
 ## Privacy and data minimization (DPIA)
 
@@ -31,7 +47,10 @@ The tool reads client-level service data to compute aggregates, and the output i
 a report of aggregate figures, not a client roster.
 
 * The receipts manifest carries no client-level field values: it records the
-  query, the row count, and a hash of the slice, not the rows themselves.
+  query, the row count, and a hash of the slice, not the rows themselves. The trace
+  view (`trace.html`) and `receipts verify` read the same receipts, so neither adds
+  a client-level surface: the trace view renders counts, definitions, and slice
+  hashes, and verify re-derives values without emitting any slice rows.
 * Small-cell suppression (v0.2) will suppress aggregate counts below a threshold,
   with complementary suppression and true zeros preserved, modeled on the U.S. CMS
   Cell Size Suppression Policy and grounded in primary guidance, expressed as
@@ -46,13 +65,26 @@ export modes land.
 Every figure in a report ships with its receipt: the query, the row count, the
 slice hash, and the timestamp. The committed eval shows the gated grounding rate
 with a Wilson confidence interval, and the gate's PASS or FAIL, rather than a
-single headline number. TODO: publish the model card for the optional drafting
+single headline number.
+
+Two transparency surfaces ship for the report's recipient. Every export embeds a
+provenance statement, in the report body and as a machine-readable record in the
+manifest, stating that each number was computed by a deterministic query, that no
+figure was written by a model, and that the gate bound every number before export.
+And `receipts verify` re-derives every figure from the spec and the cited data and
+checks it against the manifest, so the claim is reproducible and not only asserted;
+it fails closed on any drift. TODO: publish the model card for the optional drafting
 seam when it lands (v0.3).
 
 ## Accessibility
 
-N/A at v0.1: the tool is a headless CLI with no HTML or UI surface. When a review
-or approval UI lands, WCAG 2.2 AA applies to it.
+The CLI core stays headless. The HTML the tool emits is held to WCAG 2.2 AA. The
+chart output ships an SVG with `role="img"`, a `<title>`, and a `<desc>`, paired
+with an equivalent data table. The trace view (`trace.html`) is a single semantic,
+high-contrast page: one `<h1>`, a document `lang`, a summary table with a
+`<caption>` and `scope`-marked headers, dark text on white, and every number as
+text. It carries no script and no external asset, so it opens offline. When a
+review or approval UI lands, the same bar applies to it.
 
 ## Security
 
