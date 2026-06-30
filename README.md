@@ -79,6 +79,37 @@ receipts audit --config examples/housing-demo/report.toml --narrative some-draft
 If the narrative contains a number that no figure backs, `audit` reports it and
 exits non-zero, and `run` refuses to export.
 
+### Report templates, charts, and a period comparison
+
+A report type is defined entirely by its TOML spec, so adding a report shape means
+adding a spec. Two more ship alongside the housing demo: a grant report and a
+board report.
+
+```sh
+receipts run --config examples/grant-report/report.toml --out out/grant
+receipts run --config examples/board-report/report.toml --out out/board
+```
+
+Each can add two optional sections, and the numbers in both are held to the same
+gate as the narrative:
+
+* **Charts.** A `[[charts]]` entry names the figures it draws. The chart's bars or
+  points are those figures' values, so a chart has no data of its own; it is a
+  rendering of numbers that already carry receipts. Each chart is written as a
+  standalone SVG and paired with an accessible data table that carries the same
+  numbers as text, so a chart is readable without the image and every number in it
+  traces to a receipt. The SVG is built with the standard library, so no
+  dependency is added.
+* **Period comparison.** A `[comparison]` section runs one set of metrics across
+  two periods (for example two quarters) and reports the change. The two period
+  values and the change are each a figure with a receipt; the change is computed
+  by a single SQL query that subtracts one period from the other, not by
+  arithmetic on the page. Direction is reported as a word, so no ungrounded number
+  is shown.
+
+`receipts run` grounds the narrative and the chart-and-comparison numbers, and
+refuses to export if any number in any of them is unbound.
+
 Score the gate on the committed fixtures:
 
 ```sh
@@ -115,7 +146,7 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | AI Evaluation | Applies when the drafting seam lands (v0.3); v0.1 has no model in any path |
 | Security & Supply-Chain | Applies — hardening (SBOM, signed releases, pinned actions) lands toward 1.0 |
 | CI/CD | Applies — `make verify` mirrors CI |
-| Accessibility | N/A — headless CLI, no HTML/UI surface yet |
+| Accessibility | Applies to chart output — every chart ships an SVG with `role="img"`, `<title>`, and `<desc>`, paired with an equivalent data table; the CLI core stays headless |
 | Internationalization | N/A — English-only at v0.1; report copy is externalizable in the spec |
 | Observability | N/A — library/CLI, no long-running service |
 

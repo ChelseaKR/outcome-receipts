@@ -18,7 +18,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from outcome_receipts import __version__
-from outcome_receipts.clock import FixedClock, SystemClock
+from outcome_receipts.charts import Chart, render_charts
+from outcome_receipts.clock import Clock, FixedClock, SystemClock
+from outcome_receipts.comparison import ComparisonResult, compute_comparison
 from outcome_receipts.config import Spec, load_spec
 from outcome_receipts.draft import draft
 from outcome_receipts.engine import compute_figures, read_csv
@@ -31,46 +33,97 @@ from outcome_receipts.report import (
     render_report,
 )
 
+# The chart subdirectory under the output directory, referenced from the report.
+_CHART_DIR = "charts"
 
-def _load_and_compute(config: str, *, reproducible: bool) -> tuple[Spec, list[Figure]]:
+
+def _clock(*, reproducible: bool) -> Clock:
+    return FixedClock() if reproducible else SystemClock()
+
+
+def _load_and_compute(
+    config: str, *, reproducible: bool
+) -> tuple[Spec, list[dict[str, str]], list[Figure]]:
     spec = load_spec(config)
     rows = read_csv(spec.data_path)
-    clock = FixedClock() if reproducible else SystemClock()
-    figures = compute_figures(rows, spec.report.metrics, clock=clock)
-    return spec, figures
+    figures = compute_figures(rows, spec.report.metrics, clock=_clock(reproducible=reproducible))
+    return spec, rows, figures
+
+
+def _claims_text(comparison: ComparisonResult | None, charts: Sequence[Chart]) -> str:
+    """The numbers a comparison and charts assert, as plain text for the gate.
+
+    Only the figure displays go here, never category labels or SVG geometry, so
+    the gate checks the numbers a chart or table claims and binds each to a
+    receipt. A rendered number that is not a figure display would be unbound and
+    block export, which is what catches a separate, ungrounded data path.
+    """
+
+    parts: list[str] = []
+    if comparison is not None:
+        parts.append(" ".join(figure.display for figure in comparison.figures))
+    parts.extend(chart.claims_text for chart in charts)
+    return " ".join(parts)
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    spec, figures = _load_and_compute(args.config, reproducible=args.reproducible)
+    spec, rows, figures = _load_and_compute(args.config, reproducible=args.reproducible)
+    clock = _clock(reproducible=args.reproducible)
+
+    comparison: ComparisonResult | None = None
+    if spec.report.comparison is not None:
+        comparison = compute_comparison(rows, spec.report.comparison, clock=clock)
+        figures = [*figures, *comparison.figures]
+
     narrative = draft(spec.report, figures)
-    result = ground(narrative, figures)
+    charts = render_charts(spec.report.charts, figures)
+
+    narrative_result = ground(narrative, figures)
+    claims_result = ground(_claims_text(comparison, charts), figures)
 
     print(f"figures computed: {len(figures)}")
-    print(f"numbers in narrative: {result.total} (bound {len(result.bound)}, "
-          f"unbound {len(result.unbound)})")
+    print(f"numbers in narrative: {narrative_result.total} "
+          f"(bound {len(narrative_result.bound)}, unbound {len(narrative_result.unbound)})")
+    print(f"chart and comparison numbers: {claims_result.total} "
+          f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})")
 
-    if not result.ok:
+    if not (narrative_result.ok and claims_result.ok):
         print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
-        for span in result.unbound:
-            print(f"  unverifiable number: {span.text!r} at offset {span.start}", file=sys.stderr)
+        for span in (*narrative_result.unbound, *claims_result.unbound):
+            print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
         return 2
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "report.md"
     manifest_path = out_dir / "receipts.json"
+    if charts:
+        chart_dir = out_dir / _CHART_DIR
+        chart_dir.mkdir(parents=True, exist_ok=True)
+        for chart in charts:
+            (chart_dir / f"{chart.chart_id}.svg").write_text(chart.svg, encoding="utf-8")
     report_path.write_text(
-        render_report(spec.report.title, narrative, figures), encoding="utf-8"
+        render_report(
+            spec.report.title,
+            narrative,
+            figures,
+            comparison=comparison,
+            charts=charts,
+            chart_dir=_CHART_DIR,
+        ),
+        encoding="utf-8",
     )
     manifest_path.write_text(receipts_manifest(figures), encoding="utf-8")
     print("\ngrounding gate: PASS")
     print(f"  report:   {report_path}")
     print(f"  receipts: {manifest_path}")
+    if charts:
+        print(f"  charts:   {out_dir / _CHART_DIR} ({len(charts)} SVG)")
     return 0
 
 
 def _cmd_audit(args: argparse.Namespace) -> int:
-    _spec, figures = _load_and_compute(args.config, reproducible=args.reproducible)
+    _spec, _rows, figures = _load_and_compute(args.config, reproducible=args.reproducible)
     narrative = Path(args.narrative).read_text(encoding="utf-8")
     result = ground(narrative, figures)
     print(f"numbers: {result.total}, bound: {len(result.bound)}, "
@@ -81,7 +134,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
-    spec, figures = _load_and_compute(args.config, reproducible=True)
+    spec, _rows, figures = _load_and_compute(args.config, reproducible=True)
     narrative = draft(spec.report, figures)
     result = ground(narrative, figures)
     report = evaluate(result)
