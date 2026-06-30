@@ -10,14 +10,80 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
+from outcome_receipts.charts import Chart
+from outcome_receipts.comparison import ComparisonResult
 from outcome_receipts.evaluate import EvalReport
 from outcome_receipts.models import Figure
 
 
-def render_report(title: str, narrative: str, figures: Sequence[Figure]) -> str:
-    """Render the narrative with a receipts manifest appended."""
+def render_comparison_table(result: ComparisonResult) -> str:
+    """Render a period-over-period comparison as a Markdown table.
 
-    lines = [f"# {title}", "", narrative.strip(), "", "## Receipts", ""]
+    Every number in the table is a figure display: the two period values and the
+    change. Direction is a word, derived from the sign of the change, so the table
+    asserts no number that is not a receipt. The change for a rate metric is in
+    percentage points, noted under the table.
+    """
+
+    lines = [
+        "## Period comparison",
+        "",
+        f"Comparing {result.current_label} with {result.prior_label}. Each value is "
+        "a figure with a receipt; the change is itself computed by a single query, "
+        "not arithmetic over the page.",
+        "",
+        f"| Outcome | {result.prior_label} | {result.current_label} | Change | Direction |",
+        "|---------|------|------|--------|-----------|",
+    ]
+    for row in result.rows:
+        name = row.description or row.base_metric_id
+        lines.append(
+            f"| {name} | {row.prior.display} | {row.current.display} | "
+            f"{row.delta.display} | {row.direction} |"
+        )
+    lines.append("")
+    lines.append("Change for a rate metric is in percentage points.")
+    return "\n".join(lines)
+
+
+def render_charts_section(charts: Sequence[Chart], *, chart_dir: str) -> str:
+    """Render the charts as image references with their accessible data tables.
+
+    The SVG is referenced as an image; the data table beneath it is the text
+    equivalent and carries the same grounded numbers, so the chart is readable
+    without the image and the numbers it shows trace to receipts.
+    """
+
+    lines = ["## Charts", ""]
+    for chart in charts:
+        lines.append(f"### {chart.title}")
+        lines.append("")
+        lines.append(f"![{chart.title} (see data table below)]({chart_dir}/{chart.chart_id}.svg)")
+        lines.append("")
+        lines.append(f"Data for the chart above ({chart.title}):")
+        lines.append("")
+        lines.append(chart.data_table)
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def render_report(
+    title: str,
+    narrative: str,
+    figures: Sequence[Figure],
+    *,
+    comparison: ComparisonResult | None = None,
+    charts: Sequence[Chart] = (),
+    chart_dir: str = "charts",
+) -> str:
+    """Render the narrative, optional comparison and charts, then receipts."""
+
+    lines = [f"# {title}", "", narrative.strip()]
+    if comparison is not None:
+        lines.extend(["", render_comparison_table(comparison)])
+    if charts:
+        lines.extend(["", render_charts_section(charts, chart_dir=chart_dir)])
+    lines.extend(["", "## Receipts", ""])
     for figure in sorted(figures, key=lambda f: f.metric_id):
         receipt = figure.receipt
         lines.append(f"- **{figure.metric_id}** = {figure.display}")

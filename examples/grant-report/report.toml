@@ -1,0 +1,113 @@
+# A grant report for a housing program funder. Alongside the narrative, this
+# template adds two sections whose numbers are held to the same grounding gate:
+# charts drawn from the receipted figures, and a quarter-over-quarter comparison
+# whose every value and change is itself a query with a receipt.
+#
+#   receipts run --config examples/grant-report/report.toml --out out/grant
+
+[data]
+path = "services.csv"
+
+[report]
+title = "Housing Program Grant Report"
+template = """
+This report covers our housing program for the grant period. We served \
+{clients_served} clients. Of the {exits} clients who exited, {exits_permanent} \
+moved into permanent housing and {exits_temporary} into temporary housing, with \
+{exits_unknown} of unknown destination. The permanent-housing rate for the \
+period was {pct_permanent}.
+
+The charts below break down exits by destination and compare permanent-housing \
+exits across the two quarters. The period comparison table reports the change in \
+each headline outcome from the first quarter to the second.
+"""
+
+[metrics.clients_served]
+description = "Distinct clients with any enrollment in the period."
+unit = "count"
+value_sql = "SELECT COUNT(DISTINCT client_id) FROM data"
+slice_sql = "SELECT client_id FROM data"
+
+[metrics.exits]
+description = "Enrollments that exited the program (an exit date is present)."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_date != ''"
+slice_sql = "SELECT * FROM data WHERE exit_date != ''"
+
+[metrics.exits_permanent]
+description = "Exits whose destination was permanent housing."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent'"
+
+[metrics.exits_temporary]
+description = "Exits whose destination was temporary housing."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'temporary'"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'temporary'"
+
+[metrics.exits_unknown]
+description = "Exits whose destination was not recorded."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_date != '' AND exit_destination = 'unknown'"
+slice_sql = "SELECT * FROM data WHERE exit_date != '' AND exit_destination = 'unknown'"
+
+[metrics.pct_permanent]
+description = "Share of exits that went to permanent housing."
+unit = "percent"
+decimals = 0
+value_sql = "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != ''"
+slice_sql = "SELECT * FROM data WHERE exit_date != ''"
+
+[[charts]]
+id = "exits-by-destination"
+title = "Exits by destination"
+kind = "bar"
+metrics = ["exits_permanent", "exits_temporary", "exits_unknown"]
+labels = ["Permanent", "Temporary", "Unknown"]
+
+[[charts]]
+id = "permanent-by-quarter"
+title = "Permanent-housing exits by quarter"
+kind = "bar"
+metrics = ["exits_permanent__q1", "exits_permanent__q2"]
+labels = ["Q1 2025", "Q2 2025"]
+
+[comparison]
+current = "q2"
+prior = "q1"
+
+[[comparison.periods]]
+id = "q1"
+label = "Q1 2025"
+predicate = "enrolled_date >= '2025-01-01' AND enrolled_date < '2025-04-01'"
+
+[[comparison.periods]]
+id = "q2"
+label = "Q2 2025"
+predicate = "enrolled_date >= '2025-04-01' AND enrolled_date < '2025-07-01'"
+
+[comparison.metrics.clients_served]
+description = "Distinct clients enrolled in the quarter."
+unit = "count"
+value_sql = "SELECT COUNT(DISTINCT client_id) FROM data WHERE {period}"
+slice_sql = "SELECT client_id FROM data WHERE {period}"
+
+[comparison.metrics.exits]
+description = "Clients who exited, by quarter of enrollment."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_date != '' AND ({period})"
+slice_sql = "SELECT * FROM data WHERE exit_date != '' AND ({period})"
+
+[comparison.metrics.exits_permanent]
+description = "Permanent-housing exits, by quarter of enrollment."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent' AND ({period})"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent' AND ({period})"
+
+[comparison.metrics.pct_permanent]
+description = "Permanent-housing rate, by quarter of enrollment."
+unit = "percent"
+decimals = 0
+value_sql = "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != '' AND ({period})"
+slice_sql = "SELECT * FROM data WHERE exit_date != '' AND ({period})"

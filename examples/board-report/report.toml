@@ -1,0 +1,72 @@
+# A board report for the same housing program. It is shorter and higher-level
+# than the grant report: a brief summary, a trend chart of clients served across
+# the two quarters, and a comparison table of the headline outcomes. Every number
+# is a figure with a receipt, and the chart and the comparison are held to the
+# same grounding gate as the narrative.
+#
+#   receipts run --config examples/board-report/report.toml --out out/board
+
+[data]
+path = "services.csv"
+
+[report]
+title = "Housing Program Board Report"
+template = """
+Summary for the board. The program served {clients_served} clients this period \
+and exited {pct_permanent} of them to permanent housing. The trend chart shows \
+clients served by quarter, and the comparison table reports how each headline \
+outcome moved from the first quarter to the second.
+"""
+
+[metrics.clients_served]
+description = "Distinct clients with any enrollment in the period."
+unit = "count"
+value_sql = "SELECT COUNT(DISTINCT client_id) FROM data"
+slice_sql = "SELECT client_id FROM data"
+
+[metrics.pct_permanent]
+description = "Share of exits that went to permanent housing."
+unit = "percent"
+decimals = 0
+value_sql = "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != ''"
+slice_sql = "SELECT * FROM data WHERE exit_date != ''"
+
+[[charts]]
+id = "clients-by-quarter"
+title = "Clients served by quarter"
+kind = "line"
+metrics = ["clients_served__q1", "clients_served__q2"]
+labels = ["Q1 2025", "Q2 2025"]
+
+[comparison]
+current = "q2"
+prior = "q1"
+
+[[comparison.periods]]
+id = "q1"
+label = "Q1 2025"
+predicate = "enrolled_date >= '2025-01-01' AND enrolled_date < '2025-04-01'"
+
+[[comparison.periods]]
+id = "q2"
+label = "Q2 2025"
+predicate = "enrolled_date >= '2025-04-01' AND enrolled_date < '2025-07-01'"
+
+[comparison.metrics.clients_served]
+description = "Distinct clients enrolled in the quarter."
+unit = "count"
+value_sql = "SELECT COUNT(DISTINCT client_id) FROM data WHERE {period}"
+slice_sql = "SELECT client_id FROM data WHERE {period}"
+
+[comparison.metrics.exits_permanent]
+description = "Permanent-housing exits, by quarter of enrollment."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent' AND ({period})"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent' AND ({period})"
+
+[comparison.metrics.pct_permanent]
+description = "Permanent-housing rate, by quarter of enrollment."
+unit = "percent"
+decimals = 0
+value_sql = "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != '' AND ({period})"
+slice_sql = "SELECT * FROM data WHERE exit_date != '' AND ({period})"

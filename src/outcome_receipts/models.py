@@ -65,17 +65,87 @@ class Figure:
 
 
 @dataclass(frozen=True)
+class PeriodSpec:
+    """One reporting period in a multi-period comparison.
+
+    ``predicate`` is a SQL boolean over the data table that selects the period's
+    rows (for example a date window). It is substituted into a comparison metric's
+    ``{period}`` placeholder, so each period's figure is computed by the same
+    deterministic query restricted to that period. ``label`` is the human name
+    shown in tables and charts; it carries no number.
+    """
+
+    period_id: str
+    label: str
+    predicate: str
+
+
+@dataclass(frozen=True)
+class ComparisonSpec:
+    """A period-over-period comparison of a shared set of metrics.
+
+    Each metric in ``metrics`` uses a ``{period}`` placeholder in its SQL. The
+    comparison computes that metric once for ``prior`` and once for ``current``,
+    then a delta, each as a Figure with its own receipt. ``current`` and ``prior``
+    name two entries in ``periods``.
+    """
+
+    current: str
+    prior: str
+    periods: tuple[PeriodSpec, ...] = field(default_factory=tuple)
+    metrics: tuple[MetricSpec, ...] = field(default_factory=tuple)
+
+    def period(self, period_id: str) -> PeriodSpec:
+        for spec in self.periods:
+            if spec.period_id == period_id:
+                return spec
+        raise KeyError(f"comparison references unknown period {period_id!r}")
+
+
+@dataclass(frozen=True)
+class ChartSpec:
+    """A chart drawn from already-computed, receipted figures.
+
+    ``metric_ids`` names the figures whose values become the chart's data points,
+    so a chart has no data path of its own: its bars and points are the grounded
+    figures. ``kind`` is ``bar`` or ``line``. Every number the chart renders (its
+    value labels and its accessible data table) is a figure display, so the
+    grounding gate verifies a chart exactly as it verifies prose.
+    """
+
+    chart_id: str
+    title: str
+    kind: str
+    metric_ids: tuple[str, ...]
+    labels: tuple[str, ...] = field(default_factory=tuple)
+
+    def label_for(self, index: int) -> str:
+        """The bar/point label for the figure at ``index``.
+
+        Falls back to the metric id when no explicit label is given, so a chart
+        is renderable without a parallel labels list.
+        """
+
+        if index < len(self.labels):
+            return self.labels[index]
+        return self.metric_ids[index]
+
+
+@dataclass(frozen=True)
 class ReportSpec:
     """A report template plus the metrics it needs.
 
     ``template`` is plain text with ``{metric_id}`` placeholders. ``metrics`` are
     the specs whose figures fill those placeholders. ``title`` heads the rendered
-    report.
+    report. ``charts`` and ``comparison`` are optional sections; their numbers are
+    figures too, held to the same grounding gate.
     """
 
     title: str
     template: str
     metrics: tuple[MetricSpec, ...] = field(default_factory=tuple)
+    charts: tuple[ChartSpec, ...] = field(default_factory=tuple)
+    comparison: ComparisonSpec | None = None
 
 
 @dataclass(frozen=True)
