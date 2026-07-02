@@ -62,6 +62,10 @@ from outcome_receipts.report import (
     render_report,
 )
 from outcome_receipts.scaffold import scaffold_spec
+from outcome_receipts.suppression import (
+    filter_for_aggregate_only,
+    suppress_figures,
+)
 from outcome_receipts.trace import render_trace_html
 from outcome_receipts.verify import BundleResult, VerifyResult, verify_bundle, verify_manifest
 
@@ -539,8 +543,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
         approver,
         approved_at,
         key,
-    )
-
     if args.json:
         flat_outputs: object = (
             written[0][1]
@@ -654,10 +656,12 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
     )
+    # Apply suppression to re-derived figures so they match the exported manifest.
+    suppressed_figures, _suppression_result = suppress_figures(figures)
     if args.bundle is not None:
-        return _verify_bundle(args, figures)
+        return _verify_bundle(args, suppressed_figures)
     manifest = json.loads(Path(args.receipts).read_text(encoding="utf-8"))
-    result = verify_manifest(figures, manifest)
+    result = verify_manifest(suppressed_figures, manifest)
 
     if args.json:
         _emit_json(_verify_payload(result))

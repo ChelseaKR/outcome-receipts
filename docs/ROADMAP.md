@@ -42,12 +42,18 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
   blocks the whole run/export, extending the "fail closed everywhere" invariant to
   the data the figures rest on.
 
-## v0.2.0 — Small-cell suppression
+## v0.2.0 — Small-cell suppression (completed)
 
-* The privacy invariant: aggregate counts below a threshold suppressed, with
+* ✅ The privacy invariant: aggregate counts below a threshold suppressed, with
   complementary suppression and true zeros preserved, modeled on the U.S. CMS
   Cell Size Suppression Policy. Sourced from primary guidance, expressed as tests.
-* Aggregate-only export mode for figures shared externally.
+  Implementation: threshold = 11 (CMS policy: suppress 1–10), complementary
+  suppression applied to totals, true zeros (0) preserved. Tested with
+  16 test cases covering threshold behavior, complementary suppression, and
+  aggregate-only export. Merge-blocking: `tests/test_suppression.py`.
+* ✅ Aggregate-only export mode for figures shared externally. Provenance
+  attestation includes `aggregate_only: true` assertion; filter validates that
+  no metric looks like row-level PII data (client_id, name, ssn, dob, etc.).
 
 ## v0.3.0 — The drafting seam
 
