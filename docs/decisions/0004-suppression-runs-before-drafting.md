@@ -1,6 +1,9 @@
 # 0004 — Suppression runs before drafting, not after
 
-Status: accepted (working tree, uncommitted)
+Status: accepted; the complementary-scope refinement ("grouped by crosstab",
+`_group_key`) is superseded by 0005, which found that the per-group scope
+severed real accounting identities and widened the disclosure scope to the
+whole report.
 
 ## Context
 

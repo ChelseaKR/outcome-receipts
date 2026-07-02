@@ -18,6 +18,7 @@ Sourced from:
 from __future__ import annotations
 
 import json
+from itertools import product
 from pathlib import Path
 
 import pytest
@@ -35,7 +36,9 @@ from outcome_receipts.suppression import (
 )
 
 
-def _make_figure(metric_id: str, value: float, display: str | None = None) -> Figure:
+def _make_figure(
+    metric_id: str, value: float, display: str | None = None, unit: str = "count"
+) -> Figure:
     """Helper to create a test figure."""
     if display is None:
         display = str(int(value)) if value == int(value) else f"{value:.1f}"
@@ -45,7 +48,7 @@ def _make_figure(metric_id: str, value: float, display: str | None = None) -> Fi
         row_count=int(value),
         slice_hash="abc123" * 10 + "12",  # 64 chars
         value=value,
-        unit="count",
+        unit=unit,
         computed_at="2026-07-01T00:00:00Z",
         definition=f"Count of {metric_id}",
     )
@@ -55,6 +58,24 @@ def _make_figure(metric_id: str, value: float, display: str | None = None) -> Fi
         display=display,
         receipt=receipt,
     )
+
+
+def _signed_subset_recovers(target: float, values: list[float]) -> bool:
+    """The adversary's own brute force: does any +/- combination equal ``target``?
+
+    Deliberately independent of the implementation under test (it does not import
+    or share code with ``suppression.py``), so a bug in the module's search cannot
+    hide the same bug here. Every non-empty subset of ``values``, with every
+    assignment of + or - to each member, is checked against ``target``.
+    """
+
+    for signs in product((-1, 0, 1), repeat=len(values)):
+        if all(sign == 0 for sign in signs):
+            continue
+        total = sum(sign * value for sign, value in zip(signs, values, strict=True))
+        if abs(total - target) < 1e-9:
+            return True
+    return False
 
 
 def _report_receipt_block(report_md: str, metric_id: str) -> str:
@@ -546,3 +567,200 @@ class TestSuppressionArtifactIntegration:
         # figure's own <section>, for the same reason).
         assert "<dd>10</dd>" not in _trace_figure_section(trace_html, "exits")
         assert "<dd>6</dd>" not in _trace_figure_section(trace_html, "exits_permanent")
+
+
+class TestFullDepthDisclosureSearch:
+    """Merge-blocking: the disclosure search must cover the whole figure group.
+
+    The search used to stop at combinations of 4 terms (`_MAX_DISCLOSURE_TERMS`),
+    so a total decomposed into five or more named categories -- an ordinary shape
+    in HMIS-style reporting -- evaded it: the only recovering combination has as
+    many terms as the breakdown has figures, and the cap meant it was never tried.
+    """
+
+    def test_five_term_breakdown_is_not_recoverable(self) -> None:
+        """The demonstrated evasion: 162 = 52 + 30 + 61 + 17 + 2, dept_e suppressed.
+
+        total - a - b - c - d reconstructs dept_e exactly, but the recovering
+        combination has five terms, one past the old cap. After suppression, no
+        signed combination of the figures still visible may equal 2.
+        """
+        figures = [
+            _make_figure("total_clients", 162),
+            _make_figure("dept_a", 52),
+            _make_figure("dept_b", 30),
+            _make_figure("dept_c", 61),
+            _make_figure("dept_d", 17),
+            _make_figure("dept_e", 2),
+        ]
+        redacted, result = suppress_figures(figures, complementary_rule=True)
+
+        assert "dept_e" in result.suppressed
+        # The adversary's check, run against exactly what the export shows: no
+        # +/- combination of visible values may reconstruct the suppressed 2.
+        visible_values = [f.value for f in redacted if f.display != "[SUPPRESSED]"]
+        assert not _signed_subset_recovers(2.0, visible_values)
+        # The next-smallest-cell rule breaks the five-term identity by redacting
+        # dept_d (17), the smallest figure in the recovering combination; the
+        # total and the three larger categories stay visible.
+        assert "dept_d" in result.complementary_suppressed
+        for still_visible in ("total_clients", "dept_a", "dept_b", "dept_c"):
+            assert still_visible in result.unsuppressed
+
+
+# A report spec with exactly the shipped grant-report structure: a headline
+# count metric, and a comparison of the same base metric across two quarters.
+# The headline is computed over the whole period, so it is the sum of the two
+# period figures -- the cross-scope accounting identity the old per-group
+# disclosure check never examined.
+_HEADLINE_PLUS_COMPARISON_TOML = """
+[data]
+path = "services.csv"
+
+[report]
+title = "Cross-scope reproduction"
+template = "Of the clients who exited, {exits_permanent} moved into permanent housing."
+
+[metrics.exits_permanent]
+description = "Exits whose destination was permanent housing."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent'"
+
+[comparison]
+current = "q2"
+prior = "q1"
+
+[[comparison.periods]]
+id = "q1"
+label = "Q1 2025"
+predicate = "enrolled_date >= '2025-01-01' AND enrolled_date < '2025-04-01'"
+
+[[comparison.periods]]
+id = "q2"
+label = "Q2 2025"
+predicate = "enrolled_date >= '2025-04-01' AND enrolled_date < '2025-07-01'"
+
+[comparison.metrics.exits_permanent]
+description = "Permanent-housing exits, by quarter of enrollment."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent' AND ({period})"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent' AND ({period})"
+"""
+
+
+class TestCrossScopeRecoveryThroughRealCli:
+    """Merge-blocking: a headline and its period figures share a disclosure scope.
+
+    `_group_key` used to bucket `exits_permanent__q1/__q2/__delta` into group
+    "exits_permanent" while the whole-period headline `exits_permanent` landed in
+    "__report__", so the identity headline = q1 + q2 was never checked:
+    headline(68) - q2(63) printed the suppressed q1(5) into the same report.md.
+    Reproduced through the real CLI with the shipped grant-report structure.
+    """
+
+    def test_headline_and_period_cannot_recover_a_suppressed_quarter(
+        self, tmp_path: Path
+    ) -> None:
+        # Data shaped like examples/grant-report: every enrollment exits to
+        # permanent housing; 5 enrolled in Q1 and 63 in Q2, so the headline is
+        # 68, the Q1 figure is 5 (suppressed), and Q2 is 63.
+        rows = ["client_id,program,enrolled_date,exit_date,exit_destination"]
+        rows.extend(
+            f"C{i:03d},housing,2025-02-{(i % 28) + 1:02d},2025-03-15,permanent"
+            for i in range(5)
+        )
+        rows.extend(
+            f"C{i:03d},housing,2025-05-{(i % 28) + 1:02d},2025-06-15,permanent"
+            for i in range(5, 68)
+        )
+        (tmp_path / "services.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+        config = tmp_path / "report.toml"
+        config.write_text(_HEADLINE_PLUS_COMPARISON_TOML, encoding="utf-8")
+
+        out = tmp_path / "out"
+        code = main(["run", "--config", str(config), "--out", str(out), "--reproducible"])
+        assert code == 0
+
+        manifest = json.loads((out / "receipts.json").read_text(encoding="utf-8"))
+        by_id = {record["metric_id"]: record for record in manifest["receipts"]}
+
+        # The quarter with five clients is suppressed.
+        assert by_id["exits_permanent__q1"]["display"] == "[SUPPRESSED]"
+        # The demonstrated attack: with the headline (68) and Q2 (63) both
+        # visible in the same report, 68 - 63 recovers the suppressed 5. After
+        # the fix, no signed combination of the values still visible anywhere in
+        # the manifest (and therefore in report.md, whose every number is a
+        # figure display) may reconstruct it.
+        visible_counts = [
+            float(record["value"])
+            for record in manifest["receipts"]
+            if record["display"] != "[SUPPRESSED]" and record["unit"] == "count"
+        ]
+        assert not _signed_subset_recovers(5.0, visible_counts)
+        # The specific resolution: the headline stays (it is the largest cell in
+        # the identity), the recovering period figure is complementary-suppressed,
+        # and the delta goes with its suppressed period -- a visible delta next
+        # to the visible headline would pin q1 at (headline - delta) / 2.
+        assert by_id["exits_permanent"]["display"] == "68"
+        assert by_id["exits_permanent__q2"]["display"] == "[SUPPRESSED]"
+        assert by_id["exits_permanent__delta"]["display"] == "[SUPPRESSED]"
+
+
+class TestPercentTriangulation:
+    """Merge-blocking: a percent must not triangulate a suppressed count.
+
+    The complementary check used to restrict itself to unit == "count", waving
+    every percent through. A percent with a visible denominator uniquely
+    determines a suppressed numerator via rounding. The MetricSpec data model
+    cannot express which count metrics feed a percent (value_sql is opaque SQL),
+    so the module implements the conservative rule: when any count in the report
+    is suppressed, every percent figure is suppressed with it.
+    """
+
+    def test_percent_with_visible_denominator_is_suppressed(self) -> None:
+        """The demonstrated case: exits = 14 visible, pct_permanent = 71%.
+
+        Among numerators 1..14 only 10/14 rounds to 71%, so the "suppressed"
+        numerator is uniquely recoverable while the percent prints. The percent
+        must be suppressed along with the count it discloses.
+        """
+        figures = [
+            _make_figure("exits", 14),
+            _make_figure("exits_permanent", 10),
+            _make_figure("pct_permanent", 71.0, display="71%", unit="percent"),
+        ]
+        redacted, result = suppress_figures(figures, complementary_rule=True)
+        by_id = {figure.metric_id: figure for figure in redacted}
+
+        assert "exits_permanent" in result.suppressed
+        assert by_id["pct_permanent"].display == "[SUPPRESSED]"
+        assert by_id["pct_permanent"].value == 0.0
+        assert by_id["pct_permanent"].receipt.value == 0.0
+        assert "pct_permanent" in result.complementary_suppressed
+        # The denominator itself is at no risk and stays visible: the rule
+        # removes the triangulating percent, not every count in sight.
+        assert by_id["exits"].display == "14"
+        assert "exits" in result.unsuppressed
+
+    def test_housing_demo_percent_is_suppressed_end_to_end(self, tmp_path: Path) -> None:
+        """The shipped housing-demo has this exact shape: 6/10 exits, 60%.
+
+        With exits (10) and exits_permanent (6) suppressed, a visible 60% next
+        to any inference about the denominator narrows the suppressed pair to
+        almost nothing; the exported manifest must carry the percent as
+        suppressed too.
+        """
+        examples = Path(__file__).resolve().parents[1] / "examples"
+        config = examples / "housing-demo" / "report.toml"
+        out = tmp_path / "out"
+        code = main(["run", "--config", str(config), "--out", str(out), "--reproducible"])
+        assert code == 0
+
+        manifest = json.loads((out / "receipts.json").read_text(encoding="utf-8"))
+        by_id = {record["metric_id"]: record for record in manifest["receipts"]}
+        assert by_id["pct_permanent"]["display"] == "[SUPPRESSED]"
+        assert by_id["pct_permanent"]["value"] == 0.0
+        # clients_served (12) is above threshold, in no recovering relationship,
+        # and not a percent: it stays visible.
+        assert by_id["clients_served"]["display"] == "12"

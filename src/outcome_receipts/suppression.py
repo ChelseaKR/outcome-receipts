@@ -15,6 +15,58 @@ manifest, and trace renderers do) must see the same redaction a caller reading
 ``figure.value`` sees; a suppressed ``Figure`` sharing an unredacted ``Receipt`` is
 not suppression, it is a suppressed label glued to an unsuppressed number.
 
+Disclosure scope: the whole report, per unit. An earlier revision scoped the
+complementary check to sibling groups (a comparison metric's period and delta
+figures together, every headline metric in a separate report-level group), on
+the theory that only figures presented together would be combined by a reader.
+That partition severed real accounting identities: a whole-period headline is
+the sum of its own period figures (``exits_permanent = __q1 + __q2``), so
+``headline - q2`` printed a suppressed ``q1`` into the same report, undetected,
+because the two figures sat in different groups. The report spec is a flat
+metric list over one data table; per-period category sums, category totals, and
+headline/period identities all cross any finer grouping the metric ids could
+induce, so any partition can sever an identity a reader actually knows. The
+rule now: every count figure in a report is checked against every other count
+figure, and every percent figure against every other percent figure (counts and
+percents are never additive with each other). The cost is that a coincidental
+arithmetic match between unrelated figures can suppress more than strictly
+necessary; over-suppression is the protective direction, and a leak is a
+defect, so the trade is accepted.
+
+Two relationships need rules of their own, because they are not plain +/- sums:
+
+- A comparison delta is defined as current minus prior. When either period
+  figure is suppressed, the delta is suppressed with it: a visible delta beside
+  the other period reconstructs the hidden period directly, and a visible delta
+  beside a visible whole-period headline pins the hidden period at
+  ``(headline - delta) / 2`` -- a recovery with a coefficient the signed-sum
+  search cannot represent, so it is closed by rule rather than by search.
+- A percent is a ratio of counts, and a percent with a visible denominator
+  uniquely determines a suppressed numerator via rounding (71% of 14 exits can
+  only be 10). ``MetricSpec`` cannot express which count metrics feed a percent
+  (``value_sql`` is opaque SQL), so the conservative rule applies: when any
+  count figure in the report is suppressed, every percent figure is suppressed
+  with it. This is deliberately blunt -- a percent whose numerator and
+  denominator are both visible is suppressed too -- because the dependency
+  cannot be traced from the data model, and guessing it from SQL text is the
+  name-matching heuristic this module already rejected once.
+
+The guarantee, stated precisely: after suppression reaches its fixed point, no
+suppressed figure's exact value is certified to a reader by the figures still
+visible -- not by any single +/- combination of same-unit visible figures, not
+by a delta definition, and not by a percent with a visible input. Two things
+are deliberately outside that guarantee. A suppressed value may still be
+*consistent* with the visible figures (a headline of 13 with both period
+figures hidden tells the reader the two hidden values sum to 13; an interval
+is not a disclosure under the cell-suppression model). And a hidden value may
+coincidentally equal some arithmetic on visible figures from unrelated metrics
+(nothing certifies the coincidence to the reader, who cannot distinguish it
+from the other combinations that do not match). What must never happen is the
+demonstrated failures: an accounting identity the reader actually holds --
+total minus categories, headline minus a period, one period plus a visible
+delta, a percent times its visible denominator -- landing exactly on a
+suppressed cell.
+
 Sourced from:
   CMS Cell Size Suppression Policy, ResDAC
   https://resdac.org/articles/cms-cell-size-suppression-policy
@@ -25,7 +77,6 @@ Sourced from:
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from itertools import combinations, product
 from typing import TYPE_CHECKING
 
 from outcome_receipts.models import EMPTY_SLICE_HASH, Figure, Receipt
@@ -42,14 +93,10 @@ SUPPRESSION_THRESHOLD = 11
 # The redacted placeholder shown in place of a suppressed figure's value.
 _REDACTED_DISPLAY = "[SUPPRESSED]"
 
-# The largest combination of candidate figures checked for arithmetic disclosure
-# recovery (see `_disclosing_combination`). Report figure sets are small (a
-# handful to a few dozen metrics per report), so exhaustively checking every
-# combination up to this size is cheap, and it covers the disclosure patterns
-# that actually show up in outcome reports: a two-way part/part or total/part
-# relationship (2 terms) up through a total decomposed into several named
-# categories (up to 4 terms). This is not a general n-way disclosure solver.
-_MAX_DISCLOSURE_TERMS = 4
+# Tolerance for treating a candidate combination's sum as equal to the target.
+# Figures are counts (or percents computed to fixed decimals), so exact-match
+# with a float epsilon is the right test; nothing here is approximate.
+_EPSILON = 1e-9
 
 
 @dataclass(frozen=True)
@@ -150,28 +197,51 @@ def _disclosing_combination(
 ) -> tuple[str, ...] | None:
     """Find a signed combination of ``candidates`` that reconstructs ``target``.
 
-    Checks every combination of up to ``_MAX_DISCLOSURE_TERMS`` candidates, with
-    every assignment of + or - to each term, e.g. "total - other_category". A
-    name match (does a metric_id contain "total"?) is not a disclosure check: it
-    catches nothing that isn't named "total" and it flags plenty of figures that
-    are not actually recoverable. This is the real check: does some arithmetic
-    combination of other still-visible figures equal the suppressed value exactly?
+    Checks combinations of every size up to the full candidate set, with every
+    assignment of + or - to each term, e.g. "total - other_category". The search
+    used to stop at four terms, which let a five-category breakdown evade it:
+    the only combination recovering the suppressed fifth category
+    (``total - a - b - c - d``) has five terms, and breakdowns of five or more
+    categories are ordinary in HMIS-style reporting. No within-group identity
+    may escape on size, so the search is exhaustive over the group.
+
+    Implemented as a depth-first search over the candidates sorted by descending
+    magnitude, with branch-and-bound pruning: a branch is abandoned as soon as
+    the remaining candidates' combined magnitude cannot close the gap between
+    the partial sum and the target. Report figure sets are small (tens of
+    figures at most), so the pruned search is cheap in practice.
 
     Returns the metric_ids of a combination that reconstructs ``target``, or
     ``None`` if no such combination exists among ``candidates``.
     """
 
-    limit = min(len(candidates), _MAX_DISCLOSURE_TERMS)
-    for r in range(1, limit + 1):
-        for combo in combinations(candidates, r):
-            ids = tuple(metric_id for metric_id, _ in combo)
-            values = [value for _, value in combo]
-            for signs in product((1, -1), repeat=r):
-                total = sum(
-                    sign * value for sign, value in zip(signs, values, strict=True)
-                )
-                if abs(total - target) < 1e-9:
-                    return ids
+    # Largest magnitudes first, so pruning bites as early as possible. The
+    # secondary sort on metric_id keeps the search order, and therefore the
+    # returned combination, deterministic.
+    ordered = sorted(candidates, key=lambda item: (-abs(item[1]), item[0]))
+    values = [value for _, value in ordered]
+    # remaining[i]: the combined magnitude of candidates i..end, the most any
+    # completion of a partial combination can still move the sum.
+    remaining = [0.0] * (len(ordered) + 1)
+    for index in range(len(ordered) - 1, -1, -1):
+        remaining[index] = remaining[index + 1] + abs(values[index])
+
+    chosen: list[int] = []
+
+    def search(index: int, partial: float) -> bool:
+        if chosen and abs(partial - target) < _EPSILON:
+            return True
+        if index == len(ordered) or abs(partial - target) > remaining[index] + _EPSILON:
+            return False
+        for sign in (1.0, -1.0):
+            chosen.append(index)
+            if search(index + 1, partial + sign * values[index]):
+                return True
+            chosen.pop()
+        return search(index + 1, partial)
+
+    if search(0, 0.0):
+        return tuple(ordered[index][0] for index in chosen)
     return None
 
 
@@ -186,85 +256,99 @@ def _disclosing_combination(
 # compute the "protected" delta from the two period values regardless of what
 # the delta figure itself displays. So a delta's own suppression stands on its
 # own (it still gets redacted if its magnitude is small); it just does not pull
-# other figures down with it. It can still act as a *candidate* for its own
-# period figures (see `_group_key`): if a delta is ever left visible next to one
-# suppressed period, the other period genuinely is recoverable from them, and
-# that risk is real, not definitional.
+# other figures down with it. The reverse dependency is real, though: once
+# either of a delta's period figures is suppressed, the delta must go with it
+# (see `_complementary_suppress`), because a visible delta reconstructs the
+# hidden period from the other period, or -- combined with a visible
+# whole-period headline -- pins it at (headline - delta) / 2.
 _DELTA_SUFFIX = "__delta"
 
 
-def _group_key(metric_id: str) -> str:
-    """The disclosure-check group a figure belongs to.
+def _sibling_delta_id(metric_id: str) -> str | None:
+    """The delta metric_id belonging to a comparison period figure, or None.
 
-    The report spec has no explicit crosstab structure -- metrics are a flat
-    list -- so checking every suppressed figure against every other figure in
-    the whole export, headline metrics and comparison metrics alike, produces
-    false positives: two unrelated aggregates (say, total distinct clients and
-    a different quarter's exit count) can coincidentally subtract to the same
-    integer as some suppressed cell, with no real relationship and no reason an
-    analyst would try that combination. Complementary suppression should only
-    fire within an actual sibling group: figures a reader would plausibly
-    combine because the spec presents them together.
-
-    A comparison metric's period and delta figures (``exits__q1``,
-    ``exits__q2``, ``exits__delta``) share a base metric_id and *do* have a real
-    arithmetic relationship (the delta is defined from the two periods), so
-    they group together, keyed by that base id. Every other figure -- the
-    report's own headline metrics -- has no declared grouping beyond "the
-    report", so they all share one group; that is the only crosstab the spec
-    actually expresses (see the module docstring's fallback for when a fuller
-    grouping model isn't available).
+    ``exits__q1`` -> ``exits__delta``. A figure that is not suffixed, or is
+    itself a delta, has no sibling delta.
     """
 
-    if "__" in metric_id:
-        return metric_id.rsplit("__", 1)[0]
-    return "__report__"
+    if "__" not in metric_id or metric_id.endswith(_DELTA_SUFFIX):
+        return None
+    return metric_id.rsplit("__", 1)[0] + _DELTA_SUFFIX
 
 
-def _complementary_suppress(
-    figures: list[Figure], suppressed_ids: set[str], threshold: int
-) -> set[str]:
+def _complementary_suppress(figures: list[Figure], suppressed_ids: set[str]) -> set[str]:
     """Disclosure-based complementary suppression: real arithmetic, not names.
 
-    For every already-suppressed figure, checks whether its exact value can be
-    reconstructed by adding or subtracting other still-visible figures in the
-    same group (see ``_group_key``): a total minus its other named parts, a
-    sibling category minus another, a comparison's other period plus its delta,
-    and so on. If a disclosing combination exists, the smallest-valued figure in
-    it is suppressed too -- the standard "next-smallest cell" complementary
-    suppression rule, which suppresses the least additional information needed
-    to break that particular recovery -- and the check repeats, since suppressing
-    one figure can still leave another combination that discloses the same or a
-    different suppressed cell.
+    Runs three rules to a shared fixed point, since applying any one of them can
+    expose work for another:
 
-    Only "count"-unit figures participate: a percentage is not additive with a
-    count, so mixing them would produce meaningless coincidental matches. A
-    comparison delta figure (metric_id ending in `_DELTA_SUFFIX`) is never
-    treated as a target; see the module note above.
+    1. A suppressed period figure pulls its own delta figure down with it. The
+       delta is current minus prior by definition; visible, it reconstructs the
+       hidden period from the other period figure or from a whole-period
+       headline, and the headline route has a coefficient (a half) the signed
+       sum search below cannot represent. See the ``_DELTA_SUFFIX`` note.
+    2. Once any count figure is suppressed (primary or complementary), every
+       percent figure is suppressed too. A percent with a visible denominator
+       uniquely determines a suppressed numerator via rounding, and the data
+       model cannot say which counts feed which percent, so the conservative
+       rule from the module docstring applies.
+    3. For every primary-suppressed figure, the exact-recovery search: can the
+       suppressed value be rebuilt by adding or subtracting still-visible
+       figures of the same unit anywhere in the report (a total minus its other
+       named parts, a headline minus the other period, a sibling category minus
+       another)? If a disclosing combination exists, the smallest-valued figure
+       in it is suppressed -- the standard "next-smallest cell" rule, the least
+       additional information that breaks that recovery -- and the loop repeats,
+       since one redaction can leave another combination that discloses the same
+       or a different suppressed cell.
+
+    The disclosure scope is the whole report, split only by unit (counts check
+    against counts, percents against percents); see the module docstring for why
+    any finer grouping severed real accounting identities. A comparison delta
+    figure is never a *target* of rule 3 (its recoverability from its own
+    periods is definitional, not a discovered disclosure), but it is a candidate
+    while visible.
     """
 
     complementary: set[str] = set()
-    counts_by_id = {
-        figure.metric_id: figure.value
-        for figure in figures
-        if figure.receipt.unit == "count"
-    }
+    values_by_id = {figure.metric_id: figure.value for figure in figures}
+    units_by_id = {figure.metric_id: figure.receipt.unit for figure in figures}
+
+    def hidden(metric_id: str) -> bool:
+        return metric_id in suppressed_ids or metric_id in complementary
 
     changed = True
     while changed:
         changed = False
-        for metric_id in sorted(suppressed_ids):
-            if metric_id not in counts_by_id or metric_id.endswith(_DELTA_SUFFIX):
+
+        # Rule 1: a suppressed period figure takes its delta with it.
+        for metric_id in sorted(values_by_id):
+            delta_id = _sibling_delta_id(metric_id)
+            if delta_id is None or not hidden(metric_id):
                 continue
-            target = counts_by_id[metric_id]
-            group = _group_key(metric_id)
+            if delta_id in values_by_id and not hidden(delta_id):
+                complementary.add(delta_id)
+                changed = True
+
+        # Rule 2: any suppressed count suppresses every percent/ratio figure.
+        if any(units_by_id[mid] == "count" for mid in suppressed_ids | complementary):
+            for metric_id in sorted(values_by_id):
+                if units_by_id[metric_id] != "count" and not hidden(metric_id):
+                    complementary.add(metric_id)
+                    changed = True
+
+        # Rule 3: the exact-recovery search over same-unit visible figures.
+        for metric_id in sorted(suppressed_ids):
+            if metric_id.endswith(_DELTA_SUFFIX) or metric_id not in values_by_id:
+                continue
+            target = values_by_id[metric_id]
+            unit = units_by_id[metric_id]
             candidates = [
                 (other_id, value)
-                for other_id, value in counts_by_id.items()
+                for other_id, value in values_by_id.items()
                 if other_id != metric_id
-                and other_id not in suppressed_ids
-                and other_id not in complementary
-                and _group_key(other_id) == group
+                and not hidden(other_id)
+                and units_by_id[other_id] == unit
             ]
             combo = _disclosing_combination(target, candidates)
             if combo is None:
@@ -272,7 +356,7 @@ def _complementary_suppress(
             # The minimum additional redaction that breaks this recovery: the
             # smallest-valued figure in the disclosing combination. Ties broken
             # by metric_id so the choice is deterministic.
-            victim = min(combo, key=lambda mid: (abs(counts_by_id[mid]), mid))
+            victim = min(combo, key=lambda mid: (abs(values_by_id[mid]), mid))
             complementary.add(victim)
             changed = True
 
@@ -290,9 +374,11 @@ def suppress_figures(
     Figures with values in [1, threshold-1] (by magnitude; see
     ``_is_below_threshold``) are marked as suppressed; true zeros (value = 0) are
     preserved. If ``complementary_rule`` is True and a figure is suppressed,
-    other figures are checked for actual arithmetic recoverability of the
-    suppressed value (see ``_complementary_suppress``) and suppressed too if a
-    disclosing combination is found.
+    further figures are suppressed until no suppressed value is recoverable from
+    the ones still visible: any figure in a disclosing signed combination, the
+    delta of any suppressed period figure, and every percent once any count is
+    suppressed (see ``_complementary_suppress`` for the three rules and the
+    module docstring for the disclosure scope).
 
     Returns a tuple of (suppressed_figures, suppression_result). Every field of a
     suppressed figure that carries a raw count -- the figure's own value and
@@ -322,7 +408,7 @@ def suppress_figures(
     # recoverability rather than metric-name substrings.
     complementary_ids: set[str] = set()
     if complementary_rule and suppressed_ids:
-        complementary_ids = _complementary_suppress(figures, suppressed_ids, threshold)
+        complementary_ids = _complementary_suppress(figures, suppressed_ids)
         unsuppressed_ids -= complementary_ids
 
     # Third pass: redact every figure that ended up suppressed, primary or
