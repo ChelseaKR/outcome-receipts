@@ -17,8 +17,16 @@ Sourced from:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
+from outcome_receipts.cli import main
+from outcome_receipts.clock import FixedClock
+from outcome_receipts.config import load_spec
+from outcome_receipts.engine import compute_figures, read_csv
+from outcome_receipts.grounding import find_numbers
 from outcome_receipts.models import Figure, Receipt
 from outcome_receipts.suppression import (
     SuppressionResult,
@@ -47,6 +55,32 @@ def _make_figure(metric_id: str, value: float, display: str | None = None) -> Fi
         display=display,
         receipt=receipt,
     )
+
+
+def _report_receipt_block(report_md: str, metric_id: str) -> str:
+    """The single figure's receipt bullet block from a rendered report.md.
+
+    `render_report` writes one `- **metric_id** = display` bullet per figure,
+    followed by its indented sub-bullets, in metric_id order. This isolates just
+    that figure's block, so a check against it cannot be confused by another,
+    legitimately unsuppressed figure's receipt elsewhere in the document.
+    """
+
+    marker = f"- **{metric_id}**"
+    start = report_md.index(marker)
+    rest = report_md[start + len(marker) :]
+    end = rest.find("\n- **")
+    return marker + (rest if end == -1 else rest[:end])
+
+
+def _trace_figure_section(trace_html: str, metric_id: str) -> str:
+    """The single figure's <section> from a rendered trace.html."""
+
+    marker = f'id="metric-{metric_id}"'
+    start = trace_html.index(marker)
+    rest = trace_html[start:]
+    end = rest.find("</section>")
+    return rest if end == -1 else rest[: end + len("</section>")]
 
 
 class TestSuppressionThreshold:
@@ -112,19 +146,29 @@ class TestComplementarySuppression:
     """Complementary suppression must prevent recovery of suppressed cells."""
 
     def test_complementary_suppression_on_total(self) -> None:
-        """When a category is suppressed, suppress its total so the category can't be derived."""
+        """When a category is suppressed, suppress the cell that would derive it.
+
+        total_exits(25) - exits_other(17) == exits_to_housing(8), so leaving both
+        total_exits and exits_other visible would let a reader recover the
+        suppressed value by subtraction. The real arithmetic check (not a name
+        match against "total") finds this and suppresses the smaller of the two
+        recovering cells, exits_other, the standard "next-smallest" rule: it is
+        the least additional redaction that still breaks the recovery.
+        """
         figures = [
             _make_figure("total_exits", 25),           # Total = suppressed + unsuppressed
             _make_figure("exits_to_housing", 8),       # Suppressed (below threshold)
-            _make_figure("exits_other", 17),           # Unsuppressed (25 - 8 = 17)
+            _make_figure("exits_other", 17),           # 25 - 8 = 17: recovers the suppressed cell
         ]
         redacted, result = suppress_figures(
             figures, complementary_rule=True
         )
 
-        # The total should be complementary-suppressed to prevent: other = total - suppressed
         assert "exits_to_housing" in result.suppressed
-        assert "total_exits" in result.complementary_suppressed
+        assert "exits_other" in result.complementary_suppressed
+        # Recovery is genuinely broken: only total_exits remains visible, and a
+        # single number cannot reconstruct exits_to_housing by itself.
+        assert result.unsuppressed == ("total_exits",)
 
     def test_complementary_suppression_can_be_disabled(self) -> None:
         """When complementary_rule=False, only primary suppression is applied."""
@@ -157,6 +201,12 @@ class TestComplementarySuppression:
         assert "small_group" in result.suppressed
         assert "category_a" in result.unsuppressed
         assert "category_b" in result.unsuppressed
+        # None of these values combine to reconstruct small_group (5), so a
+        # genuine arithmetic check leaves total_served visible too -- unlike a
+        # name-substring heuristic, which would have suppressed it just for
+        # being called "total_served" regardless of whether it discloses anything.
+        assert "total_served" in result.unsuppressed
+        assert result.complementary_suppressed == ()
 
 
 class TestSuppressionRedaction:
@@ -184,15 +234,23 @@ class TestSuppressionRedaction:
         assert redacted[1].display == "75.0%"
 
     def test_suppressed_receipt_value_zeroed(self) -> None:
-        """Suppressed figures have value set to 0 in their receipt (signal suppression)."""
+        """A suppressed figure's *receipt* must also be scrubbed, not just the figure.
+
+        report.py and trace.py render `receipt.row_count` and the manifest renders
+        `receipt.value` directly -- neither reads `Figure.value`. A suppressed
+        figure that keeps its original, unredacted receipt "for audit trail" is
+        not suppressed at all: the raw count is still sitting right there for
+        every renderer that reads the receipt instead of the figure.
+        """
         figures = [
             _make_figure("count_8", 8),
         ]
         redacted, result = suppress_figures(figures)
 
         assert redacted[0].value == 0.0
-        # Original receipt is still attached for audit trail.
-        assert redacted[0].receipt.value == 8.0
+        assert redacted[0].receipt.value == 0.0
+        assert redacted[0].receipt.row_count == 0
+        assert redacted[0].receipt.slice_hash != figures[0].receipt.slice_hash
 
 
 class TestAggregateOnlyAssertion:
@@ -227,15 +285,23 @@ class TestAggregateOnlyAssertion:
 
 
 class TestSuppressionResult:
-    """The SuppressionResult captures the suppression outcome."""
+    """SuppressionResult.ok must check the actual privacy invariant, not counts.
+
+    The old implementation was `len(suppressed) == 0 or len(unsuppressed) <
+    len(suppressed)`: a comparison of two tuple lengths that says nothing about
+    whether any below-threshold cell was actually left unredacted. These tests
+    pin the real check: ok is False exactly when a figure recorded as
+    unsuppressed had an original value below threshold.
+    """
 
     def test_result_ok_when_no_figures_suppressed(self) -> None:
-        """ok=True when all figures passed through unsuppressed."""
+        """ok=True when all figures passed through unsuppressed, above threshold."""
         result = SuppressionResult(
             suppressed=(),
             complementary_suppressed=(),
             unsuppressed=("metric1", "metric2"),
             aggregate_only=True,
+            values=(("metric1", 100.0), ("metric2", 0.0)),
         )
         assert result.ok
 
@@ -251,12 +317,59 @@ class TestSuppressionResult:
         assert len(result.complementary_suppressed) == 1
         assert len(result.unsuppressed) == 2
 
+    def test_ok_is_false_when_a_below_threshold_cell_is_left_unsuppressed(self) -> None:
+        """A below-threshold figure marked unsuppressed must fail ok.
+
+        This is the scenario the old `len(unsuppressed) < len(suppressed)` check
+        could not catch: a single leaked small cell, with nothing else suppressed
+        to compare it against.
+        """
+        result = SuppressionResult(
+            suppressed=(),
+            complementary_suppressed=(),
+            unsuppressed=("leaked_small_cell",),
+            aggregate_only=True,
+            values=(("leaked_small_cell", 4.0),),
+        )
+        assert not result.ok
+
+    def test_ok_ignores_unsuppressed_zero_and_above_threshold_values(self) -> None:
+        """A true zero or an at/above-threshold value is correctly not a violation."""
+        result = SuppressionResult(
+            suppressed=(),
+            complementary_suppressed=(),
+            unsuppressed=("zero_cell", "big_cell", "threshold_cell"),
+            aggregate_only=True,
+            values=(("zero_cell", 0.0), ("big_cell", 500.0), ("threshold_cell", 11.0)),
+        )
+        assert result.ok
+
+    def test_ok_is_true_for_every_real_suppress_figures_call(self) -> None:
+        """Every result suppress_figures actually returns must be ok."""
+        figures = [
+            _make_figure("served", 100),
+            _make_figure("small", 5),
+            _make_figure("zero", 0),
+        ]
+        _redacted, result = suppress_figures(figures)
+        assert result.ok
+
 
 class TestRealWorldScenario:
     """A realistic outcome-report scenario: housing program with suppressed cells."""
 
-    def test_housing_program_with_small_exits_suppressed(self) -> None:
-        """A realistic outcome report where a small exit group is suppressed."""
+    def test_housing_program_with_two_small_exits_suppressed(self) -> None:
+        """Two suppressed cells whose *sum* (not either alone) is derivable.
+
+        total_served(150) - exited_to_ph(45) - exited_to_th(95) == 10, the
+        combined total of the two suppressed cells, exited_to_sh(7) and
+        still_housed(3). But that arithmetic only pins down their sum; it does
+        not reconstruct either exact value (7+3, 6+4, 5+5, ... are all
+        consistent with 10), so a real disclosure check correctly leaves
+        total_served visible. A name-substring heuristic could not tell this
+        apart from a genuinely recoverable case and would suppress total_served
+        regardless.
+        """
         figures = [
             _make_figure("total_served", 150),
             _make_figure("exited_to_ph", 45),            # Above threshold
@@ -270,14 +383,166 @@ class TestRealWorldScenario:
         assert "exited_to_sh" in result.suppressed
         assert "still_housed" in result.suppressed
 
-        # Above-threshold figures pass through.
+        # Above-threshold figures pass through: neither individual suppressed
+        # value is recoverable from them.
         assert "exited_to_ph" in result.unsuppressed
         assert "exited_to_th" in result.unsuppressed
-
-        # Total is complementary-suppressed to prevent recovery.
-        assert "total_served" in result.complementary_suppressed
+        assert "total_served" in result.unsuppressed
+        assert result.complementary_suppressed == ()
 
         # Check that the redacted version has [SUPPRESSED] placeholders.
         redacted_by_id = {f.metric_id: f for f in redacted}
         assert redacted_by_id["exited_to_sh"].display == "[SUPPRESSED]"
         assert redacted_by_id["still_housed"].display == "[SUPPRESSED]"
+
+    def test_housing_program_with_one_small_exit_group_suppressed(self) -> None:
+        """A single suppressed cell whose value *is* exactly recoverable.
+
+        Here total_served is a true sum of the three categories, so once
+        exited_to_sh is suppressed, total_served - exited_to_ph - exited_to_th
+        reconstructs it exactly (150 - 45 - 98 == 7). The real check catches
+        this via the 3-term combination and suppresses the smallest cell in
+        it -- exited_to_ph -- the standard "next-smallest" rule. (The total is
+        the sum of its parts, so it is never the smallest cell in a genuine
+        recovering combination; suppressing a category instead of the total
+        matches real disclosure-control practice, unlike the old heuristic,
+        which suppressed whatever happened to be named "total".)
+        """
+        figures = [
+            _make_figure("total_served", 150),           # 45 + 98 + 7
+            _make_figure("exited_to_ph", 45),
+            _make_figure("exited_to_th", 98),
+            _make_figure("exited_to_sh", 7),              # Below threshold, suppressed
+        ]
+        redacted, result = suppress_figures(figures, complementary_rule=True)
+
+        assert "exited_to_sh" in result.suppressed
+        assert "exited_to_ph" in result.complementary_suppressed
+        assert "total_served" in result.unsuppressed
+        assert "exited_to_th" in result.unsuppressed
+
+        redacted_by_id = {f.metric_id: f for f in redacted}
+        assert redacted_by_id["exited_to_ph"].display == "[SUPPRESSED]"
+        assert redacted_by_id["exited_to_ph"].receipt.value == 0.0
+
+
+class TestArithmeticDisclosureNotNameMatching:
+    """Bug: the complementary pass used to only match metric_id keywords.
+
+    None of "clients_served", "clients_white", or "clients_black" contains
+    "total", "all", "sum", or "aggregate", so the old heuristic suppressed
+    nothing beyond the primary cell -- even though clients_black is trivially
+    recoverable as clients_served - clients_white.
+    """
+
+    def test_demographic_breakdown_without_total_or_all_in_the_name(self) -> None:
+        figures = [
+            _make_figure("clients_served", 103),
+            _make_figure("clients_white", 95),
+            _make_figure("clients_black", 8),  # Below threshold; 103 - 95 == 8
+        ]
+        redacted, result = suppress_figures(figures, complementary_rule=True)
+
+        assert "clients_black" in result.suppressed
+        # A real recovering combination exists (clients_served - clients_white),
+        # so one of its members must be suppressed too -- the smaller of the two,
+        # clients_white, is the minimal additional redaction.
+        assert "clients_white" in result.complementary_suppressed
+        assert "clients_served" in result.unsuppressed
+
+        redacted_by_id = {f.metric_id: f for f in redacted}
+        assert redacted_by_id["clients_black"].display == "[SUPPRESSED]"
+        assert redacted_by_id["clients_white"].display == "[SUPPRESSED]"
+        # clients_served alone cannot reconstruct clients_black: no combination
+        # of the figures still visible after suppression equals 8.
+        assert redacted_by_id["clients_served"].display == "103"
+        assert redacted_by_id["clients_served"].value == 103.0
+
+    def test_no_false_positive_when_nothing_is_actually_recoverable(self) -> None:
+        """A name containing 'total' must not be suppressed if it discloses nothing.
+
+        This is the other half of the fix: the old heuristic suppressed any
+        "total"-ish figure whenever *anything* was suppressed, whether or not it
+        was actually part of a recoverable relationship.
+        """
+        figures = [
+            _make_figure("clients_served", 500),
+            _make_figure("total_donations_thousands", 220),  # Unrelated metric
+            _make_figure("clients_black", 8),  # Below threshold, unrelated to the above
+        ]
+        redacted, result = suppress_figures(figures, complementary_rule=True)
+
+        assert "clients_black" in result.suppressed
+        assert result.complementary_suppressed == ()
+        assert "total_donations_thousands" in result.unsuppressed
+        assert "clients_served" in result.unsuppressed
+
+
+class TestSuppressionArtifactIntegration:
+    """Merge-blocking: a suppressed value must not appear in any exported artifact.
+
+    Unit tests on `suppress_figures` alone can't catch a leak that happens
+    downstream, in a renderer that reads `figure.receipt` instead of
+    `figure.value` (this is exactly what Bug 1 was). This test runs the real
+    `receipts run` pipeline end to end and greps the actual rendered
+    report.md, receipts.json, and trace.html for the raw suppressed numbers,
+    the same way a reviewer would.
+    """
+
+    def test_raw_suppressed_values_do_not_appear_in_any_exported_artifact(
+        self, tmp_path: Path
+    ) -> None:
+        examples = Path(__file__).resolve().parents[1] / "examples"
+        config = examples / "housing-demo" / "report.toml"
+        out = tmp_path / "out"
+
+        # housing-demo's `exits` metric is 10 and `exits_permanent` is 6, both
+        # below the suppression threshold of 11.
+        spec = load_spec(config)
+        rows = read_csv(spec.data_path)
+        raw_figures = compute_figures(rows, spec.report.metrics, clock=FixedClock())
+        raw_by_id = {f.metric_id: f for f in raw_figures}
+        assert raw_by_id["exits"].value == 10.0
+        assert raw_by_id["exits_permanent"].value == 6.0
+
+        code = main(["run", "--config", str(config), "--out", str(out), "--reproducible"])
+        assert code == 0
+
+        report_md = (out / "report.md").read_text(encoding="utf-8")
+        receipts_json = json.loads((out / "receipts.json").read_text(encoding="utf-8"))
+        trace_html = (out / "trace.html").read_text(encoding="utf-8")
+
+        # The narrative must show the redacted placeholder, not the raw counts:
+        # neither "10" nor "6" may appear as a number the drafter wrote.
+        narrative_section = report_md.split("## Receipts")[0]
+        narrative_numbers = {span.text for span in find_numbers(narrative_section)}
+        assert "10" not in narrative_numbers
+        assert "6" not in narrative_numbers
+        assert report_md.count("[SUPPRESSED]") >= 2
+
+        # The receipts manifest must carry the redaction through every field a
+        # reader could use to recover the count, not just `display`.
+        by_metric = {r["metric_id"]: r for r in receipts_json["receipts"]}
+        for metric_id in ("exits", "exits_permanent"):
+            record = by_metric[metric_id]
+            assert record["display"] == "[SUPPRESSED]"
+            assert record["value"] == 0.0
+            assert record["row_count"] == 0
+            assert record["slice_hash"] != raw_by_id[metric_id].receipt.slice_hash
+
+        # The exact leak this bug reported: "rows in slice: 10" right under a
+        # "[SUPPRESSED]" line in the rendered Markdown -- scoped to *this*
+        # figure's own receipt block, not the whole document. housing-demo's
+        # `pct_permanent` is a legitimately unsuppressed rate whose own,
+        # legitimate row_count happens to also be 10 (same slice as `exits`), so
+        # a blind whole-document substring search would false-positive on it; the
+        # bug is specifically the suppressed figure's *own* block still showing
+        # its raw count.
+        assert "rows in slice: 10" not in _report_receipt_block(report_md, "exits")
+        assert "rows in slice: 6" not in _report_receipt_block(report_md, "exits_permanent")
+
+        # The trace view's per-figure detail must show the redacted row count,
+        # not the raw one, for both suppressed figures (again scoped to each
+        # figure's own <section>, for the same reason).
+        assert "<dd>10</dd>" not in _trace_figure_section(trace_html, "exits")
+        assert "<dd>6</dd>" not in _trace_figure_section(trace_html, "exits_permanent")

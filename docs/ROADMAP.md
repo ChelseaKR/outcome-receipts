@@ -12,15 +12,16 @@ mapping over messy real exports) come after the trust machinery has proven out.
 
 ## Architecture
 
-A deterministic state machine: compute figures with receipts, draft a narrative,
-run the grounding gate, suppress small cells, let a human approve, export.
+A deterministic state machine: compute figures with receipts, suppress small
+cells, draft a narrative from the already-suppressed figures, run the
+grounding gate, let a human approve, export.
 
 ```
-compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
-(SQL,        (fill      (every     (small-cell   (human      (report +
- receipt)     template)  number     redaction)    sign-off)   manifest)
-              binds to a
-              receipt)
+compute  ->  suppress  ->  draft  ->  ground  ->  approve  ->  export
+(SQL,        (small-cell   (fill      (every      (human      (report +
+ receipt)     redaction)    template)  number      sign-off)   manifest)
+                             binds to a
+                             receipt)
 ```
 
 ## v0.1.0 — Receipts, no LLM (scope complete on `main`; not yet tagged/released)

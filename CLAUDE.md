@@ -210,9 +210,17 @@ Decisions made now so they are not relitigated:
   grounding gate is the enforcement that it complied. Under any policy pack that
   forbids cloud calls, the seam is fused off and the deterministic template
   drafter is used.
-* **Suppression runs before export, after grounding.** Order: compute → receipt
-  → draft → ground → suppress → human-approve → export. Suppression is the last
-  transform before a human sees the report, so what they approve is what ships.
+* **Suppression runs before drafting, not after.** Order: compute → receipt →
+  suppress → draft → ground → human-approve → export. The original design ran
+  suppression last, on the theory that it was "the last transform before a
+  human sees the report, so what they approve is what ships" — but nothing in
+  this codebase implements that human-approval step, so suppress-after-draft
+  shipped a narrative, chart, and comparison table drafted from the raw,
+  pre-suppression figures straight to export with no safety net (found in code
+  review; see the suppression-order ADR). Suppression must run first so the
+  drafter and the grounding gate never see a value they are not allowed to
+  publish; the gate then re-verifies against the *suppressed* figures, so a
+  "[SUPPRESSED]" placeholder is what gets grounded, not the number it replaced.
 
 ## Build plan
 

@@ -64,6 +64,7 @@ from outcome_receipts.report import (
 from outcome_receipts.scaffold import scaffold_spec
 from outcome_receipts.suppression import (
     filter_for_aggregate_only,
+    redact_comparison,
     suppress_figures,
 )
 from outcome_receipts.trace import render_trace_html

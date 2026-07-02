@@ -184,7 +184,7 @@ today** (mapped to real v0.1 features) · **Gets stuck** · **Wants next** ·
   different from one a chatbot wrote.
 - **Wants next.** A one-paragraph, plain-language trust statement she can paste
   into a cover letter; a human approval step she actually signs (the
-  compute → ground → suppress → approve → export order in
+  compute → suppress → draft → ground → approve → export order in
   [`docs/ROADMAP.md`](ROADMAP.md) names it, but there is no sign-off surface yet).
 - **Adopts if.** It lowers the personal risk of putting her name on the numbers.
   **Walks if.** Approving means reading SQL she does not understand.

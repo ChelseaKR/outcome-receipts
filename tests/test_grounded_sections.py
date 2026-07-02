@@ -71,7 +71,11 @@ def test_cli_run_writes_report_charts_and_manifest(tmp_path: Path) -> None:
     assert "## Period comparison" in report
     assert "## Charts" in report
     # The comparison renders period values and a change, all grounded numbers.
-    assert "| 12 | 14 | 2 | increase |" in report
+    # clients_served is 12 in Q1 and 14 in Q2, both well above the suppression
+    # threshold, so the periods render as themselves; their change (2) is below
+    # the threshold on its own and is suppressed, exactly like any other small
+    # count, so it renders as the redacted placeholder rather than "2".
+    assert "| 12 | 14 | [SUPPRESSED] | increase |" in report
     # The accessible data table carries the chart's grounded numbers.
     assert "| Permanent | 13 |" in report
     # The provenance statement is embedded, and the trace view ships alongside.
