@@ -8,6 +8,8 @@ Commands:
           numbers
   verify  re-derive every receipt in a manifest from the spec and data, and fail
           on any drift
+  verify-ledger
+          re-hash the append-only export ledger and fail if the chain is broken
   eval    score the drafted narrative's grounding and write the eval report
 
 argparse only; no runtime dependency beyond the standard library.
@@ -30,6 +32,7 @@ from outcome_receipts.draft import draft
 from outcome_receipts.engine import compute_figures, read_csv
 from outcome_receipts.evaluate import evaluate
 from outcome_receipts.grounding import ground
+from outcome_receipts.ledger import append_export, verify_chain
 from outcome_receipts.models import Figure
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
@@ -150,12 +153,25 @@ def _cmd_run(args: argparse.Namespace) -> int:
         render_trace_html(spec.report.title, figures, provenance=provenance),
         encoding="utf-8",
     )
+
+    ledger_path = (
+        Path(args.ledger) if args.ledger else out_dir.parent / "export-ledger.jsonl"
+    )
+    entry = append_export(
+        ledger_path,
+        report_title=spec.report.title,
+        manifest_json_or_hash=manifest_path.read_text(encoding="utf-8"),
+        recipient=args.recipient,
+        clock=_clock(reproducible=args.reproducible),
+    )
+
     print("\ngrounding gate: PASS")
     print(f"  report:   {report_path}")
     print(f"  receipts: {manifest_path}")
     print(f"  trace:    {trace_path}")
     if charts:
         print(f"  charts:   {out_dir / _CHART_DIR} ({len(charts)} SVG)")
+    print(f"  ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
     return 0
 
 
@@ -189,6 +205,20 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_verify_ledger(args: argparse.Namespace) -> int:
+    ledger_path = Path(args.ledger)
+    problems = verify_chain(ledger_path)
+    if not problems:
+        print(f"export ledger: {ledger_path}")
+        print("verify-ledger: PASS — the export chain is intact")
+        return 0
+    print(f"export ledger: {ledger_path}", file=sys.stderr)
+    for problem in problems:
+        print(f"  {problem}", file=sys.stderr)
+    print("\nverify-ledger: FAIL — the export chain is broken", file=sys.stderr)
+    return 1
+
+
 def _cmd_eval(args: argparse.Namespace) -> int:
     spec, _rows, figures = _load_and_compute(args.config, reproducible=True)
     narrative = draft(spec.report, figures)
@@ -219,6 +249,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use a fixed timestamp so receipts are byte-for-byte reproducible",
     )
+    run_parser.add_argument(
+        "--ledger",
+        default=None,
+        help="path to the append-only export ledger (default: <out>/../export-ledger.jsonl)",
+    )
+    run_parser.add_argument(
+        "--recipient",
+        default=None,
+        help="who the report was exported to, recorded in the export ledger",
+    )
     run_parser.set_defaults(func=_cmd_run)
 
     audit_parser = sub.add_parser("audit", help="run the grounding gate over a narrative file")
@@ -236,6 +276,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_parser.add_argument("--reproducible", action="store_true", help=argparse.SUPPRESS)
     verify_parser.set_defaults(func=_cmd_verify)
+
+    verify_ledger_parser = sub.add_parser(
+        "verify-ledger", help="check the hash-chained export ledger for tampering"
+    )
+    verify_ledger_parser.add_argument(
+        "--ledger", required=True, help="path to the export-ledger.jsonl to check"
+    )
+    verify_ledger_parser.set_defaults(func=_cmd_verify_ledger)
 
     eval_parser = sub.add_parser("eval", help="score the drafted narrative's grounding")
     eval_parser.add_argument("--config", required=True, help="path to the report spec TOML")
