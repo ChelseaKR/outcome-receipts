@@ -30,12 +30,12 @@ from outcome_receipts.charts import Chart, render_charts
 from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import ComparisonResult, compute_comparison
 from outcome_receipts.config import Spec, load_spec
-from outcome_receipts.draft import draft
+from outcome_receipts.draft import draft, draft_template
 from outcome_receipts.engine import compute_figures, read_csv
 from outcome_receipts.evaluate import evaluate
 from outcome_receipts.grounding import ground
-from outcome_receipts.ledger import append_export, verify_chain
-from outcome_receipts.models import Figure
+from outcome_receipts.ledger import LedgerEntry, append_export, verify_chain
+from outcome_receipts.models import Figure, GroundingResult, TemplateSpec
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
     receipts_manifest,
@@ -104,49 +104,39 @@ def _claims_text(comparison: ComparisonResult | None, charts: Sequence[Chart]) -
     return " ".join(parts)
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
-    spec, _rows, figures, comparison = _compute_all(args.config, reproducible=args.reproducible)
+def _write_template_output(
+    out_dir: Path,
+    tspec: TemplateSpec,
+    narrative: str,
+    figures: Sequence[Figure],
+    comparison: ComparisonResult | None,
+    charts: Sequence[Chart],
+    provenance: Provenance,
+    *,
+    ledger_path: Path,
+    recipient: str | None,
+    clock: Clock,
+) -> LedgerEntry:
+    """Write one funder format's report, receipts, trace, and charts, and append
+    that export to the ledger.
 
-    narrative = draft(spec.report, figures)
-    charts = render_charts(spec.report.charts, figures)
+    The figure set, comparison, and charts are shared across formats and computed
+    once; only the narrative and title differ per template. Each output directory
+    is self-contained: the charts rendered once are written into every subdir so a
+    report's relative image references resolve without reaching outside it. Each
+    format's export is its own ledger entry, chained onto the same ledger file, so
+    every funder format that shipped is individually receipted.
+    """
 
-    narrative_result = ground(narrative, figures)
-    claims_result = ground(_claims_text(comparison, charts), figures)
-
-    print(f"figures computed: {len(figures)}")
-    print(
-        f"numbers in narrative: {narrative_result.total} "
-        f"(bound {len(narrative_result.bound)}, unbound {len(narrative_result.unbound)})"
-    )
-    print(
-        f"chart and comparison numbers: {claims_result.total} "
-        f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})"
-    )
-
-    if not (narrative_result.ok and claims_result.ok):
-        print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
-        for span in (*narrative_result.unbound, *claims_result.unbound):
-            print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
-        return 2
-
-    provenance = Provenance(
-        numbers_bound=len(narrative_result.bound) + len(claims_result.bound),
-        numbers_unbound=0,
-    )
-
-    out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    report_path = out_dir / "report.md"
-    manifest_path = out_dir / "receipts.json"
-    trace_path = out_dir / "trace.html"
     if charts:
         chart_dir = out_dir / _CHART_DIR
         chart_dir.mkdir(parents=True, exist_ok=True)
         for chart in charts:
             (chart_dir / f"{chart.chart_id}.svg").write_text(chart.svg, encoding="utf-8")
-    report_path.write_text(
+    (out_dir / "report.md").write_text(
         render_report(
-            spec.report.title,
+            tspec.title,
             narrative,
             figures,
             comparison=comparison,
@@ -156,28 +146,93 @@ def _cmd_run(args: argparse.Namespace) -> int:
         ),
         encoding="utf-8",
     )
-    manifest_path.write_text(receipts_manifest(figures, provenance=provenance), encoding="utf-8")
-    trace_path.write_text(
-        render_trace_html(spec.report.title, figures, provenance=provenance),
+    manifest_text = receipts_manifest(figures, provenance=provenance)
+    (out_dir / "receipts.json").write_text(manifest_text, encoding="utf-8")
+    (out_dir / "trace.html").write_text(
+        render_trace_html(tspec.title, figures, provenance=provenance),
         encoding="utf-8",
     )
-
-    ledger_path = Path(args.ledger) if args.ledger else out_dir.parent / "export-ledger.jsonl"
-    entry = append_export(
+    return append_export(
         ledger_path,
-        report_title=spec.report.title,
-        manifest_json_or_hash=manifest_path.read_text(encoding="utf-8"),
-        recipient=args.recipient,
-        clock=_clock(reproducible=args.reproducible),
+        report_title=tspec.title,
+        manifest_json_or_hash=manifest_text,
+        recipient=recipient,
+        clock=clock,
     )
 
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    spec, _rows, figures, comparison = _compute_all(
+        args.config, reproducible=args.reproducible
+    )
+
+    # The figures, comparison, and charts are the shared, receipted evidence: they
+    # are computed once and rendered into every funder format below.
+    charts = render_charts(spec.report.charts, figures)
+    claims_result = ground(_claims_text(comparison, charts), figures)
+
+    # Draft and gate each format up front, so an unbound number in ANY template
+    # blocks the whole export before a single file is written (fail-closed).
+    drafts: list[tuple[TemplateSpec, str, GroundingResult]] = []
+    for tspec in spec.report.effective_templates:
+        narrative = draft_template(tspec.template, figures)
+        drafts.append((tspec, narrative, ground(narrative, figures)))
+
+    print(f"figures computed: {len(figures)}")
+    print(f"chart and comparison numbers: {claims_result.total} "
+          f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})")
+    for tspec, _narrative, result in drafts:
+        print(f"numbers in {tspec.template_id!r} narrative: {result.total} "
+              f"(bound {len(result.bound)}, unbound {len(result.unbound)})")
+
+    unbound_ok = claims_result.ok and all(result.ok for _t, _n, result in drafts)
+    if not unbound_ok:
+        print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
+        for span in claims_result.unbound:
+            print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
+        for tspec, _narrative, result in drafts:
+            for span in result.unbound:
+                print(
+                    f"  unverifiable number in {tspec.template_id!r}: {span.text!r}",
+                    file=sys.stderr,
+                )
+        return 2
+
+    base_out = Path(args.out)
+    # A legacy single-template spec keeps writing to the flat output dir; only an
+    # explicit [[report.templates]] spec fans out into per-format subdirs.
+    fan_out = bool(spec.report.templates)
+    ledger_path = Path(args.ledger) if args.ledger else base_out.parent / "export-ledger.jsonl"
+    clock = _clock(reproducible=args.reproducible)
+    written: list[tuple[Path, LedgerEntry]] = []
+    for tspec, narrative, result in drafts:
+        provenance = Provenance(
+            numbers_bound=len(result.bound) + len(claims_result.bound),
+            numbers_unbound=0,
+        )
+        out_dir = base_out / tspec.template_id if fan_out else base_out
+        entry = _write_template_output(
+            out_dir,
+            tspec,
+            narrative,
+            figures,
+            comparison,
+            charts,
+            provenance,
+            ledger_path=ledger_path,
+            recipient=args.recipient,
+            clock=clock,
+        )
+        written.append((out_dir, entry))
+
     print("\ngrounding gate: PASS")
-    print(f"  report:   {report_path}")
-    print(f"  receipts: {manifest_path}")
-    print(f"  trace:    {trace_path}")
-    if charts:
-        print(f"  charts:   {out_dir / _CHART_DIR} ({len(charts)} SVG)")
-    print(f"  ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
+    for out_dir, entry in written:
+        print(f"  report:   {out_dir / 'report.md'}")
+        print(f"  receipts: {out_dir / 'receipts.json'}")
+        print(f"  trace:    {out_dir / 'trace.html'}")
+        if charts:
+            print(f"  charts:   {out_dir / _CHART_DIR} ({len(charts)} SVG)")
+        print(f"  ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
     return 0
 
 
