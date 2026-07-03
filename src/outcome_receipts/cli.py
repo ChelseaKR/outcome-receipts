@@ -12,6 +12,9 @@ Commands:
           on any drift
   verify-ledger
           re-hash the append-only export ledger and fail if the chain is broken
+  verify-bundle
+          recompute the bundle manifest over an output directory and fail on any
+          member that was tampered, is missing, or is extra
   eval    score the drafted narrative's grounding and write the eval report
 
 argparse only; no runtime dependency beyond the standard library.
@@ -26,6 +29,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from outcome_receipts import __version__
+from outcome_receipts.bundle import bundle_manifest, verify_bundle
 from outcome_receipts.charts import Chart, render_charts
 from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import ComparisonResult, compute_comparison
@@ -49,9 +53,35 @@ from outcome_receipts.verify import verify_manifest
 # The chart subdirectory under the output directory, referenced from the report.
 _CHART_DIR = "charts"
 
+# The bundle manifest written next to the export it seals.
+_BUNDLE_NAME = "bundle.json"
+
 
 def _clock(*, reproducible: bool) -> Clock:
     return FixedClock() if reproducible else SystemClock()
+
+
+def _load_key(path: str | None) -> bytes | None:
+    """Load a signing key as raw bytes, or ``None`` for a digests-only bundle."""
+
+    return Path(path).read_bytes() if path else None
+
+
+def _bundle_members(out_dir: Path) -> dict[str, bytes]:
+    """Read every export file under ``out_dir`` (except the bundle) back as bytes.
+
+    Names are stored relative to the output directory with forward slashes, so a
+    chart at ``charts/foo.svg`` is a stable member name across platforms and the
+    same bytes re-bundle to the same digest.
+    """
+
+    members: dict[str, bytes] = {}
+    for path in sorted(out_dir.rglob("*")):
+        if not path.is_file() or path.name == _BUNDLE_NAME:
+            continue
+        name = path.relative_to(out_dir).as_posix()
+        members[name] = path.read_bytes()
+    return members
 
 
 def _load_and_compute(
@@ -171,6 +201,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         clock=_clock(reproducible=args.reproducible),
     )
 
+    key = _load_key(getattr(args, "sign_key_file", None))
+    bundle_path = out_dir / _BUNDLE_NAME
+    bundle_path.write_text(
+        bundle_manifest(_bundle_members(out_dir), key=key), encoding="utf-8"
+    )
+
     print("\ngrounding gate: PASS")
     print(f"  report:   {report_path}")
     print(f"  receipts: {manifest_path}")
@@ -178,6 +214,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if charts:
         print(f"  charts:   {out_dir / _CHART_DIR} ({len(charts)} SVG)")
     print(f"  ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
+    print(f"  bundle:   {bundle_path} ({'signed' if key else 'digests-only'})")
     return 0
 
 
@@ -221,6 +258,24 @@ def _cmd_verify_ledger(args: argparse.Namespace) -> int:
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
     print("\nverify-ledger: FAIL — the export chain is broken", file=sys.stderr)
+    return 1
+
+
+def _cmd_verify_bundle(args: argparse.Namespace) -> int:
+    out_dir = Path(args.dir)
+    manifest = json.loads((out_dir / _BUNDLE_NAME).read_text(encoding="utf-8"))
+    key = _load_key(getattr(args, "sign_key_file", None))
+    result = verify_bundle(_bundle_members(out_dir), manifest, key=key)
+
+    print(f"members checked: {len(result.checks)} "
+          f"(ok {result.n_ok}, tampered {len(result.checks) - result.n_ok})")
+    for check in result.checks:
+        status = "ok" if check.ok else "TAMPERED"
+        print(f"  [{status}] {check.name}: {check.detail}")
+    if result.ok:
+        print("\nverify-bundle: PASS — every member matches the sealed manifest")
+        return 0
+    print("\nverify-bundle: FAIL — the bundle has been tampered with", file=sys.stderr)
     return 1
 
 
@@ -279,6 +334,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="who the report was exported to, recorded in the export ledger",
     )
+    run_parser.add_argument(
+        "--sign-key-file",
+        help="path to a key file; adds a keyed-BLAKE2b signature to bundle.json",
+    )
     run_parser.set_defaults(func=_cmd_run)
 
     audit_parser = sub.add_parser("audit", help="run the grounding gate over a narrative file")
@@ -304,6 +363,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--ledger", required=True, help="path to the export-ledger.jsonl to check"
     )
     verify_ledger_parser.set_defaults(func=_cmd_verify_ledger)
+
+    verify_bundle_parser = sub.add_parser(
+        "verify-bundle",
+        help="recompute the bundle manifest over an output directory and fail on tamper",
+    )
+    verify_bundle_parser.add_argument(
+        "--dir", required=True, help="the output directory containing bundle.json"
+    )
+    verify_bundle_parser.add_argument(
+        "--sign-key-file",
+        help="path to the key file the bundle was signed with, to verify the signature",
+    )
+    verify_bundle_parser.set_defaults(func=_cmd_verify_bundle)
 
     eval_parser = sub.add_parser("eval", help="score the drafted narrative's grounding")
     eval_parser.add_argument("--config", required=True, help="path to the report spec TOML")
