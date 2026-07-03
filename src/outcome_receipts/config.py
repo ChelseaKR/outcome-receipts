@@ -41,7 +41,7 @@ def _resolve(base: Path, value: str) -> Path:
 
 
 def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
-    if "value_sql" not in body or "slice_sql" not in body:
+    if not str(body.get("value_sql", "")).strip() or not str(body.get("slice_sql", "")).strip():
         raise ValueError(f"metric {metric_id!r} must set value_sql and slice_sql")
     unit = str(body.get("unit", "count"))
     if unit not in _VALID_UNITS:

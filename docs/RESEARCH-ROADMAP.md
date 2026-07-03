@@ -72,6 +72,7 @@ S afternoon · M day or two · L week or more.
 | E8 | **Model and data cards** for the drafting seam, regenerated on release. | P11,E1 | P3 | S | **[corroborates ROADMAP v0.3]** / [`CLAUDE.md`](../CLAUDE.md) quality bar. Lands with E5. |
 | E9 | **EN/ES report-output parity** — externalize report copy so the same receipted figures render bilingually. | P7,(LEP communities) | P3 | M | [`CLAUDE.md`](../CLAUDE.md) i18n bar (EN/ES parity); not in [`docs/ROADMAP.md`](ROADMAP.md). **[NET-NEW]** vs roadmap |
 | E10 | **Data-flow map + retention model** documented in the DPIA. | P11 | P3 | S | Closes the explicit TODO in [`RESPONSIBLE-TECH-AUDITS.md`](RESPONSIBLE-TECH-AUDITS.md). EV6. **[NET-NEW]** (doc, not code) |
+| E11 | **`receipts init` deterministic spec scaffolder** — inspect an export and scaffold a starter TOML spec: the `[data]`/`[report]` shape, the full column inventory as comments, and one empty stub metric. Zero-model; never guesses a definition or a query, so every stub fails loudly until a human fills it. | P5 | P2 | S | EV3 (scattered data), R9 (fail-closed on bad specs). Lowers the first-spec authoring cost without becoming a mapper (E4). **[NET-NEW]** ✅ Implemented 2026-07-02 |
 
 ## Sequenced roadmap (how the panel layers onto `docs/ROADMAP.md`)
 
