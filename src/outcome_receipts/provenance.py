@@ -31,6 +31,8 @@ class Provenance:
 
     numbers_bound: int
     numbers_unbound: int = 0
+    approved_by: str | None = None
+    approved_at: str | None = None
 
     @property
     def gate_pass(self) -> bool:
@@ -50,28 +52,42 @@ def provenance_markdown(prov: Provenance) -> str:
             "this report is not cleared for export."
         )
     )
-    return "\n".join(
-        [
-            "## Provenance",
-            "",
-            "Every number in this report was computed by a deterministic SQL query "
-            "over the organization's own service data. No figure was written by a "
-            "language model. Each figure carries a receipt below: the exact query, "
-            "the count of rows it drew from, a content hash of that data slice, and "
-            "a timestamp.",
-            "",
-            gate_line,
-        ]
-    )
+    lines = [
+        "## Provenance",
+        "",
+        "Every number in this report was computed by a deterministic SQL query "
+        "over the organization's own service data. No figure was written by a "
+        "language model. Each figure carries a receipt below: the exact query, "
+        "the count of rows it drew from, a content hash of that data slice, and "
+        "a timestamp.",
+        "",
+        gate_line,
+    ]
+    if prov.approved_by is not None:
+        when = f" on {prov.approved_at}" if prov.approved_at is not None else ""
+        lines.extend(
+            [
+                "",
+                f"This report was reviewed and approved for export by "
+                f"{prov.approved_by}{when}.",
+            ]
+        )
+    return "\n".join(lines)
 
 
 def provenance_record(prov: Provenance) -> dict[str, object]:
     """Render the provenance attestation as a machine-readable manifest record."""
 
-    return {
+    record: dict[str, object] = {
         "numbers_from": "deterministic_sql",
         "model_wrote_numbers": False,
         "grounding_gate": "pass" if prov.gate_pass else "fail",
         "numbers_bound": prov.numbers_bound,
         "numbers_unbound": prov.numbers_unbound,
+        # State approval status explicitly, always: ``None`` when no human signed
+        # off, so the manifest never leaves the reader to infer it (fail-closed).
+        "approved_by": prov.approved_by,
     }
+    if prov.approved_by is not None:
+        record["approved_at"] = prov.approved_at
+    return record

@@ -78,7 +78,9 @@ def test_missing_definition_is_labelled_not_blank() -> None:
 
 def test_cli_run_writes_the_trace_view(tmp_path: Path) -> None:
     out = tmp_path / "grant"
-    assert main(["run", "--config", str(GRANT), "--out", str(out), "--reproducible"]) == 0
+    run_args = ["run", "--config", str(GRANT), "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    assert main(run_args) == 0
     trace = (out / "trace.html").read_text(encoding="utf-8")
     assert trace.startswith("<!doctype html>")
     # A grant-report figure and its definition reach the page.

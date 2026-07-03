@@ -30,7 +30,7 @@ from outcome_receipts.draft import draft
 from outcome_receipts.engine import compute_figures, read_csv
 from outcome_receipts.evaluate import evaluate
 from outcome_receipts.grounding import ground
-from outcome_receipts.models import Figure
+from outcome_receipts.models import Figure, GroundingResult
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
     receipts_manifest,
@@ -93,6 +93,45 @@ def _claims_text(comparison: ComparisonResult | None, charts: Sequence[Chart]) -
     return " ".join(parts)
 
 
+def _approver(
+    title: str,
+    narrative_result: GroundingResult,
+    claims_result: GroundingResult,
+    args: argparse.Namespace,
+) -> str | None:
+    """Resolve the human approver for this export, or ``None`` to abort.
+
+    ``--approved-by NAME`` records the approver non-interactively, for CI and
+    reproducible runs. Otherwise, on a TTY and unless ``--yes/--no-confirm`` was
+    given, prompt for a sign-off: the reviewer types their name to approve, blank
+    to abort. Off a TTY with no ``--approved-by``, there is nobody to prompt, so we
+    return ``None`` and let the caller fail closed rather than hang on ``input()``.
+    """
+
+    if args.approved_by is not None:
+        name = args.approved_by.strip()
+        return name or None
+
+    if args.no_confirm or not sys.stdin.isatty():
+        return None
+
+    figures_computed = narrative_result.total + claims_result.total
+    numbers_bound = len(narrative_result.bound) + len(claims_result.bound)
+    print("\nready to export:")
+    print(f"  title:            {title}")
+    print(f"  figures computed: {figures_computed}")
+    print(f"  numbers bound:    {numbers_bound}")
+    try:
+        entered = input(
+            "Approve this report for export? "
+            "Type your name to sign off (blank to abort): "
+        )
+    except EOFError:
+        return None
+    name = entered.strip()
+    return name or None
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     spec, _rows, figures, comparison = _compute_all(
         args.config, reproducible=args.reproducible
@@ -116,9 +155,20 @@ def _cmd_run(args: argparse.Namespace) -> int:
             print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
         return 2
 
+    # Human sign-off gate. The grounding gate proves every number traces to a
+    # receipt; this gate records that a named person approved the export. It runs
+    # only after the grounding gate PASSes and before any file is written, so a
+    # missing sign-off aborts fail-closed with nothing on disk.
+    approver = _approver(spec.report.title, narrative_result, claims_result, args)
+    if approver is None:
+        print("export aborted: no approver sign-off", file=sys.stderr)
+        return 3
+
     provenance = Provenance(
         numbers_bound=len(narrative_result.bound) + len(claims_result.bound),
         numbers_unbound=0,
+        approved_by=approver,
+        approved_at=_clock(reproducible=args.reproducible).now_iso(),
     )
 
     out_dir = Path(args.out)
@@ -218,6 +268,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--reproducible",
         action="store_true",
         help="use a fixed timestamp so receipts are byte-for-byte reproducible",
+    )
+    run_parser.add_argument(
+        "--approved-by",
+        metavar="NAME",
+        help="record NAME as the human approver, non-interactively (for CI); "
+        "skips the interactive sign-off prompt",
+    )
+    run_parser.add_argument(
+        "--yes",
+        "--no-confirm",
+        dest="no_confirm",
+        action="store_true",
+        help="skip the interactive sign-off prompt; requires --approved-by, "
+        "otherwise the export aborts with no approver",
     )
     run_parser.set_defaults(func=_cmd_run)
 
