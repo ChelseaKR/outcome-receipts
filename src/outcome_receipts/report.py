@@ -12,6 +12,7 @@ from collections.abc import Sequence
 
 from outcome_receipts.charts import Chart
 from outcome_receipts.comparison import ComparisonResult
+from outcome_receipts.diff import FigureDelta, ManifestDiff
 from outcome_receipts.evaluate import EvalReport
 from outcome_receipts.models import Figure
 from outcome_receipts.provenance import Provenance, provenance_markdown, provenance_record
@@ -45,6 +46,69 @@ def render_comparison_table(result: ComparisonResult) -> str:
     lines.append("")
     lines.append("Change for a rate metric is in percentage points.")
     return "\n".join(lines)
+
+
+def _delta_display(delta: FigureDelta, key: str) -> str:
+    """The display string for one side of a changed figure, blank if absent."""
+
+    side = delta.prior if key == "prior" else delta.current
+    if side is None:
+        return ""
+    return str(side.get("display", side.get("value", "")))
+
+
+def render_diff_markdown(
+    diff: ManifestDiff,
+    *,
+    prior_label: str = "prior",
+    current_label: str = "current",
+) -> str:
+    """Render a manifest-to-manifest diff as a Markdown "Receipts diff" section.
+
+    A summary line counts the added, removed, changed, and unchanged figures. A
+    table then lists each changed figure with its before and after value and the
+    reasons it moved, followed by bulleted Added and Removed lists. Every value in
+    the table is copied from a receipt, so the diff asserts no number that is not
+    already grounded in one of the two manifests.
+    """
+
+    lines = [
+        "## Receipts diff",
+        "",
+        f"Comparing {current_label} with {prior_label}. "
+        f"{len(diff.added)} added, {len(diff.removed)} removed, "
+        f"{len(diff.changed)} changed, {len(diff.unchanged)} unchanged. "
+        "Each figure is a receipt; a move is reported only when the value, row "
+        "count, slice hash, or query differs, never the timestamp alone.",
+        "",
+    ]
+    if diff.changed:
+        lines.append(f"| Metric | {prior_label} value | {current_label} value | why |")
+        lines.append("|--------|------------|--------------|-----|")
+        for delta in diff.changed:
+            why = "; ".join(delta.reasons)
+            lines.append(
+                f"| {delta.metric_id} | {_delta_display(delta, 'prior')} | "
+                f"{_delta_display(delta, 'current')} | {why} |"
+            )
+        lines.append("")
+    if diff.added:
+        lines.append("### Added")
+        lines.append("")
+        for receipt in diff.added:
+            metric_id = receipt.get("metric_id", "")
+            display = receipt.get("display", receipt.get("value", ""))
+            lines.append(f"- {metric_id} = {display}")
+        lines.append("")
+    if diff.removed:
+        lines.append("### Removed")
+        lines.append("")
+        for receipt in diff.removed:
+            metric_id = receipt.get("metric_id", "")
+            display = receipt.get("display", receipt.get("value", ""))
+            lines.append(f"- {metric_id} = {display}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_charts_section(charts: Sequence[Chart], *, chart_dir: str) -> str:

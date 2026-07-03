@@ -9,6 +9,7 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
+from outcome_receipts.diff import FigureDelta, ManifestDiff, diff_manifests
 from outcome_receipts.models import (
     Figure,
     GroundingResult,
@@ -19,9 +20,12 @@ from outcome_receipts.models import (
 
 __all__ = [
     "Figure",
+    "FigureDelta",
     "GroundingResult",
+    "ManifestDiff",
     "MetricSpec",
     "Receipt",
     "ReportSpec",
     "__version__",
+    "diff_manifests",
 ]

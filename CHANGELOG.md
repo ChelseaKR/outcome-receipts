@@ -47,6 +47,16 @@ retitled with the real release date when `v0.1.0` is tagged and
   with justification; `S101` (assert) is ignored under `tests/*` only, since
   pytest's own idiom relies on it.
 
+- **Receipts diff between reporting cycles** (`diff.py`, `receipts diff`). Change
+  accounting between two receipted runs: `receipts diff PRIOR.json CURRENT.json`
+  compares two receipts manifests and reports which figures moved, were added, or
+  removed, and *why* each moved (value change, row-count change, slice-hash change,
+  or query change). It is a pure manifest-to-manifest comparison — distinct from the
+  in-run period-over-period `comparison.py` — reading only the JSON, so it needs no
+  data table or SQL engine. The `computed_at` timestamp is never a reason, mirroring
+  `verify`, so a re-run alone is not a move. `render_diff_markdown` renders a
+  "Receipts diff" section with summary counts, a table of changed figures, and Added
+  / Removed lists.
 - **More report templates.** A report type is its TOML spec, so two new ones ship
   as specs alongside the housing demo: a grant report
   (`examples/grant-report/`) and a board report (`examples/board-report/`). Each
