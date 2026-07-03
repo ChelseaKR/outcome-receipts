@@ -47,6 +47,13 @@ retitled with the real release date when `v0.1.0` is tagged and
   with justification; `S101` (assert) is ignored under `tests/*` only, since
   pytest's own idiom relies on it.
 
+### Added
+- **Reusable CI action** (`action.yml`). The `receipts verify` gate is packaged as
+  a composite GitHub Action, so a downstream repo can gate CI on receipt drift with
+  `uses: ChelseaKR/outcome-receipts@v1` and the two inputs `config` and `receipts`
+  (mirroring the CLI flags). The CLI already exits non-zero on drift, so the action
+  fails closed. It is dogfooded in CI against `examples/housing-demo/receipts.json`,
+  and usage plus supply-chain pinning guidance live in `docs/ci-action.md`.
 - **More report templates.** A report type is its TOML spec, so two new ones ship
   as specs alongside the housing demo: a grant report
   (`examples/grant-report/`) and a board report (`examples/board-report/`). Each

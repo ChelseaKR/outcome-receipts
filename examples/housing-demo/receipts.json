@@ -1,0 +1,55 @@
+{
+  "provenance": {
+    "grounding_gate": "pass",
+    "model_wrote_numbers": false,
+    "numbers_bound": 4,
+    "numbers_from": "deterministic_sql",
+    "numbers_unbound": 0
+  },
+  "receipts": [
+    {
+      "computed_at": "1970-01-01T00:00:00+00:00",
+      "definition": "Each person enrolled in the housing program during the reporting period, counted once by client_id even if they enrolled more than once. The unit is the person, not the enrollment.",
+      "display": "12",
+      "metric_id": "clients_served",
+      "row_count": 12,
+      "slice_hash": "9502d27008b6584d280e7a43efbc73a64804f5393151a8eba879549639cb828f",
+      "unit": "count",
+      "value": 12.0,
+      "value_sql": "SELECT COUNT(DISTINCT client_id) FROM data"
+    },
+    {
+      "computed_at": "1970-01-01T00:00:00+00:00",
+      "definition": "Enrollments with a recorded exit date. The unit is the enrollment, so a client who exited two enrollments counts twice. A blank exit date is treated as still enrolled, not as an exit.",
+      "display": "10",
+      "metric_id": "exits",
+      "row_count": 10,
+      "slice_hash": "c96e2423040ca793c844382654f9959e8b891c6a0f64149f64297e9ec544e3c4",
+      "unit": "count",
+      "value": 10.0,
+      "value_sql": "SELECT COUNT(*) FROM data WHERE exit_date != ''"
+    },
+    {
+      "computed_at": "1970-01-01T00:00:00+00:00",
+      "definition": "Exits whose exit_destination is 'permanent'. Destination categories are taken as recorded; an unrecorded destination is not counted as permanent.",
+      "display": "6",
+      "metric_id": "exits_permanent",
+      "row_count": 6,
+      "slice_hash": "ea1768b045cc499793113deb90136544866eaf52447fc91d4bdbc4bdb8896665",
+      "unit": "count",
+      "value": 6.0,
+      "value_sql": "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
+    },
+    {
+      "computed_at": "1970-01-01T00:00:00+00:00",
+      "definition": "Permanent-housing exits divided by all exits in the period, as a whole-number percent. The denominator is exits, not all enrolled clients, so a client still enrolled is not in it.",
+      "display": "60%",
+      "metric_id": "pct_permanent",
+      "row_count": 10,
+      "slice_hash": "c96e2423040ca793c844382654f9959e8b891c6a0f64149f64297e9ec544e3c4",
+      "unit": "percent",
+      "value": 60.0,
+      "value_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != ''"
+    }
+  ]
+}

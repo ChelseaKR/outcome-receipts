@@ -160,6 +160,11 @@ mismatch is drift (the data changed, the spec changed, or the manifest was edite
 verify reports each drifted receipt and exits non-zero, so a silent divergence
 cannot pass.
 
+The same check is packaged as a reusable composite GitHub Action so a downstream
+repo can gate CI on receipt drift with `uses: ChelseaKR/outcome-receipts@v1`. See
+[docs/ci-action.md](docs/ci-action.md) for the workflow snippet and supply-chain
+pinning guidance.
+
 ## What it does not do
 
 * It does **not let a model invent numbers.** Figures come from queries; the gate

@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Reusable composite action: gate CI on receipt drift.
+#
+# It installs the published `outcome-receipts` CLI and runs `receipts verify`,
+# which re-derives every figure in a receipts manifest from the spec and data
+# and exits non-zero if any receipt no longer matches. The CLI fails closed
+# (see src/outcome_receipts/cli.py::_cmd_verify), so a drifted or tampered
+# manifest fails the job with no extra logic here.
+#
+# Downstream usage lives in docs/ci-action.md.
+name: "Outcome Receipts Verify"
+description: "Re-derive a receipts manifest from its spec and data, and fail the job on drift."
+branding:
+  icon: "check-circle"
+  color: "green"
+
+inputs:
+  config:
+    description: "Path to the report spec TOML (mirrors the CLI's --config)."
+    required: true
+  receipts:
+    description: "Path to the receipts.json manifest to verify (mirrors the CLI's --receipts)."
+    required: true
+  version:
+    description: >-
+      Package version to install: a git ref (branch, tag, or commit SHA) of
+      ChelseaKR/outcome-receipts. Pin to a released tag or a commit SHA for
+      reproducible, supply-chain-hardened runs.
+    required: false
+    default: "main"
+
+runs:
+  using: composite
+  steps:
+    # Third-party actions are pinned to a commit SHA with a version comment,
+    # matching the supply-chain convention in .github/workflows/ci.yml.
+    - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+    - name: Install outcome-receipts
+      shell: bash
+      run: |
+        uv pip install --system \
+          "outcome-receipts @ git+https://github.com/ChelseaKR/outcome-receipts@${{ inputs.version }}"
+    - name: Verify receipts
+      shell: bash
+      run: |
+        receipts verify \
+          --config "${{ inputs.config }}" \
+          --receipts "${{ inputs.receipts }}"
