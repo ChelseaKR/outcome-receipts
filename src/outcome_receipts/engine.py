@@ -88,6 +88,29 @@ def _format(value: float, unit: str, decimals: int) -> str:
     return f"{value:,.{decimals}f}"
 
 
+def _execute(conn: sqlite3.Connection, sql: str, spec: MetricSpec) -> sqlite3.Cursor:
+    """Run a metric's SQL, failing closed on a missing column.
+
+    A query that references a column absent from the export raises a sqlite3
+    ``OperationalError`` ("no such column: <name>"). Catch it and re-raise a
+    ``ValueError`` naming the missing column and the metric, so the operator sees
+    what is wrong rather than a raw driver error. Any other OperationalError is
+    re-raised as a ValueError too, so a bad spec never silent-passes.
+    """
+
+    try:
+        return conn.execute(sql)
+    except sqlite3.OperationalError as exc:
+        message = str(exc)
+        if message.startswith("no such column:"):
+            col = message.split(":", 1)[1].strip()
+            raise ValueError(
+                f"metric {spec.metric_id!r} references column {col!r} "
+                "which is not in the export"
+            ) from exc
+        raise ValueError(f"metric {spec.metric_id!r} query failed: {message}") from exc
+
+
 def compute_figure(
     conn: sqlite3.Connection, spec: MetricSpec, *, clock: Clock | None = None
 ) -> Figure:
@@ -95,11 +118,13 @@ def compute_figure(
 
     Raises ``ValueError`` if the value query does not return exactly one scalar,
     so a malformed metric fails loudly rather than producing a silent wrong number.
+    Also raises ``ValueError`` naming any column a query references that is absent
+    from the export, so a bad spec against a messy export fails closed.
     """
 
     clock = clock or SystemClock()
 
-    cursor = conn.execute(spec.value_sql)
+    cursor = _execute(conn, spec.value_sql, spec)
     value_rows = cursor.fetchall()
     if len(value_rows) != 1 or len(value_rows[0]) != 1:
         raise ValueError(
@@ -109,7 +134,7 @@ def compute_figure(
     raw_value = value_rows[0][0]
     value = float(raw_value) if raw_value is not None else 0.0
 
-    slice_rows = conn.execute(spec.slice_sql).fetchall()
+    slice_rows = _execute(conn, spec.slice_sql, spec).fetchall()
 
     receipt = Receipt(
         metric_id=spec.metric_id,
