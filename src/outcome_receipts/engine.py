@@ -120,6 +120,7 @@ def compute_figure(
         unit=spec.unit,
         computed_at=clock.now_iso(),
         definition=spec.definition,
+        kind=spec.kind,
     )
     return Figure(
         metric_id=spec.metric_id,

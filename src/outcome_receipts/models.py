@@ -32,6 +32,11 @@ class MetricSpec:
     figure, so a reviewer can see and contest the choices a query encodes (a count
     of "clients served" is only as fair as its definition) instead of inferring
     them from the SQL.
+
+    ``kind`` distinguishes an ``output`` (an activity count, such as clients
+    served) from an ``outcome`` (a change in condition, such as a housing-retention
+    rate). It rides in the receipt so a reader does not misread a busy output as
+    the outcome it is meant to produce.
     """
 
     metric_id: str
@@ -41,6 +46,7 @@ class MetricSpec:
     unit: str = "count"
     decimals: int = 0
     definition: str = ""
+    kind: str = "output"
 
 
 @dataclass(frozen=True)
@@ -52,7 +58,10 @@ class Receipt:
     slice is detectable. ``computed_at`` comes from an injected clock so a
     committed eval is reproducible. ``definition`` carries the figure's
     plain-language definition forward from its ``MetricSpec`` so the receipt is
-    self-describing without the spec on hand.
+    self-describing without the spec on hand. ``kind`` carries the same forward
+    label distinguishing an activity count (``output``) from a change in condition
+    (``outcome``), so a reader of the receipt alone does not misread an output as
+    an outcome.
     """
 
     metric_id: str
@@ -63,6 +72,7 @@ class Receipt:
     unit: str
     computed_at: str
     definition: str = ""
+    kind: str = "output"
 
 
 @dataclass(frozen=True)
