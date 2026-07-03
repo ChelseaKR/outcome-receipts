@@ -20,6 +20,7 @@ from pathlib import Path
 from outcome_receipts.clock import Clock, SystemClock
 from outcome_receipts.models import (
     EMPTY_SLICE_HASH,
+    HASH_DIGEST_SIZE,
     DataCheck,
     Figure,
     MetricSpec,
@@ -78,19 +79,32 @@ def read_csv(path: Path) -> list[dict[str, str]]:
         return [{k: (v or "").strip() for k, v in row.items()} for row in reader]
 
 
-def _slice_hash(slice_rows: list[tuple[object, ...]]) -> str:
-    """BLAKE2b-256 over the canonical JSON of the slice rows.
+def _slice_hash(column_names: Sequence[str], slice_rows: list[tuple[object, ...]]) -> str:
+    """BLAKE2b-256 over the canonical JSON of the slice's columns and rows.
 
     Rows are sorted so the hash does not depend on query row order, and each value
-    is stringified so the hash is stable regardless of SQLite's column typing.
+    is stringified so the hash is stable regardless of SQLite's column typing. The
+    sorted column names are folded into the payload (canonicalization ``v1``), so a
+    slice whose values are unchanged but whose columns were renamed hashes
+    differently — under the earlier rules a rename was invisible.
+
+    A slice with zero rows still returns ``EMPTY_SLICE_HASH`` regardless of its
+    columns, preserving the invariant that an empty slice is a single visible
+    sentinel rather than a family of column-dependent hashes. See ADR 0004.
     """
 
     if not slice_rows:
         return EMPTY_SLICE_HASH
-    canonical = [[str(value) for value in row] for row in slice_rows]
-    canonical.sort()
-    payload = json.dumps(canonical, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.blake2b(payload.encode("utf-8"), digest_size=32).hexdigest()
+    canonical_rows = [[str(value) for value in row] for row in slice_rows]
+    canonical_rows.sort()
+    payload = json.dumps(
+        {"columns": sorted(column_names), "rows": canonical_rows},
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.blake2b(
+        payload.encode("utf-8"), digest_size=HASH_DIGEST_SIZE
+    ).hexdigest()
 
 
 def _format(value: float, unit: str, decimals: int) -> str:
@@ -153,18 +167,21 @@ def compute_figure(
     raw_value = value_rows[0][0]
     value = float(raw_value) if raw_value is not None else 0.0
 
-    slice_rows = _execute(conn, spec.slice_sql, spec).fetchall()
+    slice_cursor = _execute(conn, spec.slice_sql, spec)
+    slice_rows = slice_cursor.fetchall()
+    columns = tuple(d[0] for d in slice_cursor.description or ())
 
     receipt = Receipt(
         metric_id=spec.metric_id,
         value_sql=spec.value_sql,
         row_count=len(slice_rows),
-        slice_hash=_slice_hash(slice_rows),
+        slice_hash=_slice_hash(columns, slice_rows),
         value=value,
         unit=spec.unit,
         computed_at=clock.now_iso(),
         definition=spec.definition,
         kind=spec.kind,
+        column_names=columns,
     )
     return Figure(
         metric_id=spec.metric_id,
