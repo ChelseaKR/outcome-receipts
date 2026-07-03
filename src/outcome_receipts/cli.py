@@ -20,6 +20,7 @@ argparse only; no runtime dependency beyond the standard library.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections.abc import Sequence
@@ -44,7 +45,7 @@ from outcome_receipts.report import (
 )
 from outcome_receipts.scaffold import scaffold_spec
 from outcome_receipts.trace import render_trace_html
-from outcome_receipts.verify import verify_manifest
+from outcome_receipts.verify import verify_bundle, verify_manifest
 
 # The chart subdirectory under the output directory, referenced from the report.
 _CHART_DIR = "charts"
@@ -52,6 +53,16 @@ _CHART_DIR = "charts"
 
 def _clock(*, reproducible: bool) -> Clock:
     return FixedClock() if reproducible else SystemClock()
+
+
+def _sha256(text: str) -> str:
+    """The sha256 hex digest of ``text`` encoded as UTF-8.
+
+    Artifacts are written as UTF-8 text, so hashing the same encoding the digest
+    is recomputed from at verify time makes the check exact.
+    """
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _load_and_compute(
@@ -134,6 +145,32 @@ def _cmd_run(args: argparse.Namespace) -> int:
         numbers_unbound=0,
     )
 
+    # Build every artifact string in memory first so the manifest, written last,
+    # can hash its siblings. The manifest never hashes itself; the report embeds
+    # the receipts section but not the artifact digests, so the hash relation is
+    # one-directional (no circularity). See ADR 0004. Write order: charts, then
+    # report, then trace, then the manifest.
+    report_text = render_report(
+        spec.report.title,
+        narrative,
+        figures,
+        comparison=comparison,
+        charts=charts,
+        chart_dir=_CHART_DIR,
+        provenance=provenance,
+    )
+    trace_text = render_trace_html(spec.report.title, figures, provenance=provenance)
+
+    digests = {
+        "report.md": _sha256(report_text),
+        "trace.html": _sha256(trace_text),
+    }
+    for chart in charts:
+        digests[f"{_CHART_DIR}/{chart.chart_id}.svg"] = _sha256(chart.svg)
+    manifest_text = receipts_manifest(
+        figures, provenance=provenance, artifacts=digests
+    )
+
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "report.md"
@@ -144,29 +181,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
         chart_dir.mkdir(parents=True, exist_ok=True)
         for chart in charts:
             (chart_dir / f"{chart.chart_id}.svg").write_text(chart.svg, encoding="utf-8")
-    report_path.write_text(
-        render_report(
-            spec.report.title,
-            narrative,
-            figures,
-            comparison=comparison,
-            charts=charts,
-            chart_dir=_CHART_DIR,
-            provenance=provenance,
-        ),
-        encoding="utf-8",
-    )
-    manifest_path.write_text(receipts_manifest(figures, provenance=provenance), encoding="utf-8")
-    trace_path.write_text(
-        render_trace_html(spec.report.title, figures, provenance=provenance),
-        encoding="utf-8",
-    )
+    report_path.write_text(report_text, encoding="utf-8")
+    trace_path.write_text(trace_text, encoding="utf-8")
+    manifest_path.write_text(manifest_text, encoding="utf-8")
 
     ledger_path = Path(args.ledger) if args.ledger else out_dir.parent / "export-ledger.jsonl"
     entry = append_export(
         ledger_path,
         report_title=spec.report.title,
-        manifest_json_or_hash=manifest_path.read_text(encoding="utf-8"),
+        manifest_json_or_hash=manifest_text,
         recipient=args.recipient,
         clock=_clock(reproducible=args.reproducible),
     )
@@ -192,7 +215,12 @@ def _cmd_audit(args: argparse.Namespace) -> int:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    _spec, _rows, figures, _comparison = _compute_all(args.config, reproducible=args.reproducible)
+    _spec, _rows, figures, _comparison = _compute_all(
+        args.config, reproducible=args.reproducible
+    )
+    if args.bundle is not None:
+        return _verify_bundle(args, figures)
+
     manifest = json.loads(Path(args.receipts).read_text(encoding="utf-8"))
     result = verify_manifest(figures, manifest)
 
@@ -221,6 +249,36 @@ def _cmd_verify_ledger(args: argparse.Namespace) -> int:
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
     print("\nverify-ledger: FAIL — the export chain is broken", file=sys.stderr)
+    return 1
+
+
+def _verify_bundle(args: argparse.Namespace, figures: Sequence[Figure]) -> int:
+    result = verify_bundle(Path(args.bundle), figures)
+    manifest = result.manifest
+
+    print(f"receipts checked: {len(manifest.checks)} "
+          f"(re-derived {manifest.n_ok}, drift {len(manifest.checks) - manifest.n_ok})")
+    for check in manifest.checks:
+        status = "ok" if check.ok else "DRIFT"
+        print(f"  [{status}] {check.metric_id}: {check.detail}")
+    print(f"artifacts checked: {len(result.artifacts)}")
+    for artifact in result.artifacts:
+        status = "ok" if artifact.ok else "MISMATCH"
+        print(f"  [{status}] {artifact.path}: {artifact.detail}")
+    print(f"narrative grounding: {result.grounding.total} number(s), "
+          f"{len(result.grounding.unbound)} unbound")
+    for span in result.grounding.unbound:
+        print(f"  unverifiable number: {span.text!r}")
+
+    if result.ok:
+        print("\nverify: PASS — the whole bundle is coherent")
+        return 0
+    print("\nverify: FAIL — the exported bundle does not verify", file=sys.stderr)
+    for artifact in result.failed_artifacts:
+        print(f"  offending file: {artifact.path} ({artifact.detail})", file=sys.stderr)
+    if not result.grounding.ok:
+        for span in result.grounding.unbound:
+            print(f"  ungrounded number in report.md: {span.text!r}", file=sys.stderr)
     return 1
 
 
@@ -291,8 +349,14 @@ def build_parser() -> argparse.ArgumentParser:
         "verify", help="re-derive a receipts manifest from the spec and data"
     )
     verify_parser.add_argument("--config", required=True, help="path to the report spec TOML")
-    verify_parser.add_argument(
-        "--receipts", required=True, help="path to the receipts.json manifest to verify"
+    verify_target = verify_parser.add_mutually_exclusive_group(required=True)
+    verify_target.add_argument(
+        "--receipts", help="path to the receipts.json manifest to verify"
+    )
+    verify_target.add_argument(
+        "--bundle",
+        help="path to an exported bundle directory to verify whole "
+        "(receipts, artifact digests, and narrative grounding)",
     )
     verify_parser.add_argument("--reproducible", action="store_true", help=argparse.SUPPRESS)
     verify_parser.set_defaults(func=_cmd_verify)

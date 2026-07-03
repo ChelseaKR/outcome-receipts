@@ -15,11 +15,15 @@ re-run as drift and say nothing about whether the numbers still hold.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from outcome_receipts.models import Figure
+from outcome_receipts.grounding import ground
+from outcome_receipts.models import Figure, GroundingResult
 
 # The receipt fields re-derivation compares. ``computed_at`` is excluded on
 # purpose; see the module docstring.
@@ -100,3 +104,113 @@ def verify_manifest(figures: Sequence[Figure], manifest: Mapping[str, Any]) -> V
         if metric_id not in seen:
             checks.append(Check(metric_id, False, "figure has no receipt in the manifest"))
     return VerifyResult(tuple(checks))
+
+
+@dataclass(frozen=True)
+class ArtifactCheck:
+    """The digest-match outcome for one sibling artifact of the bundle."""
+
+    path: str
+    ok: bool
+    detail: str
+
+
+@dataclass(frozen=True)
+class BundleResult:
+    """The whole-bundle verification: receipts, artifact digests, and grounding.
+
+    ``manifest`` is the per-receipt re-derivation. ``artifacts`` is one check per
+    file the manifest hashes (``report.md``, ``trace.html``, each chart SVG).
+    ``grounding`` re-runs the gate over the exported narrative. The bundle is
+    ``ok`` only when all three hold, so any drift, swap, or ungrounded number
+    fails closed.
+    """
+
+    manifest: VerifyResult
+    artifacts: tuple[ArtifactCheck, ...]
+    grounding: GroundingResult
+
+    @property
+    def ok(self) -> bool:
+        return (
+            self.manifest.ok
+            and all(check.ok for check in self.artifacts)
+            and self.grounding.ok
+        )
+
+    @property
+    def failed_artifacts(self) -> tuple[ArtifactCheck, ...]:
+        return tuple(check for check in self.artifacts if not check.ok)
+
+
+def _report_narrative(report_text: str) -> str:
+    """The drafted narrative extracted from an exported ``report.md``.
+
+    The report is the title, then the narrative, then ``##`` sections (comparison,
+    charts, provenance, receipts). Only the narrative is the drafted prose whose
+    every number the gate must bind; the receipts and provenance sections carry
+    row counts, hashes, and timestamps that are not figure displays. So the
+    grounding re-check runs over the region from after the title up to the first
+    ``##`` heading, mirroring what ``run`` grounded before it exported.
+    """
+
+    collected: list[str] = []
+    for line in report_text.splitlines():
+        if line.startswith("## "):
+            break
+        if line.startswith("# "):
+            continue
+        collected.append(line)
+    return "\n".join(collected).strip()
+
+
+def _check_artifacts(
+    bundle_dir: Path, manifest: Mapping[str, Any]
+) -> tuple[ArtifactCheck, ...]:
+    if "artifacts" not in manifest:
+        return (
+            ArtifactCheck(
+                "receipts.json",
+                False,
+                "manifest has no 'artifacts' key; cannot verify the bundle",
+            ),
+        )
+    artifacts = manifest["artifacts"]
+    checks: list[ArtifactCheck] = []
+    for rel_path, want in sorted(artifacts.items()):
+        sibling = bundle_dir / rel_path
+        if not sibling.is_file():
+            checks.append(ArtifactCheck(rel_path, False, "artifact file is missing"))
+            continue
+        got = hashlib.sha256(sibling.read_bytes()).hexdigest()
+        if got != want:
+            checks.append(
+                ArtifactCheck(rel_path, False, f"digest {got} != manifest {want}")
+            )
+        else:
+            checks.append(ArtifactCheck(rel_path, True, "digest matches"))
+    return tuple(checks)
+
+
+def verify_bundle(bundle_dir: Path, figures: Sequence[Figure]) -> BundleResult:
+    """Verify an exported bundle is internally coherent, not just re-derivable.
+
+    Beyond re-deriving every receipt (``verify_manifest``), this reads each file
+    the manifest hashes and recomputes its sha256, so a swapped ``report.md``,
+    ``trace.html``, or chart SVG is caught; and it re-runs the grounding gate over
+    the exported narrative, so a number that no longer binds to a receipt is
+    caught. It fails closed: a manifest with no ``artifacts`` key is an error, and
+    a missing artifact file is a failure.
+    """
+
+    bundle_dir = Path(bundle_dir)
+    manifest = json.loads((bundle_dir / "receipts.json").read_text(encoding="utf-8"))
+    manifest_result = verify_manifest(figures, manifest)
+    artifacts = _check_artifacts(bundle_dir, manifest)
+
+    report_path = bundle_dir / "report.md"
+    report_text = (
+        report_path.read_text(encoding="utf-8") if report_path.is_file() else ""
+    )
+    grounding = ground(_report_narrative(report_text), figures)
+    return BundleResult(manifest_result, artifacts, grounding)
