@@ -37,6 +37,12 @@ class MetricSpec:
     served) from an ``outcome`` (a change in condition, such as a housing-retention
     rate). It rides in the receipt so a reader does not misread a busy output as
     the outcome it is meant to produce.
+
+    ``indicator``, ``data_source``, and ``collection_frequency`` are the optional
+    logic-model mapping. They tie the figure to a row in a theory of change: the
+    named indicator it measures, the system the data comes from, and how often that
+    data is collected. Each defaults to empty, which means the figure is not mapped;
+    when set they ride into the receipt so the mapping travels with the number.
     """
 
     metric_id: str
@@ -47,6 +53,9 @@ class MetricSpec:
     decimals: int = 0
     definition: str = ""
     kind: str = "output"
+    indicator: str = ""
+    data_source: str = ""
+    collection_frequency: str = ""
 
 
 @dataclass(frozen=True)
@@ -81,7 +90,9 @@ class Receipt:
     self-describing without the spec on hand. ``kind`` carries the same forward
     label distinguishing an activity count (``output``) from a change in condition
     (``outcome``), so a reader of the receipt alone does not misread an output as
-    an outcome.
+    an outcome. ``indicator``, ``data_source``, and ``collection_frequency`` carry
+    the logic-model mapping forward the same way, so a receipt states which
+    theory-of-change indicator its number belongs to.
     """
 
     metric_id: str
@@ -93,6 +104,9 @@ class Receipt:
     computed_at: str
     definition: str = ""
     kind: str = "output"
+    indicator: str = ""
+    data_source: str = ""
+    collection_frequency: str = ""
 
 
 @dataclass(frozen=True)

@@ -165,6 +165,9 @@ def compute_figure(
         computed_at=clock.now_iso(),
         definition=spec.definition,
         kind=spec.kind,
+        indicator=spec.indicator,
+        data_source=spec.data_source,
+        collection_frequency=spec.collection_frequency,
     )
     return Figure(
         metric_id=spec.metric_id,

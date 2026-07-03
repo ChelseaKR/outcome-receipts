@@ -100,6 +100,12 @@ def render_report(
         lines.append(f"  - kind: {receipt.kind}")
         if receipt.definition:
             lines.append(f"  - definition: {receipt.definition}")
+        if receipt.indicator:
+            lines.append(f"  - indicator: {receipt.indicator}")
+        if receipt.data_source:
+            lines.append(f"  - data source: {receipt.data_source}")
+        if receipt.collection_frequency:
+            lines.append(f"  - collection frequency: {receipt.collection_frequency}")
         lines.append(f"  - query: `{receipt.value_sql}`")
         lines.append(f"  - rows in slice: {receipt.row_count}")
         lines.append(f"  - slice hash: `{receipt.slice_hash}`")
@@ -124,6 +130,9 @@ def receipts_manifest(figures: Sequence[Figure], *, provenance: Provenance | Non
                 "unit": f.receipt.unit,
                 "kind": f.receipt.kind,
                 "definition": f.receipt.definition,
+                "indicator": f.receipt.indicator,
+                "data_source": f.receipt.data_source,
+                "collection_frequency": f.receipt.collection_frequency,
                 "value_sql": f.receipt.value_sql,
                 "row_count": f.receipt.row_count,
                 "slice_hash": f.receipt.slice_hash,
