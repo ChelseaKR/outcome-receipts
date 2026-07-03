@@ -12,12 +12,13 @@ from collections.abc import Sequence
 
 from outcome_receipts.charts import Chart
 from outcome_receipts.comparison import ComparisonResult
+from outcome_receipts.copy import Locale, get_copy
 from outcome_receipts.evaluate import EvalReport
 from outcome_receipts.models import Figure
 from outcome_receipts.provenance import Provenance, provenance_markdown, provenance_record
 
 
-def render_comparison_table(result: ComparisonResult) -> str:
+def render_comparison_table(result: ComparisonResult, *, locale: Locale = "en") -> str:
     """Render a period-over-period comparison as a Markdown table.
 
     Every number in the table is a figure display: the two period values and the
@@ -26,14 +27,16 @@ def render_comparison_table(result: ComparisonResult) -> str:
     percentage points, noted under the table.
     """
 
+    copy = get_copy(locale)
     lines = [
-        "## Period comparison",
+        copy.comparison_heading,
         "",
-        f"Comparing {result.current_label} with {result.prior_label}. Each value is "
-        "a figure with a receipt; the change is itself computed by a single query, "
-        "not arithmetic over the page.",
+        copy.comparing_sentence_template.format(
+            current=result.current_label, prior=result.prior_label
+        ),
         "",
-        f"| Outcome | {result.prior_label} | {result.current_label} | Change | Direction |",
+        f"| {copy.header_outcome} | {result.prior_label} | {result.current_label} "
+        f"| {copy.header_change} | {copy.header_direction} |",
         "|---------|------|------|--------|-----------|",
     ]
     for row in result.rows:
@@ -43,11 +46,13 @@ def render_comparison_table(result: ComparisonResult) -> str:
             f"{row.delta.display} | {row.direction} |"
         )
     lines.append("")
-    lines.append("Change for a rate metric is in percentage points.")
+    lines.append(copy.rate_metric_note)
     return "\n".join(lines)
 
 
-def render_charts_section(charts: Sequence[Chart], *, chart_dir: str) -> str:
+def render_charts_section(
+    charts: Sequence[Chart], *, chart_dir: str, locale: Locale = "en"
+) -> str:
     """Render the charts as image references with their accessible data tables.
 
     The SVG is referenced as an image; the data table beneath it is the text
@@ -55,13 +60,14 @@ def render_charts_section(charts: Sequence[Chart], *, chart_dir: str) -> str:
     without the image and the numbers it shows trace to receipts.
     """
 
-    lines = ["## Charts", ""]
+    copy = get_copy(locale)
+    lines = [copy.charts_heading, ""]
     for chart in charts:
         lines.append(f"### {chart.title}")
         lines.append("")
         lines.append(f"![{chart.title} (see data table below)]({chart_dir}/{chart.chart_id}.svg)")
         lines.append("")
-        lines.append(f"Data for the chart above ({chart.title}):")
+        lines.append(copy.chart_data_caption_template.format(title=chart.title))
         lines.append("")
         lines.append(chart.data_table)
         lines.append("")
@@ -77,6 +83,7 @@ def render_report(
     charts: Sequence[Chart] = (),
     chart_dir: str = "charts",
     provenance: Provenance | None = None,
+    locale: Locale = "en",
 ) -> str:
     """Render the narrative, optional comparison and charts, provenance, receipts.
 
@@ -86,24 +93,27 @@ def render_report(
     with its plain-language definition and the receipt that backs it.
     """
 
+    copy = get_copy(locale)
     lines = [f"# {title}", "", narrative.strip()]
     if comparison is not None:
-        lines.extend(["", render_comparison_table(comparison)])
+        lines.extend(["", render_comparison_table(comparison, locale=locale)])
     if charts:
-        lines.extend(["", render_charts_section(charts, chart_dir=chart_dir)])
+        lines.extend(
+            ["", render_charts_section(charts, chart_dir=chart_dir, locale=locale)]
+        )
     if provenance is not None:
-        lines.extend(["", provenance_markdown(provenance)])
-    lines.extend(["", "## Receipts", ""])
+        lines.extend(["", provenance_markdown(provenance, locale=locale)])
+    lines.extend(["", copy.receipts_heading, ""])
     for figure in sorted(figures, key=lambda f: f.metric_id):
         receipt = figure.receipt
         lines.append(f"- **{figure.metric_id}** = {figure.display}")
         lines.append(f"  - kind: {receipt.kind}")
         if receipt.definition:
-            lines.append(f"  - definition: {receipt.definition}")
-        lines.append(f"  - query: `{receipt.value_sql}`")
-        lines.append(f"  - rows in slice: {receipt.row_count}")
-        lines.append(f"  - slice hash: `{receipt.slice_hash}`")
-        lines.append(f"  - computed at: {receipt.computed_at}")
+            lines.append(f"  - {copy.receipt_definition_label}: {receipt.definition}")
+        lines.append(f"  - {copy.receipt_query_label}: `{receipt.value_sql}`")
+        lines.append(f"  - {copy.receipt_rows_label}: {receipt.row_count}")
+        lines.append(f"  - {copy.receipt_slice_hash_label}: `{receipt.slice_hash}`")
+        lines.append(f"  - {copy.receipt_computed_at_label}: {receipt.computed_at}")
     return "\n".join(lines) + "\n"
 
 

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from outcome_receipts.copy import Locale, get_copy
+
 
 @dataclass(frozen=True)
 class Provenance:
@@ -37,28 +39,20 @@ class Provenance:
         return self.numbers_unbound == 0
 
 
-def provenance_markdown(prov: Provenance) -> str:
+def provenance_markdown(prov: Provenance, *, locale: Locale = "en") -> str:
     """Render the provenance block as a Markdown section for the report body."""
 
+    copy = get_copy(locale)
     gate_line = (
-        f"Before this report was exported, the grounding gate bound all "
-        f"{prov.numbers_bound} of its numbers to a receipt; a number that traced "
-        "to no receipt would have blocked the export."
+        copy.provenance_gate_pass_template.format(bound=prov.numbers_bound)
         if prov.gate_pass
-        else (
-            f"The grounding gate left {prov.numbers_unbound} number(s) unbound, so "
-            "this report is not cleared for export."
-        )
+        else copy.provenance_gate_fail_template.format(unbound=prov.numbers_unbound)
     )
     return "\n".join(
         [
-            "## Provenance",
+            copy.provenance_heading,
             "",
-            "Every number in this report was computed by a deterministic SQL query "
-            "over the organization's own service data. No figure was written by a "
-            "language model. Each figure carries a receipt below: the exact query, "
-            "the count of rows it drew from, a content hash of that data slice, and "
-            "a timestamp.",
+            copy.provenance_statement,
             "",
             gate_line,
         ]
