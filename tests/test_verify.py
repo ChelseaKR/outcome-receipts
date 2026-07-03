@@ -81,14 +81,18 @@ def test_figure_with_no_receipt_fails() -> None:
 
 def test_cli_verify_passes_on_a_just_written_manifest(tmp_path: Path) -> None:
     out = tmp_path / "grant"
-    assert main(["run", "--config", str(GRANT), "--out", str(out), "--reproducible"]) == 0
+    run_args = ["run", "--config", str(GRANT), "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    assert main(run_args) == 0
     code = main(["verify", "--config", str(GRANT), "--receipts", str(out / "receipts.json")])
     assert code == 0
 
 
 def test_cli_verify_fails_on_a_tampered_manifest(tmp_path: Path) -> None:
     out = tmp_path / "grant"
-    assert main(["run", "--config", str(GRANT), "--out", str(out), "--reproducible"]) == 0
+    run_args = ["run", "--config", str(GRANT), "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    assert main(run_args) == 0
     manifest_path = out / "receipts.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["receipts"][0]["value"] = -1.0
