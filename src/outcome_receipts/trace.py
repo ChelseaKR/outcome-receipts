@@ -87,6 +87,7 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
         '<th scope="col">Figure</th>'
         '<th scope="col">Value</th>'
         '<th scope="col">What it counts</th>'
+        '<th scope="col">Caveat</th>'
         '<th scope="col">Rows</th>'
         "</tr>",
         "</thead>",
@@ -95,11 +96,13 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
     for figure in figures:
         receipt = figure.receipt
         definition = receipt.definition or "(no definition recorded)"
+        caveat = receipt.caveat or "(none)"
         lines.append(
             "<tr>"
             f'<td><a href="#{_anchor(figure.metric_id)}">{_esc(figure.metric_id)}</a></td>'
             f'<td class="value">{_esc(figure.display)}</td>'
             f"<td>{_esc(definition)}</td>"
+            f"<td>{_esc(caveat)}</td>"
             f"<td>{receipt.row_count}</td>"
             "</tr>"
         )
@@ -110,12 +113,16 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
 def _figure_detail(figure: Figure) -> list[str]:
     receipt = figure.receipt
     definition = receipt.definition or "(no definition recorded)"
-    return [
+    lines = [
         f'<section class="figure" id="{_anchor(figure.metric_id)}" '
         f'aria-labelledby="{_anchor(figure.metric_id)}-h">',
         f'<h2 id="{_anchor(figure.metric_id)}-h">'
         f'{_esc(figure.metric_id)}: <span class="value">{_esc(figure.display)}</span></h2>',
         f"<p>{_esc(definition)}</p>",
+    ]
+    if receipt.caveat:
+        lines.append(f'<p class="caveat">Caveat: {_esc(receipt.caveat)}</p>')
+    lines += [
         "<dl>",
         f"<dt>Query</dt><dd><code>{_esc(receipt.value_sql)}</code></dd>",
         f"<dt>Rows in slice</dt><dd>{receipt.row_count}</dd>",
@@ -124,6 +131,7 @@ def _figure_detail(figure: Figure) -> list[str]:
         "</dl>",
         "</section>",
     ]
+    return lines
 
 
 def render_trace_html(

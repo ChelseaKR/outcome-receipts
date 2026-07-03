@@ -37,6 +37,10 @@ class MetricSpec:
     served) from an ``outcome`` (a change in condition, such as a housing-retention
     rate). It rides in the receipt so a reader does not misread a busy output as
     the outcome it is meant to produce.
+
+    ``caveat`` is an optional qualifying note (e.g. a data-quality limitation)
+    that travels with the receipt, so a limitation on the figure rides inside the
+    receipt chain and renders next to the figure instead of living as loose prose.
     """
 
     metric_id: str
@@ -47,6 +51,7 @@ class MetricSpec:
     decimals: int = 0
     definition: str = ""
     kind: str = "output"
+    caveat: str = ""
 
 
 @dataclass(frozen=True)
@@ -81,7 +86,9 @@ class Receipt:
     self-describing without the spec on hand. ``kind`` carries the same forward
     label distinguishing an activity count (``output``) from a change in condition
     (``outcome``), so a reader of the receipt alone does not misread an output as
-    an outcome.
+    an outcome. ``caveat`` carries the figure's optional qualifying note (e.g. a
+    data-quality limitation) forward the same way, so the limitation rides inside
+    the receipt chain rather than as loose prose.
     """
 
     metric_id: str
@@ -93,6 +100,7 @@ class Receipt:
     computed_at: str
     definition: str = ""
     kind: str = "output"
+    caveat: str = ""
 
 
 @dataclass(frozen=True)
