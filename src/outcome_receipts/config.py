@@ -25,7 +25,7 @@ from outcome_receipts.models import (
     ReportSpec,
 )
 
-_VALID_UNITS = frozenset({"count", "percent"})
+_VALID_UNITS = frozenset({"count", "percent", "money", "duration", "rate"})
 _VALID_KINDS = frozenset({"output", "outcome"})
 _VALID_CHART_KINDS = frozenset({"bar", "line"})
 

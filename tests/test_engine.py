@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from outcome_receipts.clock import FixedClock
-from outcome_receipts.engine import compute_figure, compute_figures, load_table
+from outcome_receipts.engine import _format, compute_figure, compute_figures, load_table
 from outcome_receipts.models import EMPTY_SLICE_HASH, MetricSpec
 
 ROWS = [
@@ -74,6 +74,35 @@ def test_percent_formatting() -> None:
     )
     [figure] = compute_figures(ROWS, [spec], clock=FixedClock())
     assert figure.display == "67%"
+
+
+def test_money_formatting_is_currency_prefixed_and_separated() -> None:
+    assert _format(1234.5, "money", 2) == "$1,234.50"
+    assert _format(1000000.0, "money", 0) == "$1,000,000"
+
+
+def test_duration_formatting_appends_days() -> None:
+    assert _format(30.0, "duration", 0) == "30 days"
+    assert _format(1234.5, "duration", 1) == "1,234.5 days"
+
+
+def test_rate_formatting_is_a_bare_fixed_decimal() -> None:
+    assert _format(4.25, "rate", 2) == "4.25"
+    assert _format(4.0, "rate", 0) == "4"
+
+
+def test_money_figure_display_from_a_metric() -> None:
+    spec = MetricSpec(
+        metric_id="funds",
+        description="total aid disbursed",
+        value_sql="SELECT 1234.5",
+        slice_sql="SELECT * FROM data",
+        unit="money",
+        decimals=2,
+    )
+    [figure] = compute_figures(ROWS, [spec], clock=FixedClock())
+    assert figure.display == "$1,234.50"
+    assert figure.receipt.unit == "money"
 
 
 def test_thousands_separator_in_count_display() -> None:
