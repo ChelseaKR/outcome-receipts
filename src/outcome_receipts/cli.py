@@ -158,7 +158,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     )
     manifest_path.write_text(receipts_manifest(figures, provenance=provenance), encoding="utf-8")
     trace_path.write_text(
-        render_trace_html(spec.report.title, figures, provenance=provenance),
+        render_trace_html(
+            spec.report.title, figures, provenance=provenance, comparison=comparison
+        ),
         encoding="utf-8",
     )
 
