@@ -27,7 +27,7 @@ from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import ComparisonResult, compute_comparison
 from outcome_receipts.config import Spec, load_spec
 from outcome_receipts.draft import draft
-from outcome_receipts.engine import compute_figures, read_csv
+from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import evaluate
 from outcome_receipts.grounding import ground
 from outcome_receipts.models import Figure
@@ -52,9 +52,15 @@ def _load_and_compute(
     config: str, *, reproducible: bool
 ) -> tuple[Spec, list[dict[str, str]], list[Figure]]:
     spec = load_spec(config)
-    rows = read_csv(spec.data_path)
-    figures = compute_figures(rows, spec.report.metrics, clock=_clock(reproducible=reproducible))
-    return spec, rows, figures
+    table = read_csv_meta(spec.data_path)
+    print(
+        f"loaded {spec.data_path}: {table.row_count} rows, "
+        f"{len(table.columns)} columns, digest {table.digest[:16]}"
+    )
+    figures = compute_figures(
+        table.rows, spec.report.metrics, clock=_clock(reproducible=reproducible)
+    )
+    return spec, table.rows, figures
 
 
 def _compute_all(
