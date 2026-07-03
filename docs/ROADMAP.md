@@ -31,6 +31,15 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
   number in the narrative binds to a receipt, and an injected unverifiable number
   is caught. Met.
 
+### Expansions
+
+* **EXP-02 author-declared data checks (pre-compute quality gate) — done.**
+  Spec authors declare `[[data_checks]]` data-quality assertions (each an
+  `assert_sql` returning a single scalar) that run before any figure is computed
+  and fail closed: a violated precondition raises before a receipt is produced and
+  blocks the whole run/export, extending the "fail closed everywhere" invariant to
+  the data the figures rest on.
+
 ## v0.2.0 — Small-cell suppression
 
 * The privacy invariant: aggregate counts below a threshold suppressed, with

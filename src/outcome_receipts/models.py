@@ -44,6 +44,26 @@ class MetricSpec:
 
 
 @dataclass(frozen=True)
+class DataCheck:
+    """An author-declared data-quality precondition, asserted before compute.
+
+    ``assert_sql`` is a query returning a single scalar; a nonzero/true value
+    passes and a falsy value (None, 0, "0", "", "false") fails. Checks state the
+    preconditions a report's figures rely on -- no null client ids, dates inside
+    the reporting window, no duplicate keys -- and run before any figure is
+    computed, so a violated precondition fails closed and blocks the whole run
+    rather than producing a receipted-but-wrong number. ``message`` is an optional
+    author note appended to the failure so the person fixing the data knows what
+    the check was defending.
+    """
+
+    check_id: str
+    description: str
+    assert_sql: str
+    message: str = ""
+
+
+@dataclass(frozen=True)
 class Receipt:
     """The record of how a figure was produced.
 
@@ -149,7 +169,9 @@ class ReportSpec:
     ``template`` is plain text with ``{metric_id}`` placeholders. ``metrics`` are
     the specs whose figures fill those placeholders. ``title`` heads the rendered
     report. ``charts`` and ``comparison`` are optional sections; their numbers are
-    figures too, held to the same grounding gate.
+    figures too, held to the same grounding gate. ``data_checks`` are author-declared
+    data-quality preconditions that assert before any figure is computed and fail
+    closed, so a bad export is refused before a single number is produced.
     """
 
     title: str
@@ -157,6 +179,7 @@ class ReportSpec:
     metrics: tuple[MetricSpec, ...] = field(default_factory=tuple)
     charts: tuple[ChartSpec, ...] = field(default_factory=tuple)
     comparison: ComparisonSpec | None = None
+    data_checks: tuple[DataCheck, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

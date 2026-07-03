@@ -20,10 +20,25 @@ from pathlib import Path
 from outcome_receipts.clock import Clock, SystemClock
 from outcome_receipts.models import (
     EMPTY_SLICE_HASH,
+    DataCheck,
     Figure,
     MetricSpec,
     Receipt,
 )
+
+# Scalar values that count as a failed data check. A check's ``assert_sql`` returns
+# a single scalar; anything in this set (plus None) is treated as falsy so a check
+# fails closed rather than silently passing on an empty or "false" result.
+_FALSY = frozenset({0, "0", "", "false", "False", "FALSE"})
+
+
+class DataCheckError(Exception):
+    """Raised when an author-declared data-quality check fails or is malformed.
+
+    A data check runs before any figure is computed, so this exception fails the
+    whole run closed: no receipt is produced from data that violated a declared
+    precondition.
+    """
 
 
 def load_table(rows: Sequence[dict[str, str]], *, table: str = "data") -> sqlite3.Connection:
@@ -129,17 +144,48 @@ def compute_figure(
     )
 
 
+def run_data_checks(conn: sqlite3.Connection, checks: Sequence[DataCheck]) -> None:
+    """Assert every author-declared data-quality precondition, fail closed.
+
+    Each check's ``assert_sql`` must return exactly one scalar (mirroring
+    ``compute_figure``'s scalar guard); a wrong shape raises ``DataCheckError``
+    because a precondition that cannot be evaluated is not a precondition that
+    passed. A falsy scalar (None, 0, "0", "", "false") is a violated precondition
+    and raises ``DataCheckError`` naming the check and its author message. Runs
+    before any figure is computed, so a failure blocks the whole run.
+    """
+
+    for check in checks:
+        rows = conn.execute(check.assert_sql).fetchall()
+        if len(rows) != 1 or len(rows[0]) != 1:
+            raise DataCheckError(
+                f"data check {check.check_id!r} assert_sql must return exactly one "
+                f"scalar; got {len(rows)} rows"
+            )
+        scalar = rows[0][0]
+        if scalar is None or scalar in _FALSY:
+            detail = f": {check.message}" if check.message else ""
+            raise DataCheckError(f"data check {check.check_id!r} failed{detail}")
+
+
 def compute_figures(
     rows: Sequence[dict[str, str]],
     specs: Sequence[MetricSpec],
     *,
     clock: Clock | None = None,
     table: str = "data",
+    data_checks: Sequence[DataCheck] = (),
 ) -> list[Figure]:
-    """Compute every figure for a dataset. One connection, reused per metric."""
+    """Compute every figure for a dataset. One connection, reused per metric.
+
+    Author-declared ``data_checks`` run first, on the same connection the metrics
+    use, so the checks and the figures see identical loaded data. A failing check
+    raises ``DataCheckError`` before any figure is produced -- fail closed.
+    """
 
     conn = load_table(rows, table=table)
     try:
+        run_data_checks(conn, data_checks)
         return [compute_figure(conn, spec, clock=clock) for spec in specs]
     finally:
         conn.close()

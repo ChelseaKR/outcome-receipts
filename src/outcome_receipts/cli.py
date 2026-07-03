@@ -53,7 +53,12 @@ def _load_and_compute(
 ) -> tuple[Spec, list[dict[str, str]], list[Figure]]:
     spec = load_spec(config)
     rows = read_csv(spec.data_path)
-    figures = compute_figures(rows, spec.report.metrics, clock=_clock(reproducible=reproducible))
+    figures = compute_figures(
+        rows,
+        spec.report.metrics,
+        clock=_clock(reproducible=reproducible),
+        data_checks=spec.report.data_checks,
+    )
     return spec, rows, figures
 
 
