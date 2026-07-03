@@ -57,8 +57,63 @@ a report of aggregate figures, not a client roster.
   tests. This is the same posture and the same honest attribution as the sibling
   constituent-reconciler project's DV pack.
 
-TODO: complete the data-flow map and the retention model once the suppression and
-export modes land.
+### Data-flow map
+
+The chain runs compute, receipt, draft, ground, suppress, human-approve, export,
+in that order. Each stage below names what data crosses into it and what it
+carries forward.
+
+* **Ingest.** The org's client-level service data (a CSV) is read locally into
+  the deterministic engine (the data and engine layer). Client-level rows stay in
+  the local process; they are not sent anywhere and are not written back out by
+  the tool.
+* **Compute.** `engine.py` runs each `MetricSpec` and emits a `Figure`: a value
+  plus a `Receipt` of `{metric_id, query, row_count, slice_hash, value, unit,
+  computed_at}`, where `slice_hash` is a BLAKE2b hash of the canonicalized slice
+  the figure was computed from. From this point on, only the aggregates and the
+  slice hash move forward. Raw rows are not carried into the receipt.
+* **Draft.** The deterministic template drafter (or the optional policy-gated
+  Bedrock seam) writes prose around figures that already carry receipts. The
+  drafter receives figures, never raw rows.
+* **Ground.** `grounding.py` binds every numeric span in the narrative to a
+  receipt and fails closed: an unbound or mismatched number blocks the export
+  rather than passing silently.
+* **Suppress (v0.2, planned).** Small-cell and complementary suppression run over
+  the aggregate counts before export, consistent with the suppression posture
+  described above. This module has not landed yet.
+* **Export.** `report.py` and `provenance.py` emit the aggregate report together
+  with a manifest of receipts and slice hashes. No client-level field value and
+  no client identifier is emitted. This is the aggregate-only invariant: what
+  leaves the tool is counts, rates, narrative, and provenance metadata.
+* **Verify.** `verify.py` re-derives the figures from the spec and the cited data
+  and checks them against the manifest. It reads the same data and emits no slice
+  rows.
+
+One external boundary exists in the whole chain: the optional drafting seam
+(Claude on Bedrock). It receives only receipted aggregate figures and narrative
+instructions, never client-level rows, and it is fused off entirely under any
+no-cloud policy pack.
+
+### Retention model
+
+Retention is bounded by what each artifact is allowed to contain.
+
+* **Input service data.** Not copied or retained by the tool beyond the compute
+  run. It is read from the org's own store and stays owned and retained by the
+  org under the org's own policy.
+* **Receipts and manifest.** Retain aggregates, queries, row counts, slice
+  hashes, and timestamps, with no client-level values, so a report stays
+  reproducible. Slice hashes are one-way BLAKE2b digests and are not reversible
+  to the underlying rows.
+* **Drafting-seam prompts and responses (when the seam is enabled).** Contain
+  only aggregate figures and narrative, no client-level data. Their retention
+  follows the org's own Bedrock configuration, outside this tool.
+* **Exported report.** Aggregate-only, retained by the org and its funder.
+
+Because no client-level PII is retained in any artifact the tool produces, the
+retention obligation on tool-produced artifacts is bounded to aggregates and
+provenance metadata. The obligation over client-level data stays with the org's
+system of record, where it already lived.
 
 ## Transparency
 
