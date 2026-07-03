@@ -11,7 +11,7 @@ import json
 from collections.abc import Sequence
 
 from outcome_receipts.charts import Chart
-from outcome_receipts.comparison import ComparisonResult
+from outcome_receipts.comparison import ComparisonResult, ReconciliationResult
 from outcome_receipts.evaluate import EvalReport
 from outcome_receipts.models import Figure
 from outcome_receipts.provenance import Provenance, provenance_markdown, provenance_record
@@ -47,6 +47,47 @@ def render_comparison_table(result: ComparisonResult) -> str:
     return "\n".join(lines)
 
 
+def render_reconciliation_table(result: ReconciliationResult) -> str:
+    """Render the board reconciliation as Markdown: outcomes beside financial lines.
+
+    Each row is a small table pairing the receipted outcome figure with its
+    financial line, and each shows the cross-period change as a magnitude plus a
+    direction word, the same display convention as the comparison table. Every
+    number is a figure display, so the section asserts nothing that is not a
+    receipt, and the change is itself one query, not arithmetic over the page.
+    """
+
+    lines = [
+        "## Board reconciliation",
+        "",
+        f"Pairing each receipted outcome figure with its financial line, "
+        f"{result.prior_label} to {result.current_label}. Every value is a figure "
+        "with a receipt; each change is computed by a single query, not arithmetic "
+        "over the page.",
+        "",
+    ]
+    for row in result.rows:
+        outcome = row.outcome
+        financial = row.financial
+        lines.extend(
+            [
+                f"### {row.label}",
+                "",
+                f"| Line | {result.prior_label} | {result.current_label} | Change | Direction |",
+                "|------|------|------|--------|-----------|",
+                f"| {outcome.description or outcome.base_metric_id} (outcome) | "
+                f"{outcome.prior.display} | {outcome.current.display} | "
+                f"{outcome.delta.display} | {outcome.direction} |",
+                f"| {financial.description or financial.base_metric_id} (financial) | "
+                f"{financial.prior.display} | {financial.current.display} | "
+                f"{financial.delta.display} | {financial.direction} |",
+                "",
+            ]
+        )
+    lines.append("Change for a rate metric is in percentage points.")
+    return "\n".join(lines)
+
+
 def render_charts_section(charts: Sequence[Chart], *, chart_dir: str) -> str:
     """Render the charts as image references with their accessible data tables.
 
@@ -74,11 +115,13 @@ def render_report(
     figures: Sequence[Figure],
     *,
     comparison: ComparisonResult | None = None,
+    reconciliation: ReconciliationResult | None = None,
     charts: Sequence[Chart] = (),
     chart_dir: str = "charts",
     provenance: Provenance | None = None,
 ) -> str:
-    """Render the narrative, optional comparison and charts, provenance, receipts.
+    """Render the narrative, optional comparison, reconciliation, and charts, then
+    provenance and receipts.
 
     When ``provenance`` is given, a standard provenance block is embedded before
     the receipts, stating that no number was written by a model and that the gate
@@ -89,6 +132,8 @@ def render_report(
     lines = [f"# {title}", "", narrative.strip()]
     if comparison is not None:
         lines.extend(["", render_comparison_table(comparison)])
+    if reconciliation is not None:
+        lines.extend(["", render_reconciliation_table(reconciliation)])
     if charts:
         lines.extend(["", render_charts_section(charts, chart_dir=chart_dir)])
     if provenance is not None:

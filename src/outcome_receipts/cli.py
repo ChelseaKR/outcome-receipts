@@ -28,7 +28,12 @@ from pathlib import Path
 from outcome_receipts import __version__
 from outcome_receipts.charts import Chart, render_charts
 from outcome_receipts.clock import Clock, FixedClock, SystemClock
-from outcome_receipts.comparison import ComparisonResult, compute_comparison
+from outcome_receipts.comparison import (
+    ComparisonResult,
+    ReconciliationResult,
+    compute_comparison,
+    compute_reconciliation,
+)
 from outcome_receipts.config import Spec, load_spec
 from outcome_receipts.draft import draft
 from outcome_receipts.engine import compute_figures, read_csv
@@ -70,12 +75,18 @@ def _load_and_compute(
 
 def _compute_all(
     config: str, *, reproducible: bool
-) -> tuple[Spec, list[dict[str, str]], list[Figure], ComparisonResult | None]:
-    """Compute the full figure set, including any comparison figures.
+) -> tuple[
+    Spec,
+    list[dict[str, str]],
+    list[Figure],
+    ComparisonResult | None,
+    ReconciliationResult | None,
+]:
+    """Compute the full figure set, including comparison and reconciliation figures.
 
-    The narrative metrics and the comparison are computed over the same data, so a
-    caller (``run`` and ``verify`` alike) sees one figure list whose receipts cover
-    every number the report can claim.
+    The narrative metrics, the comparison, and the reconciliation are computed over
+    the same data, so a caller (``run`` and ``verify`` alike) sees one figure list
+    whose receipts cover every number the report can claim.
     """
 
     spec, rows, figures = _load_and_compute(config, reproducible=reproducible)
@@ -85,11 +96,21 @@ def _compute_all(
             rows, spec.report.comparison, clock=_clock(reproducible=reproducible)
         )
         figures = [*figures, *comparison.figures]
-    return spec, rows, figures, comparison
+    reconciliation: ReconciliationResult | None = None
+    if spec.report.reconciliation is not None:
+        reconciliation = compute_reconciliation(
+            rows, spec.report.reconciliation, clock=_clock(reproducible=reproducible)
+        )
+        figures = [*figures, *reconciliation.figures]
+    return spec, rows, figures, comparison, reconciliation
 
 
-def _claims_text(comparison: ComparisonResult | None, charts: Sequence[Chart]) -> str:
-    """The numbers a comparison and charts assert, as plain text for the gate.
+def _claims_text(
+    comparison: ComparisonResult | None,
+    reconciliation: ReconciliationResult | None,
+    charts: Sequence[Chart],
+) -> str:
+    """The numbers a comparison, reconciliation, and charts assert, as plain text.
 
     Only the figure displays go here, never category labels or SVG geometry, so
     the gate checks the numbers a chart or table claims and binds each to a
@@ -100,18 +121,22 @@ def _claims_text(comparison: ComparisonResult | None, charts: Sequence[Chart]) -
     parts: list[str] = []
     if comparison is not None:
         parts.append(" ".join(figure.display for figure in comparison.figures))
+    if reconciliation is not None:
+        parts.append(" ".join(figure.display for figure in reconciliation.figures))
     parts.extend(chart.claims_text for chart in charts)
     return " ".join(parts)
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    spec, _rows, figures, comparison = _compute_all(args.config, reproducible=args.reproducible)
+    spec, _rows, figures, comparison, reconciliation = _compute_all(
+        args.config, reproducible=args.reproducible
+    )
 
     narrative = draft(spec.report, figures)
     charts = render_charts(spec.report.charts, figures)
 
     narrative_result = ground(narrative, figures)
-    claims_result = ground(_claims_text(comparison, charts), figures)
+    claims_result = ground(_claims_text(comparison, reconciliation, charts), figures)
 
     print(f"figures computed: {len(figures)}")
     print(
@@ -150,6 +175,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             narrative,
             figures,
             comparison=comparison,
+            reconciliation=reconciliation,
             charts=charts,
             chart_dir=_CHART_DIR,
             provenance=provenance,
@@ -192,7 +218,9 @@ def _cmd_audit(args: argparse.Namespace) -> int:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    _spec, _rows, figures, _comparison = _compute_all(args.config, reproducible=args.reproducible)
+    _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+        args.config, reproducible=args.reproducible
+    )
     manifest = json.loads(Path(args.receipts).read_text(encoding="utf-8"))
     result = verify_manifest(figures, manifest)
 

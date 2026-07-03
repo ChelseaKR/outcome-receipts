@@ -144,6 +144,47 @@ class ComparisonSpec:
 
 
 @dataclass(frozen=True)
+class ReconciliationRow:
+    """One board line: a receipted outcome figure paired with its financial line.
+
+    ``outcome`` and ``financial`` are period metrics written with the same
+    ``{period}`` placeholder as comparison metrics, so each is computed once for the
+    prior period and once for the current period, then differenced by a single
+    query. Placing them on one row lets the board read an outcome figure next to
+    the money it took to produce it, with both numbers grounded. ``label`` names
+    the pairing; it carries no number.
+    """
+
+    label: str
+    outcome: MetricSpec
+    financial: MetricSpec
+
+
+@dataclass(frozen=True)
+class ReconciliationSpec:
+    """A board reconciliation: outcome figures beside financial lines, over two periods.
+
+    Each row pairs an outcome metric with a financial metric, both using the
+    ``{period}`` placeholder exactly like a ``ComparisonSpec``. The reconciliation
+    computes every metric for ``prior`` and ``current`` and the delta between them,
+    each as a Figure with its own receipt, so a board can see how an outcome and its
+    financial line each moved period over period. ``current`` and ``prior`` name two
+    entries in ``periods``.
+    """
+
+    current: str
+    prior: str
+    periods: tuple[PeriodSpec, ...] = field(default_factory=tuple)
+    rows: tuple[ReconciliationRow, ...] = field(default_factory=tuple)
+
+    def period(self, period_id: str) -> PeriodSpec:
+        for spec in self.periods:
+            if spec.period_id == period_id:
+                return spec
+        raise KeyError(f"reconciliation references unknown period {period_id!r}")
+
+
+@dataclass(frozen=True)
 class ChartSpec:
     """A chart drawn from already-computed, receipted figures.
 
@@ -178,10 +219,11 @@ class ReportSpec:
 
     ``template`` is plain text with ``{metric_id}`` placeholders. ``metrics`` are
     the specs whose figures fill those placeholders. ``title`` heads the rendered
-    report. ``charts`` and ``comparison`` are optional sections; their numbers are
-    figures too, held to the same grounding gate. ``data_checks`` are author-declared
-    data-quality preconditions that assert before any figure is computed and fail
-    closed, so a bad export is refused before a single number is produced.
+    report. ``charts``, ``comparison``, and ``reconciliation`` are optional
+    sections; their numbers are figures too, held to the same grounding gate.
+    ``data_checks`` are author-declared data-quality preconditions that assert
+    before any figure is computed and fail closed, so a bad export is refused
+    before a single number is produced.
     """
 
     title: str
@@ -190,6 +232,7 @@ class ReportSpec:
     charts: tuple[ChartSpec, ...] = field(default_factory=tuple)
     comparison: ComparisonSpec | None = None
     data_checks: tuple[DataCheck, ...] = field(default_factory=tuple)
+    reconciliation: ReconciliationSpec | None = None
 
 
 @dataclass(frozen=True)
