@@ -106,9 +106,7 @@ def render_report(
     return "\n".join(lines) + "\n"
 
 
-def receipts_manifest(
-    figures: Sequence[Figure], *, provenance: Provenance | None = None
-) -> str:
+def receipts_manifest(figures: Sequence[Figure], *, provenance: Provenance | None = None) -> str:
     """Render the receipts as a JSON manifest for machine verification.
 
     When ``provenance`` is given, the manifest also carries the machine-readable

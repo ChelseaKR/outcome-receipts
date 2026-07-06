@@ -1,12 +1,14 @@
 .PHONY: install verify lint type test eval run clean
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
+# --frozen: install exactly what uv.lock records, never re-resolve; a lockfile
+# drift becomes a loud CI failure instead of a silently different toolchain.
 install:
-	uv venv --python 3.11 .venv
-	uv pip install --python .venv/bin/python -e ".[dev]"
+	uv sync --frozen --python 3.12 --group dev
 
 lint:
 	.venv/bin/ruff check src tests
+	.venv/bin/ruff format --check src tests
 
 type:
 	.venv/bin/python -m mypy

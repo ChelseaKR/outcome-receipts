@@ -34,6 +34,11 @@ def load_table(rows: Sequence[dict[str, str]], *, table: str = "data") -> sqlite
     in the first row; rows are expected to share a schema (CSV guarantees this).
     """
 
+    # S608 (SQL-injection lint) is a false positive on `table` and `columns`
+    # below: `table` defaults to the "data" constant everywhere it is called
+    # (grep confirms no caller passes a dynamic value), and `columns` are CSV
+    # header names read as identifiers, not values. Neither is user-supplied
+    # in the request-body sense the rule guards against.
     conn = sqlite3.connect(":memory:")
     if not rows:
         conn.execute(f'CREATE TABLE "{table}" (_empty TEXT)')
@@ -43,7 +48,7 @@ def load_table(rows: Sequence[dict[str, str]], *, table: str = "data") -> sqlite
     conn.execute(f'CREATE TABLE "{table}" ({quoted})')
     placeholders = ", ".join("?" for _ in columns)
     conn.executemany(
-        f'INSERT INTO "{table}" VALUES ({placeholders})',
+        f'INSERT INTO "{table}" VALUES ({placeholders})',  # noqa: S608
         [tuple(row.get(c, "") for c in columns) for row in rows],
     )
     conn.commit()

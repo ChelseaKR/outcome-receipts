@@ -94,9 +94,7 @@ def _claims_text(comparison: ComparisonResult | None, charts: Sequence[Chart]) -
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    spec, _rows, figures, comparison = _compute_all(
-        args.config, reproducible=args.reproducible
-    )
+    spec, _rows, figures, comparison = _compute_all(args.config, reproducible=args.reproducible)
 
     narrative = draft(spec.report, figures)
     charts = render_charts(spec.report.charts, figures)
@@ -105,10 +103,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
     claims_result = ground(_claims_text(comparison, charts), figures)
 
     print(f"figures computed: {len(figures)}")
-    print(f"numbers in narrative: {narrative_result.total} "
-          f"(bound {len(narrative_result.bound)}, unbound {len(narrative_result.unbound)})")
-    print(f"chart and comparison numbers: {claims_result.total} "
-          f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})")
+    print(
+        f"numbers in narrative: {narrative_result.total} "
+        f"(bound {len(narrative_result.bound)}, unbound {len(narrative_result.unbound)})"
+    )
+    print(
+        f"chart and comparison numbers: {claims_result.total} "
+        f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})"
+    )
 
     if not (narrative_result.ok and claims_result.ok):
         print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
@@ -143,9 +145,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         ),
         encoding="utf-8",
     )
-    manifest_path.write_text(
-        receipts_manifest(figures, provenance=provenance), encoding="utf-8"
-    )
+    manifest_path.write_text(receipts_manifest(figures, provenance=provenance), encoding="utf-8")
     trace_path.write_text(
         render_trace_html(spec.report.title, figures, provenance=provenance),
         encoding="utf-8",
@@ -163,22 +163,21 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     _spec, _rows, figures = _load_and_compute(args.config, reproducible=args.reproducible)
     narrative = Path(args.narrative).read_text(encoding="utf-8")
     result = ground(narrative, figures)
-    print(f"numbers: {result.total}, bound: {len(result.bound)}, "
-          f"unbound: {len(result.unbound)}")
+    print(f"numbers: {result.total}, bound: {len(result.bound)}, unbound: {len(result.unbound)}")
     for span in result.unbound:
         print(f"  unverifiable: {span.text!r} at offset {span.start}")
     return 0 if result.ok else 1
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    _spec, _rows, figures, _comparison = _compute_all(
-        args.config, reproducible=args.reproducible
-    )
+    _spec, _rows, figures, _comparison = _compute_all(args.config, reproducible=args.reproducible)
     manifest = json.loads(Path(args.receipts).read_text(encoding="utf-8"))
     result = verify_manifest(figures, manifest)
 
-    print(f"receipts checked: {len(result.checks)} "
-          f"(re-derived {result.n_ok}, drift {len(result.checks) - result.n_ok})")
+    print(
+        f"receipts checked: {len(result.checks)} "
+        f"(re-derived {result.n_ok}, drift {len(result.checks) - result.n_ok})"
+    )
     for check in result.checks:
         status = "ok" if check.ok else "DRIFT"
         print(f"  [{status}] {check.metric_id}: {check.detail}")

@@ -5,7 +5,7 @@ responsible-tech audit method: ethics, bias, privacy and a DPIA, transparency,
 accessibility, and security. This is a committed, dated artifact, regenerated on
 release. Sections marked TODO are scoped but not yet measured.
 
-Status: v0.1.
+Status: v0.1. *Last verified: 2026-07-05 · Recheck: quarterly*
 
 ## Ethics
 

@@ -115,18 +115,14 @@ def _parse_comparison(raw: object) -> ComparisonSpec | None:
     metric_section = raw.get("metrics", {})
     if not metric_section:
         raise ValueError("[comparison] must define at least one [comparison.metrics.<id>]")
-    metrics = tuple(
-        _parse_metric(metric_id, body) for metric_id, body in metric_section.items()
-    )
+    metrics = tuple(_parse_metric(metric_id, body) for metric_id, body in metric_section.items())
     current = str(raw["current"])
     prior = str(raw["prior"])
     known = {period.period_id for period in periods}
     for name in (current, prior):
         if name not in known:
             raise ValueError(f"[comparison] references unknown period {name!r}")
-    return ComparisonSpec(
-        current=current, prior=prior, periods=tuple(periods), metrics=metrics
-    )
+    return ComparisonSpec(current=current, prior=prior, periods=tuple(periods), metrics=metrics)
 
 
 def load_spec(path: str | Path) -> Spec:
