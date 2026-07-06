@@ -12,10 +12,15 @@ outcome-receipts is pre-1.0, so only the latest minor on the latest major receiv
 fixes. A fix ships forward in a new patch release rather than a re-publish of an existing
 version.
 
-| Version | Supported | Notes                                             |
-|---------|-----------|---------------------------------------------------|
-| 0.1.x   | Yes       | Current release line; receives security patches.  |
-| < 0.1.0 | No        | Pre-release / unreleased; upgrade to 0.1.x.       |
+**No version has been tagged or released yet** (verified 2026-07-05: `git tag` and
+`gh release list` are both empty). The table below states the policy that will apply once
+`v0.1.0` is tagged and published; until then there is no released line to report a
+vulnerability against a specific version of.
+
+| Version | Supported | Notes                                                        |
+|---------|-----------|---------------------------------------------------------------|
+| 0.1.x   | Will be, once released | Intended current release line once `v0.1.0` ships. |
+| < 0.1.0 | No        | Pre-release / unreleased.                                      |
 
 When a `0.2.0` ships, `0.1.x` security support ends and this table is updated in the same
 release.
@@ -66,9 +71,13 @@ spec, or data issue rather than a vulnerability; file those as normal issues.
 ## Supply chain
 
 Release actions are pinned to commit SHAs, release artifacts carry a Sigstore build-provenance
-attestation, and publishing to PyPI uses Trusted Publishing (OIDC, no long-lived token). The
-CI token is least-privilege and does not persist credentials. Deeper supply-chain scanning
-(SBOM, dependency audit) is on the roadmap toward 1.0.
+attestation and a CycloneDX SBOM, and publishing to PyPI uses Trusted Publishing (OIDC, no
+long-lived token). The CI token is least-privilege and does not persist credentials.
+`ci.yml`'s `security` job runs `pip-audit` and `osv-scanner` over the locked dev toolchain
+(`uv.lock`), `gitleaks` over the full commit history, and `zizmor` over the workflow files, on
+every push and pull request. `release.yml` re-runs the full `make verify` gate at the tagged
+commit before anything is signed or published (see `docs/ROADMAP.md` for what's still open:
+CodeQL/Scorecard, both gated on the repo going public).
 
 ## Hardening notes for operators
 

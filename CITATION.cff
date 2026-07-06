@@ -15,8 +15,11 @@ authors:
     family-names: "Kelly-Reif"
     email: "ckellyreif@gmail.com"
     alias: "ChelseaKR"
+# No git tag or GitHub release exists yet for this version (verified
+# 2026-07-05: `git tag` and `gh release list` both empty). `date-released` is
+# intentionally omitted until `v0.1.0` is tagged and published; add it back
+# then with the actual release date.
 version: "0.1.0"
-date-released: "2026-06-27"
 license: "Apache-2.0"
 repository-code: "https://github.com/ChelseaKR/outcome-receipts"
 url: "https://github.com/ChelseaKR/outcome-receipts"

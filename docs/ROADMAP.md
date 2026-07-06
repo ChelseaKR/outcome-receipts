@@ -1,5 +1,7 @@
 # Roadmap
 
+*Last verified: 2026-07-05 · Recheck: quarterly*
+
 Planned direction for outcome-receipts. Dates are intentions, not promises;
 items move earlier when users ask for them. Feedback is welcome as GitHub issues.
 
@@ -21,7 +23,7 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
               receipt)
 ```
 
-## v0.1.0 — Receipts, no LLM (shipped)
+## v0.1.0 — Receipts, no LLM (scope complete on `main`; not yet tagged/released)
 
 * Service-data CSV in, a TOML metric spec, the deterministic SQLite engine,
   receipts, the deterministic template drafter, and the grounding gate.
@@ -82,7 +84,8 @@ and semantic-versioning guarantees on the spec and the receipts manifest schema.
 | Hallucinated-number rate | reported with Wilson CIs | REVIEW |
 | Small-cell suppression invariants | from primary CMS guidance, as tests | AUTO (v0.2) |
 | LLM judge calibration (Cohen's kappa) | fail-closed on drift | AUTO (v0.3) |
-| Supply chain | SBOM, signed releases, SHA-pinned actions | AUTO (toward 1.0) |
+| Supply chain | SBOM, signed releases, SHA-pinned actions | AUTO — landed in `release.yml` and `ci.yml`'s `security` job (pip-audit, osv-scanner, gitleaks, zizmor) |
+| Accessibility (trace.html) | zero pa11y WCAG2AA errors | AUTO — `ci.yml`'s `accessibility` job |
 
 ## Out of scope
 

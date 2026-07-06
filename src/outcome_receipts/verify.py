@@ -72,9 +72,7 @@ def _compare(stored: Mapping[str, Any], recomputed: Mapping[str, Any]) -> list[s
     return drifts
 
 
-def verify_manifest(
-    figures: Sequence[Figure], manifest: Mapping[str, Any]
-) -> VerifyResult:
+def verify_manifest(figures: Sequence[Figure], manifest: Mapping[str, Any]) -> VerifyResult:
     """Check each manifest receipt against the figure re-derived from the data.
 
     Every receipt must re-derive to a figure with the same value, slice hash, row
@@ -91,9 +89,7 @@ def verify_manifest(
         seen.add(metric_id)
         figure = by_id.get(metric_id)
         if figure is None:
-            checks.append(
-                Check(metric_id, False, "no figure re-derives for this receipt")
-            )
+            checks.append(Check(metric_id, False, "no figure re-derives for this receipt"))
             continue
         drifts = _compare(stored, _recomputed_fields(figure))
         if drifts:
@@ -102,7 +98,5 @@ def verify_manifest(
             checks.append(Check(metric_id, True, "re-derived, matches"))
     for metric_id in sorted(by_id):
         if metric_id not in seen:
-            checks.append(
-                Check(metric_id, False, "figure has no receipt in the manifest")
-            )
+            checks.append(Check(metric_id, False, "figure has no receipt in the manifest"))
     return VerifyResult(tuple(checks))
