@@ -20,9 +20,13 @@ make verify         # the local mirror of the CI gate
 `make verify` runs `lint`, `type`, `test` in order: `ruff check`, `mypy --strict`, and
 `pytest`. It is the same path CI runs, so a change is not done until `make verify` is green
 locally. CI re-runs it and then checks that the committed eval report is current
-(`make eval`, then `git diff --exit-code eval/report.md`). There is a single required `ci`
-check on `main`. Keep branch coverage at or above the documented **90%** bar
-([`CLAUDE.md`](CLAUDE.md)); the metric engine is a library and its correctness is the product.
+(`make eval`, then `git diff --exit-code eval/report.md`). **As of 2026-07-05, `main` has no
+branch protection or required status check configured yet** — the repo is private, and
+GitHub branch protection/rulesets require a public repo (or a paid plan) to enforce. Until
+that lands, treat `make verify` green as the gate you owe yourself and reviewers, not one
+GitHub enforces for you; see `docs/decisions/` for the tracked follow-up. Keep branch
+coverage at or above the documented **90%** bar ([`CLAUDE.md`](CLAUDE.md)); the metric
+engine is a library and its correctness is the product.
 
 Individual targets: `make lint`, `make type`, `make test`, `make eval`, `make run`,
 `make clean`.
@@ -30,8 +34,11 @@ Individual targets: `make lint`, `make type`, `make test`, `make eval`, `make ru
 ## Branch model
 
 Work on a short-lived topic branch cut from `main`, one logical change per branch, and open a
-pull request back into `main`. `main` is protected and every gate must be green before merge;
-do not push to it directly.
+pull request back into `main`. **`main` is not yet protected on GitHub** (no ruleset, no
+required check — this is a known, tracked gap, not an oversight); the convention below is
+followed by discipline until the ruleset lands, not mechanically enforced:
+every gate must be green before merge, and direct pushes to `main` are avoided even though
+GitHub does not currently block them.
 
 ## Commit messages
 

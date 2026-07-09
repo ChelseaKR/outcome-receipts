@@ -56,15 +56,21 @@ def _delta_spec(spec: MetricSpec, current: PeriodSpec, prior: PeriodSpec) -> Met
     and slice hash cover every record that fed the delta.
     """
 
-    current_value = spec.value_sql.replace(_PLACEHOLDER, current.predicate)
-    prior_value = spec.value_sql.replace(_PLACEHOLDER, prior.predicate)
-    current_slice = spec.slice_sql.replace(_PLACEHOLDER, current.predicate)
-    prior_slice = spec.slice_sql.replace(_PLACEHOLDER, prior.predicate)
+    cur_val = spec.value_sql.replace(_PLACEHOLDER, current.predicate)
+    pri_val = spec.value_sql.replace(_PLACEHOLDER, prior.predicate)
+    cur_slice = spec.slice_sql.replace(_PLACEHOLDER, current.predicate)
+    pri_slice = spec.slice_sql.replace(_PLACEHOLDER, prior.predicate)
+    # S608 (SQL-injection lint) is a false positive here: these substitute an
+    # already-loaded MetricSpec's own SQL, which SECURITY.md's Scope section
+    # documents as author-trusted input, not user-supplied. Suppressed per-line
+    # so any genuinely dynamic SQL introduced elsewhere still gets flagged.
+    value_sql = f"SELECT ({cur_val}) - ({pri_val})"
+    slice_sql = f"SELECT * FROM ({cur_slice}) UNION ALL SELECT * FROM ({pri_slice})"  # noqa: S608
     return replace(
         spec,
         metric_id=f"{spec.metric_id}__delta",
-        value_sql=f"SELECT ({current_value}) - ({prior_value})",
-        slice_sql=f"SELECT * FROM ({current_slice}) UNION ALL SELECT * FROM ({prior_slice})",
+        value_sql=value_sql,
+        slice_sql=slice_sql,
     )
 
 

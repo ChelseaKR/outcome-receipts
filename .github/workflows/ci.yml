@@ -9,16 +9,23 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      # Actions are pinned to tags here for readability; pinned to commit SHAs
-      # before the first tagged release per the supply-chain standard.
+      # Actions are pinned to commit SHAs per the supply-chain standard; the
+      # trailing comment names the tag the SHA corresponds to, for readability.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
       # Drive CI through the Makefile so it runs the same path as `make verify`.
       - name: Install
         run: make install
@@ -28,3 +35,71 @@ jobs:
         run: |
           make eval
           git diff --exit-code eval/report.md
+
+  security:
+    name: security (pip-audit · osv-scanner · gitleaks · zizmor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # gitleaks scans full commit history, not just the tip
+
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+
+      - name: Install (the same .venv make verify uses; pip-audit is a dev-group member)
+        run: make install
+
+      - name: pip-audit over the installed dev toolchain
+        run: .venv/bin/pip-audit --local
+
+      - name: Install osv-scanner (checksum-verified)
+        run: |
+          set -euo pipefail
+          curl -sL -o /tmp/osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_linux_amd64"
+          echo "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0  /tmp/osv-scanner" \
+            | sha256sum -c -
+          chmod +x /tmp/osv-scanner
+
+      - name: osv-scanner --lockfile uv.lock
+        run: /tmp/osv-scanner --lockfile uv.lock
+
+      - name: Install gitleaks (checksum-verified)
+        run: |
+          set -euo pipefail
+          curl -sL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" \
+            | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          chmod +x /tmp/gitleaks
+
+      - name: gitleaks detect (secrets redacted in output)
+        run: /tmp/gitleaks detect --source . --redact --exit-code 1
+
+      - name: zizmor (workflow SAST)
+        run: uvx --from zizmor==1.16.3 zizmor .github/workflows/
+
+  accessibility:
+    name: accessibility (pa11y, WCAG2AA, trace.html)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: "22"
+
+      - name: Install
+        run: make install
+
+      - name: Build the demo output (writes out/trace.html)
+        run: make run
+
+      - name: pa11y --standard WCAG2AA against the trace view
+        run: |
+          printf '%s\n' '{"chromeLaunchConfig":{"args":["--no-sandbox"]}}' > /tmp/pa11y-ci.json
+          npx --yes pa11y@9.1.1 "file://${{ github.workspace }}/out/trace.html" --standard WCAG2AA --config /tmp/pa11y-ci.json

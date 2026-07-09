@@ -14,23 +14,68 @@ on:
 permissions:
   contents: read
 
+# Serialize releases of the same tag so a re-run (workflow_dispatch) can't race
+# a concurrent build/publish of that tag.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+# Single source of truth for which tag this run builds, signs, and publishes.
+# Referenced as "$RELEASE_TAG" in run: steps (never interpolated via ${{ }}
+# into a shell body — tag names are attacker-influenced for a tag-pusher and
+# ${{ }} interpolation directly into `run:` is a template-injection vector).
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
 jobs:
+  # Gate: nothing downstream signs, attests, or publishes anything unless this
+  # job passes at the exact commit the tag points to. Closes the gap where an
+  # untested commit could be tagged and shipped with a Sigstore attestation.
+  verify:
+    name: verify at tagged commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - name: Install uv (pinned)
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.19"
+          enable-cache: false # signing/publish path: no cache poisoning surface
+      - name: Install
+        run: make install
+      - name: Verify (ruff, mypy --strict, pytest)
+        run: make verify
+      - name: CHANGELOG has a section for this release
+        run: |
+          set -euo pipefail
+          grep -q "^## \[${RELEASE_TAG#v}\]" CHANGELOG.md || {
+            echo "No CHANGELOG section found for ${RELEASE_TAG}"
+            exit 1
+          }
+
   release:
     name: build · provenance · SBOM · GitHub release
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: write # create/edit the GitHub release
       id-token: write # Sigstore signing for provenance and SBOM attestations
       attestations: write # build-provenance and SBOM attestations
     steps:
-      - name: Checkout
+      - name: Checkout tagged commit
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
       - name: Install uv (pinned)
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "0.11.19"
+          enable-cache: false # signing/publish path: no cache poisoning surface
       - name: Build wheel + sdist
         run: uv build
       - name: Attest build provenance (signed via Sigstore)
@@ -43,7 +88,7 @@ jobs:
           # Install the freshly built wheel into an isolated environment and
           # describe exactly what ships. The dependency set is empty at v0.1,
           # and the SBOM records that rather than asserting it in prose.
-          uv venv --python 3.11 .sbom-venv
+          uv venv --python 3.12 .sbom-venv
           uv pip install --python .sbom-venv/bin/python dist/*.whl
           uvx --from cyclonedx-bom==7.3.0 cyclonedx-py environment .sbom-venv/bin/python \
             --pyproject pyproject.toml \
@@ -67,10 +112,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          gh release view "$TAG" >/dev/null 2>&1 \
-            || gh release create "$TAG" --title "outcome-receipts $TAG" --generate-notes
-          gh release upload "$TAG" dist/* --clobber
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
+            || gh release create "$RELEASE_TAG" --title "outcome-receipts $RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" dist/* --clobber
 
   pypi-publish:
     name: publish to PyPI (Trusted Publishing)
@@ -82,14 +127,16 @@ jobs:
     permissions:
       id-token: write # OIDC token for PyPI Trusted Publishing (no long-lived secret)
     steps:
-      - name: Checkout
+      - name: Checkout tagged commit
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
       - name: Install uv (pinned)
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "0.11.19"
+          enable-cache: false # signing/publish path: no cache poisoning surface
       - name: Build wheel + sdist
         run: uv build
       # Trusted Publishing: requires a one-time PyPI "pending publisher" for project

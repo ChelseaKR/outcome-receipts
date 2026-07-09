@@ -5,7 +5,7 @@ responsible-tech audit method: ethics, bias, privacy and a DPIA, transparency,
 accessibility, and security. This is a committed, dated artifact, regenerated on
 release. Sections marked TODO are scoped but not yet measured.
 
-Status: v0.1.
+Status: v0.1. *Last verified: 2026-07-05 · Recheck: quarterly*
 
 ## Ethics
 
@@ -68,10 +68,11 @@ carries forward.
   the local process; they are not sent anywhere and are not written back out by
   the tool.
 * **Compute.** `engine.py` runs each `MetricSpec` and emits a `Figure`: a value
-  plus a `Receipt` of `{metric_id, query, row_count, slice_hash, value, unit,
-  computed_at}`, where `slice_hash` is a BLAKE2b hash of the canonicalized slice
-  the figure was computed from. From this point on, only the aggregates and the
-  slice hash move forward. Raw rows are not carried into the receipt.
+  plus a `Receipt` of `{metric_id, value_sql, row_count, slice_hash, value, unit,
+  computed_at, definition, kind}`, where `slice_hash` is a BLAKE2b hash of the
+  canonicalized slice the figure was computed from. From this point on, only the
+  aggregates and the slice hash move forward. Raw rows are not carried into the
+  receipt.
 * **Draft.** The deterministic template drafter (or the optional policy-gated
   Bedrock seam) writes prose around figures that already carry receipts. The
   drafter receives figures, never raw rows.
@@ -81,10 +82,17 @@ carries forward.
 * **Suppress (v0.2, planned).** Small-cell and complementary suppression run over
   the aggregate counts before export, consistent with the suppression posture
   described above. This module has not landed yet.
+* **Human approve.** The operator reviews the grounded draft before exporting;
+  everything they see is already aggregate-only. A recorded sign-off (named
+  approver, timestamp, hash of the approved content in the manifest) is planned
+  (R8) and has not landed yet; today the approval is the operator's decision to
+  run the export.
 * **Export.** `report.py` and `provenance.py` emit the aggregate report together
-  with a manifest of receipts and slice hashes. No client-level field value and
-  no client identifier is emitted. This is the aggregate-only invariant: what
-  leaves the tool is counts, rates, narrative, and provenance metadata.
+  with a manifest of receipts and slice hashes, and `ledger.py` appends one
+  hash-chained line per successful export (report title, manifest hash, optional
+  recipient, timestamp). No client-level field value and no client identifier is
+  emitted. This is the aggregate-only invariant: what leaves the tool is counts,
+  rates, narrative, and provenance metadata.
 * **Verify.** `verify.py` re-derives the figures from the spec and the cited data
   and checks them against the manifest. It reads the same data and emits no slice
   rows.
@@ -108,6 +116,11 @@ Retention is bounded by what each artifact is allowed to contain.
 * **Drafting-seam prompts and responses (when the seam is enabled).** Contain
   only aggregate figures and narrative, no client-level data. Their retention
   follows the org's own Bedrock configuration, outside this tool.
+* **Export ledger (`export-ledger.jsonl`).** Append-only and retained
+  indefinitely by design (its tamper evidence depends on the chain staying
+  intact). Each entry holds a report title, a manifest hash, an optional
+  recipient, a timestamp, and chain hashes — aggregates' provenance metadata
+  only, no client-level data.
 * **Exported report.** Aggregate-only, retained by the org and its funder.
 
 Because no client-level PII is retained in any artifact the tool produces, the
@@ -146,8 +159,13 @@ review or approval UI lands, the same bar applies to it.
 The deterministic core has no third-party runtime dependency, which keeps the
 supply-chain surface small. The SQL in a spec is author-supplied and runs against
 an in-memory database loaded only with the org's own data; it is not a
-multi-tenant or network surface. TODO: commit the threat model and the
-supply-chain hardening (SBOM, signed releases, pinned actions) on the path to 1.0.
+multi-tenant or network surface. The threat model now ships at
+[`THREAT-MODEL.md`](THREAT-MODEL.md), and the supply-chain hardening it names is
+in place: SHA-pinned Actions, a least-privilege `GITHUB_TOKEN`, Sigstore-signed
+releases, PyPI Trusted Publishing over OIDC, and a CycloneDX SBOM on release.
+The remaining 1.0 security work is the retention and data-flow map, which
+completes with the suppression and export modes, and the drafting-seam model card
+that lands with v0.3.
 
 ## Legal note
 

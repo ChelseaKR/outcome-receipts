@@ -74,9 +74,10 @@ speaks only to nonprofit practitioners.
   outcome counts below the suppression threshold (default n < 11, the common
   HUD/HMIS floor — confirm the exact rule from primary HUD guidance before
   hard-coding it) are suppressed in every export, and complementary suppression
-  is applied so a suppressed cell cannot be recovered by subtraction. This is a
-  merge-blocking test (`tests/test_suppression.py`). Do not invent the
-  threshold or the complementary rule; cite the source.
+  is applied so a suppressed cell cannot be recovered by subtraction. This will
+  be a merge-blocking test (`tests/test_suppression.py`, planned for v0.2 — not
+  yet present in the tree). Do not invent the threshold or the complementary
+  rule; cite the source.
 * **Aggregate-only by default.** A report is aggregate statistics, not a client
   roster. The export path emits counts, rates, and the narrative; it never emits
   client-level rows. Emitting a client identifier in a report is a defect.
@@ -155,41 +156,38 @@ outcome-receipts/
 ├── CLAUDE.md                      # this file
 ├── README.md                      # practitioner-facing
 ├── pyproject.toml                 # PEP 621, console_scripts entry: receipts
-├── uv.lock
 ├── Makefile                       # install / lint / type / test / eval / verify
-├── src/outcome_receipts/
-│   ├── __init__.py
-│   ├── cli.py                     # receipts compute | draft | audit | export | verify
-│   ├── config.py                  # report spec + metric specs + policy from TOML
-│   ├── models.py                  # Receipt, Figure, MetricSpec, Report, dataclasses
-│   ├── data.py                    # load the org's service data into the engine
-│   ├── metrics/
-│   │   ├── engine.py              # run a MetricSpec's deterministic query, emit a Figure
-│   │   └── receipt.py            # build the receipt: query, row_count, slice_hash, ts
-│   ├── mapping/                   # map a funder template's metrics -> MetricSpecs
-│   │   ├── mapper.py              # pre-tuned + low-confidence-to-review
-│   │   └── review.py              # the mapping review queue
-│   ├── draft/
-│   │   ├── deterministic.py       # template-fill narrative, no LLM (the default)
-│   │   └── seam.py                # optional Bedrock drafting seam, policy-gated
+├── src/outcome_receipts/          # flat module layout — no sub-packages yet
+│   ├── __init__.py                # package entry; the supported surface is the receipts CLI
+│   ├── cli.py                     # receipts run | audit | verify | eval
+│   ├── config.py                  # report-spec + metric-spec + policy loading from TOML
+│   ├── models.py                  # core data types: Receipt, Figure, MetricSpec, Report
+│   ├── clock.py                   # time source for receipts (injectable, deterministic in tests)
+│   ├── engine.py                  # the deterministic metric engine: run a MetricSpec, emit a Figure + receipt
 │   ├── grounding.py               # the fail-closed gate: every numeric span binds to a receipt
-│   ├── suppression.py             # small-cell + complementary suppression
-│   ├── provenance.py              # report manifest: receipts + BLAKE2b slice hashes
-│   ├── evaluate.py                # grounding rate, hallucinated-number rate, Wilson CIs, kappa
-│   └── report.py                  # render report + eval renderers
-├── tests/
-│   ├── fixtures/                  # seeded synthetic service data, zero real PII, planted truth
-│   ├── test_grounding_gate.py     # MERGE-BLOCKING: no unbound number survives
-│   ├── test_suppression.py        # MERGE-BLOCKING: small cells and their complements suppressed
-│   ├── test_no_model_numbers.py   # MERGE-BLOCKING: figures never originate in the seam
-│   └── test_*.py
-├── eval/                          # committed eval report + the fixtures it scores
+│   ├── draft.py                   # the deterministic drafter: template-fill narrative, no LLM
+│   ├── comparison.py              # period-over-period comparison, every number SQL-grounded
+│   ├── charts.py                  # charts from grounded figures, with an accessible data table
+│   ├── provenance.py              # the provenance statement that travels with every export
+│   ├── trace.py                   # funder-facing trace view: static, accessible HTML of the receipts
+│   ├── verify.py                  # re-derivation check for a committed receipts manifest
+│   ├── evaluate.py                # eval scoring: grounding rate, hallucinated-number rate, Wilson CIs, kappa
+│   └── report.py                  # rendering for the report, the receipts manifest, and the eval
+│   # PLANNED (v0.2, no source file yet): small-cell suppression, data-loading,
+│   # and the funder-template mapping/review surface — see the Roadmap below.
+├── tests/                         # one module per source module, plus grounded-section tests
+│   ├── test_grounding_gate.py     # MERGE-BLOCKING: no unbound number survives the gate
+│   └── test_*.py                  # engine, draft, comparison, charts, provenance, trace, verify, eval, config, definition
+│   # PLANNED merge-blocking tests (v0.2): test_suppression.py, test_no_model_numbers.py
+├── eval/                          # committed eval report (report.md)
+├── examples/                      # runnable example configs: board-report, grant-report, housing-demo
 ├── docs/
 │   ├── ROADMAP.md
+│   ├── RESEARCH-ROADMAP.md
 │   ├── RESPONSIBLE-TECH-AUDITS.md
-│   ├── cards/                     # model-card.md, data-card-*.md
+│   ├── USER-RESEARCH.md
 │   └── decisions/                 # MADR ADRs, 0000 meta-ADR first
-└── .github/workflows/ci.yml
+└── .github/workflows/             # ci.yml, release.yml
 ```
 
 Decisions made now so they are not relitigated:
@@ -245,9 +243,10 @@ chain outward. Phases are tracked in `docs/ROADMAP.md`.
 
 ## Quality bar
 
-* Every step has a passing and a failing fixture. The three merge-blocking tests
-  (`test_grounding_gate.py`, `test_suppression.py`, `test_no_model_numbers.py`)
-  are the privacy-and-trust invariants and must stay green on `main`.
+* Every step has a passing and a failing fixture. The privacy-and-trust
+  invariants ride on merge-blocking tests: `test_grounding_gate.py` (present and
+  green on `main`); `test_suppression.py` and `test_no_model_numbers.py` are
+  planned for v0.2, when suppression and the model-drafting seam land.
 * `ruff check`, `mypy --strict`, and `pytest` (branch coverage ≥ 90%) pass in CI
   before any feature work continues. No skipped tests on `main`. No bare
   `# type: ignore` or `# noqa` without an issue reference.

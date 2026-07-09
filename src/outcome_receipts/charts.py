@@ -92,10 +92,7 @@ def _esc(text: str) -> str:
     """Escape text for inclusion in SVG/XML."""
 
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -153,8 +150,10 @@ def _line_svg_body(points: Sequence[ChartPoint]) -> list[str]:
         path = " ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
         body.append(f'<polyline fill="none" stroke="#2b6cb0" stroke-width="2" points="{path}"/>')
     for (x, y), point in zip(coords, points, strict=True):
-        body.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="#2b6cb0"><title>'
-                     f'{_esc(point.label)}: {_esc(point.display)}</title></circle>')
+        body.append(
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="#2b6cb0"><title>'
+            f"{_esc(point.label)}: {_esc(point.display)}</title></circle>"
+        )
         body.append(
             f'<text x="{x:.1f}" y="{y - 10:.1f}" text-anchor="middle" font-size="13" '
             f'fill="#1a202c">{_esc(point.display)}</text>'

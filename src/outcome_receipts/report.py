@@ -97,6 +97,7 @@ def render_report(
     for figure in sorted(figures, key=lambda f: f.metric_id):
         receipt = figure.receipt
         lines.append(f"- **{figure.metric_id}** = {figure.display}")
+        lines.append(f"  - kind: {receipt.kind}")
         if receipt.definition:
             lines.append(f"  - definition: {receipt.definition}")
         lines.append(f"  - query: `{receipt.value_sql}`")
@@ -106,9 +107,7 @@ def render_report(
     return "\n".join(lines) + "\n"
 
 
-def receipts_manifest(
-    figures: Sequence[Figure], *, provenance: Provenance | None = None
-) -> str:
+def receipts_manifest(figures: Sequence[Figure], *, provenance: Provenance | None = None) -> str:
     """Render the receipts as a JSON manifest for machine verification.
 
     When ``provenance`` is given, the manifest also carries the machine-readable
@@ -123,6 +122,7 @@ def receipts_manifest(
                 "value": f.receipt.value,
                 "display": f.display,
                 "unit": f.receipt.unit,
+                "kind": f.receipt.kind,
                 "definition": f.receipt.definition,
                 "value_sql": f.receipt.value_sql,
                 "row_count": f.receipt.row_count,

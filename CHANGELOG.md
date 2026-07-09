@@ -4,9 +4,49 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 for [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.
 
+**No version of this project has been tagged or released yet** (`git tag` and
+`gh release list` are both empty as of 2026-07-05). The `[0.1.0]` section below
+groups the changes that make up the intended first release and is dated by
+when that scope was completed on `main`, not by a release date. It will be
+retitled with the real release date when `v0.1.0` is tagged and
+`release.yml` publishes it (see `docs/ROADMAP.md`).
+
 ## [Unreleased]
 
 ### Added
+- **Standards-conformance remediation (2026-07-05).** Closes the P0/P1 gaps found
+  by the 2026-07-05 audit against the portfolio `STANDARDS/`:
+  - `release.yml` gains a `verify` job (`make install && make verify` at the
+    tagged commit, plus a CHANGELOG-section check) that `release` and
+    `pypi-publish` now depend on, so nothing is signed or published without a
+    green gate at that commit. Tag name flows through `env.RELEASE_TAG` instead
+    of interpolating `${{ github.ref_name }}` into `run:` bodies; `enable-cache`
+    is off on every `setup-uv` step in the signing/publish path; both jobs share
+    a `concurrency` group.
+  - `ci.yml` gains a `security` job (`pip-audit`, `osv-scanner --lockfile
+    uv.lock`, `gitleaks`, `zizmor`) and an `accessibility` job (`pa11y
+    --standard WCAG2AA` against the built `trace.html`).
+  - `pytest` now gates on branch coverage (`--cov-fail-under=90`) and runs with
+    `--strict-markers --strict-config --import-mode=importlib`; `ruff`'s select
+    set grows to the full bar CLAUDE.md already promised (`S`, `C90`, `RUF`) with
+    `max-complexity = 10`; `make lint` adds `ruff format --check`.
+  - Dev dependencies move to PEP 735 `[dependency-groups]`; `uv.lock` is
+    committed and `make install` runs `uv sync --frozen`.
+  - Python floor raised to 3.12 (`requires-python`, classifiers, `.python-version`,
+    `mypy`, `Makefile`, `release.yml`'s SBOM venv), matching what CLAUDE.md
+    already specified.
+  - New `.github/CODEOWNERS` and `docs/I18N.md` (N/A-with-reason artifact).
+  - CONTRIBUTING.md, SECURITY.md, README.md, and CITATION.cff corrected to stop
+    claiming branch protection and a released `v0.1.0` that don't exist yet
+    (see the 2026-07-05 remediation log for the evidence).
+
+### Fixed
+- Two `S608` ruff findings in `comparison.py` and `engine.py` triaged as false
+  positives (spec SQL and internal table/column identifiers are author-trusted,
+  not user-supplied, per `SECURITY.md`'s Scope section) and suppressed per-line
+  with justification; `S101` (assert) is ignored under `tests/*` only, since
+  pytest's own idiom relies on it.
+
 - **More report templates.** A report type is its TOML spec, so two new ones ship
   as specs alongside the housing demo: a grant report
   (`examples/grant-report/`) and a board report (`examples/board-report/`). Each
@@ -62,7 +102,7 @@ for [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.
 - The Accessibility standard now applies to the chart output (SVG plus a paired
   data table) and the trace-view HTML rather than being N/A.
 
-## [0.1.0] — 2026-06-27
+## [0.1.0] — scope completed 2026-06-27, not yet tagged/released
 
 ### Added
 - The deterministic core, with no language model in any path:
