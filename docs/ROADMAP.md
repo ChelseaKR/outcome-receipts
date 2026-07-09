@@ -59,6 +59,12 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
 
 * Each exported report carries a manifest of its receipts and slice hashes;
   `receipts verify` re-checks that the figures still compute from the cited data.
+* **EXP-11 — Hash-chained export ledger (shipped).** `run` appends every
+  successful export to an append-only, hash-chained ledger (report title, a
+  BLAKE2b hash of the receipts manifest, recipient, timestamp), each entry linked
+  to the prior by hash so tampering is detectable. `receipts verify-ledger`
+  re-hashes the chain and fails closed on any break. The record of what was
+  reported to whom is itself receipted. See ADR 0004.
 
 ## v1.0.0 — Stability commitments
 
