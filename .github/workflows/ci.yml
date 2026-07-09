@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 # Least-privilege default token.
 permissions:
   contents: read
@@ -23,6 +27,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
       # Drive CI through the Makefile so it runs the same path as `make verify`.
       - name: Install
         run: make install
