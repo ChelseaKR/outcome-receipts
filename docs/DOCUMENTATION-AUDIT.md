@@ -46,7 +46,7 @@ Root-adjacent template files checked:
 
 ## Remediation In This PR
 
-- Added missing root-level remediation docs found by the audit loop, including legal, conduct, contribution, or security files where absent.
+- No missing root-level docs were found (README, process, legal, citation, and conduct files are all present), so none were added.
 - Added `docs/PROJECT-SCOPE.md` as the plain-language project and boundary map.
 - Added this audit record so future doc changes have a dated baseline.
 - Added or refreshed the docs index so scope, audit, and primary docs are easy to find.

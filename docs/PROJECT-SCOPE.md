@@ -28,7 +28,7 @@ Package metadata checked in this pass:
 
 ## How It Is Put Together
 
-- src/outcome_receipts/ contains engine, config, charts, draft, provenance, trace, report, and verify code.
+- src/outcome_receipts/ contains the deterministic metric engine (`engine.py`), the receipt and spec models (`models.py`), the fail-closed grounding gate (`grounding.py`), config loading, the template drafter, charts, period comparison, provenance, the trace view, report export, the hash-chained export ledger (`ledger.py`), the spec scaffolder, verification (`verify.py`), the eval harness, and the CLI.
 - examples/ contains small report inputs.
 - docs/decisions/ records grounding, templates, comparison, and trace choices.
 - eval/ contains report material.
@@ -48,9 +48,9 @@ GitHub workflow files checked:
 
 ## Trust Boundaries
 
-- Claims should be tied to source rows, definitions, and transformations.
-- The project is careful about saying when a number comes from data rather than a model.
-- Verification is part of the output contract, so reports can be checked later.
+- Every number in a report must trace to a receipt (the exact query, row count, and a hash of the data slice). The grounding gate is fail-closed: a number without a receipt blocks the export instead of passing through.
+- No number comes from a model. The deterministic engine computes every figure; the optional drafting seam (v0.3, off by default) only writes prose around already-receipted figures.
+- Verification is part of the output contract: `receipts verify` re-derives every figure from the spec and cited data and exits non-zero on any drift, and each export appends to a hash-chained ledger so the reporting history is tamper-evident.
 
 ## Outside This Scope
 
