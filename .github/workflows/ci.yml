@@ -97,4 +97,8 @@ jobs:
         run: make run
 
       - name: pa11y --standard WCAG2AA against the trace view
-        run: npx --yes pa11y@9.1.1 "file://${{ github.workspace }}/out/trace.html" --standard WCAG2AA
+        run: >
+          npx --yes pa11y@9.1.1
+          "file://${{ github.workspace }}/out/trace.html"
+          --standard WCAG2AA
+          --chrome-launch-config '{"args":["--no-sandbox"]}'
