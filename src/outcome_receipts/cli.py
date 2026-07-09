@@ -1,6 +1,8 @@
 """Command-line interface.
 
 Commands:
+  init    inspect an export and scaffold a starter TOML metric spec (empty stubs
+          that fail loudly until a human fills in the SQL and definitions)
   run     compute figures, draft the narrative, run the grounding gate, and write
           the report, receipts manifest, and trace view (export blocked if any
           number is unbound)
@@ -40,6 +42,7 @@ from outcome_receipts.report import (
     render_eval_markdown,
     render_report,
 )
+from outcome_receipts.scaffold import scaffold_spec
 from outcome_receipts.trace import render_trace_html
 from outcome_receipts.verify import verify_manifest
 
@@ -232,6 +235,19 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     return 0 if report.gate_pass else 1
 
 
+def _cmd_init(args: argparse.Namespace) -> int:
+    spec_text = scaffold_spec(Path(args.data), title=args.title)
+    if args.out:
+        out_path = Path(args.out)
+        out_path.write_text(spec_text, encoding="utf-8")
+        print(f"wrote starter spec: {out_path}")
+        print("every metric is an empty stub; fill value_sql/slice_sql/definition "
+              "before `receipts run`")
+    else:
+        print(spec_text, end="")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="receipts",
@@ -288,6 +304,14 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--config", required=True, help="path to the report spec TOML")
     eval_parser.add_argument("--out", help="write the report here instead of stdout")
     eval_parser.set_defaults(func=_cmd_eval)
+
+    init_parser = sub.add_parser(
+        "init", help="scaffold a starter metric spec from an export's columns"
+    )
+    init_parser.add_argument("--data", required=True, help="path to the export CSV to inspect")
+    init_parser.add_argument("--title", help="report title to write into the scaffold")
+    init_parser.add_argument("--out", help="write the spec here instead of stdout")
+    init_parser.set_defaults(func=_cmd_init)
 
     return parser
 
