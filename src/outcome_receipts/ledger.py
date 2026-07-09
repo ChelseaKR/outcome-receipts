@@ -194,12 +194,8 @@ def verify_chain(ledger_path: Path) -> list[str]:
             )
         expected_prev = GENESIS_PREV_HASH if position == 0 else entries[position - 1].entry_hash
         if entry.prev_hash != expected_prev:
-            problems.append(
-                f"entry {entry.index}: prev_hash does not link to the previous entry"
-            )
+            problems.append(f"entry {entry.index}: prev_hash does not link to the previous entry")
         recomputed = compute_entry_hash(canonical_payload(entry))
         if recomputed != entry.entry_hash:
-            problems.append(
-                f"entry {entry.index}: entry_hash mismatch, the record was altered"
-            )
+            problems.append(f"entry {entry.index}: entry_hash mismatch, the record was altered")
     return problems

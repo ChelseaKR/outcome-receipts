@@ -33,9 +33,7 @@ def _columns(csv_path: Path) -> list[str]:
     with csv_path.open(newline="", encoding="utf-8-sig") as handle:
         fieldnames = csv.DictReader(handle).fieldnames
     if not fieldnames:
-        raise ValueError(
-            f"{csv_path} has no header row; cannot derive a column inventory"
-        )
+        raise ValueError(f"{csv_path} has no header row; cannot derive a column inventory")
     return list(fieldnames)
 
 
@@ -98,7 +96,7 @@ def scaffold_spec(csv_path: Path, title: str | None = None) -> str:
             "# scope, dedup rule). Leave nothing empty — an empty stub will not load.",
             "[metrics.row_count]",
             'description = "Number of records in the export."',
-            "definition = \"\"",
+            'definition = ""',
             'value_sql = ""',
             'slice_sql = ""',
             'unit = "count"',

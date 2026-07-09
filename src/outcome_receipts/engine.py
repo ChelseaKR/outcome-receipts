@@ -125,8 +125,7 @@ def _execute(conn: sqlite3.Connection, sql: str, spec: MetricSpec) -> sqlite3.Cu
         if message.startswith("no such column:"):
             col = message.split(":", 1)[1].strip()
             raise ValueError(
-                f"metric {spec.metric_id!r} references column {col!r} "
-                "which is not in the export"
+                f"metric {spec.metric_id!r} references column {col!r} which is not in the export"
             ) from exc
         raise ValueError(f"metric {spec.metric_id!r} query failed: {message}") from exc
 

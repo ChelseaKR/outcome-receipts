@@ -13,7 +13,7 @@ that every number in it came from a receipt.
 Numbers are canonicalized before comparison so that locale formatting does not
 defeat the gate: a figure display and a prose span that denote the same value
 bind even when they use different thousands or decimal separators (US "1,234",
-European "1.234", or NBSP-grouped "1 234"). Written-out numerals ("twelve",
+European "1.234", or NBSP-grouped "1\u00a0234"). Written-out numerals ("twelve",
 "doce") are NOT yet canonicalized; they carry no digits, are never parsed as a
 numeric span, and therefore remain unbound (fail-closed) rather than binding by
 accident. Localized (E9) report output relies on this canonicalization so the
@@ -46,14 +46,14 @@ from outcome_receipts.models import Figure, GroundingResult, NumericSpan
 # so a number that is not a figure (a stray "2024") is unbound and must be removed
 # or made a figure. That strictness is the point.
 _NUMBER = re.compile(
-    r"\d{1,3}(?:[  ]\d{3})+(?:[.,]\d+)?%?"  # 1: NBSP-grouped thousands
+    r"\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?%?"  # 1: NBSP-grouped thousands
     r"|\d[\d.,]*\d%?"  # 2: dot/comma-grouped or decimal
     r"|\d%?"  # 3: lone digit
 )
 
 # Separators that only ever group thousands, never mark a decimal: they are
 # stripped outright during canonicalization.
-_GROUP_SPACES = (" ", " ", " ")
+_GROUP_SPACES = ("\u00a0", "\u202f", " ")
 
 
 def _single_separator_is_thousands(body: str, sep: str) -> bool:

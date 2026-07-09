@@ -56,9 +56,7 @@ EXPECT_EMPTY = DataCheck(
 
 
 def test_passing_check_lets_compute_proceed() -> None:
-    figures = compute_figures(
-        ROWS, [COUNT], clock=FixedClock(), data_checks=[NO_BLANK_IDS]
-    )
+    figures = compute_figures(ROWS, [COUNT], clock=FixedClock(), data_checks=[NO_BLANK_IDS])
     assert [f.value for f in figures] == [3.0]
     assert figures[0].display == "3"
 

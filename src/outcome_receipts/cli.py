@@ -162,9 +162,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
 
-    ledger_path = (
-        Path(args.ledger) if args.ledger else out_dir.parent / "export-ledger.jsonl"
-    )
+    ledger_path = Path(args.ledger) if args.ledger else out_dir.parent / "export-ledger.jsonl"
     entry = append_export(
         ledger_path,
         report_title=spec.report.title,
@@ -246,8 +244,10 @@ def _cmd_init(args: argparse.Namespace) -> int:
         out_path = Path(args.out)
         out_path.write_text(spec_text, encoding="utf-8")
         print(f"wrote starter spec: {out_path}")
-        print("every metric is an empty stub; fill value_sql/slice_sql/definition "
-              "before `receipts run`")
+        print(
+            "every metric is an empty stub; fill value_sql/slice_sql/definition "
+            "before `receipts run`"
+        )
     else:
         print(spec_text, end="")
     return 0

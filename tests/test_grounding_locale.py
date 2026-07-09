@@ -17,8 +17,8 @@ from outcome_receipts.models import Figure, Receipt
 
 # Narrow no-break space (U+202F) and no-break space (U+00A0): both are used as
 # thousands separators in localized number formatting.
-NNBSP = " "
-NBSP = " "
+NNBSP = "\u202f"
+NBSP = "\u00a0"
 
 
 def _figure(display: str, *, value: float = 0.0, metric_id: str = "m") -> Figure:
