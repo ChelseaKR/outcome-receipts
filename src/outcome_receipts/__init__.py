@@ -7,7 +7,14 @@ between minor releases until v1.0.
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+from importlib.metadata import version
+
+# Single-sourced from pyproject.toml via installed package metadata (REL-02):
+# the tag, the wheel, and `receipts --version` can no longer disagree. The
+# package is always installed before use (`make install` / `uv sync`), so a
+# missing-distribution fallback would only mask a broken environment —
+# consistent with fail-closed, there is none.
+__version__ = version("outcome-receipts")
 
 from outcome_receipts.models import (
     Figure,
