@@ -1,11 +1,12 @@
 """Report-spec loading.
 
 A report is configured by a TOML file: the data source, the report title and
-template, the metric definitions, and two optional sections. ``[[charts]]`` draws
-a chart from named figures, and ``[comparison]`` compares a set of metrics across
-two periods. Every number either section renders is still a figure with a receipt;
-nothing here introduces an ungrounded path to a number. File paths resolve
-relative to the spec's own directory so a spec and its data move together.
+template, the metric definitions, and three optional sections. ``[[charts]]`` draws
+a chart from named figures, ``[comparison]`` compares a set of metrics across two
+periods, and ``[[data_checks]]`` declares data-quality preconditions asserted before
+any figure is computed. Every number a chart or comparison renders is still a figure
+with a receipt; nothing here introduces an ungrounded path to a number. File paths
+resolve relative to the spec's own directory so a spec and its data move together.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import Any
 from outcome_receipts.models import (
     ChartSpec,
     ComparisonSpec,
+    DataCheck,
     MetricSpec,
     PeriodSpec,
     ReportSpec,
@@ -97,6 +99,26 @@ def _parse_charts(raw: object) -> tuple[ChartSpec, ...]:
     return tuple(charts)
 
 
+def _parse_data_checks(raw: object) -> tuple[DataCheck, ...]:
+    if not raw:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError("[[data_checks]] must be an array of tables")
+    checks: list[DataCheck] = []
+    for entry in raw:
+        if "id" not in entry or "assert_sql" not in entry:
+            raise ValueError("each [[data_checks]] entry must set 'id' and 'assert_sql'")
+        checks.append(
+            DataCheck(
+                check_id=str(entry["id"]),
+                description=str(entry.get("description", "")),
+                assert_sql=str(entry["assert_sql"]),
+                message=str(entry.get("message", "")),
+            )
+        )
+    return tuple(checks)
+
+
 def _parse_comparison(raw: object) -> ComparisonSpec | None:
     if not raw:
         return None
@@ -152,6 +174,7 @@ def load_spec(path: str | Path) -> Spec:
     metrics = tuple(_parse_metric(metric_id, body) for metric_id, body in metric_section.items())
     charts = _parse_charts(data.get("charts"))
     comparison = _parse_comparison(data.get("comparison"))
+    data_checks = _parse_data_checks(data.get("data_checks"))
 
     report = ReportSpec(
         title=str(report_section.get("title", "Outcome report")),
@@ -159,5 +182,6 @@ def load_spec(path: str | Path) -> Spec:
         metrics=metrics,
         charts=charts,
         comparison=comparison,
+        data_checks=data_checks,
     )
     return Spec(data_path=_resolve(base, str(data_section["path"])), report=report)
