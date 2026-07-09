@@ -18,10 +18,10 @@ from outcome_receipts.models import (
 )
 
 __all__ = [
-    "__version__",
     "Figure",
     "GroundingResult",
     "MetricSpec",
     "Receipt",
     "ReportSpec",
+    "__version__",
 ]

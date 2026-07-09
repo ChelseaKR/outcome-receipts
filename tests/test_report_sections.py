@@ -50,9 +50,7 @@ def test_comparison_table_renders_values_change_and_direction() -> None:
 
 
 def test_comparison_table_falls_back_to_metric_id_when_no_description() -> None:
-    result = ComparisonResult(
-        current_label="Q2", prior_label="Q1", rows=(_row(""),), figures=()
-    )
+    result = ComparisonResult(current_label="Q2", prior_label="Q1", rows=(_row(""),), figures=())
     table = render_comparison_table(result)
     assert "| clients |" in table
 

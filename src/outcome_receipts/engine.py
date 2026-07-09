@@ -22,10 +22,25 @@ from typing import NamedTuple
 from outcome_receipts.clock import Clock, SystemClock
 from outcome_receipts.models import (
     EMPTY_SLICE_HASH,
+    DataCheck,
     Figure,
     MetricSpec,
     Receipt,
 )
+
+# Scalar values that count as a failed data check. A check's ``assert_sql`` returns
+# a single scalar; anything in this set (plus None) is treated as falsy so a check
+# fails closed rather than silently passing on an empty or "false" result.
+_FALSY = frozenset({0, "0", "", "false", "False", "FALSE"})
+
+
+class DataCheckError(Exception):
+    """Raised when an author-declared data-quality check fails or is malformed.
+
+    A data check runs before any figure is computed, so this exception fails the
+    whole run closed: no receipt is produced from data that violated a declared
+    precondition.
+    """
 
 
 class LoaderError(Exception):
@@ -78,6 +93,12 @@ def load_table(rows: Sequence[dict[str, str]], *, table: str = "data") -> sqlite
     ``LoaderError`` instead of silently creating a placeholder table.
     """
 
+    # S608 (SQL-injection lint) is a false positive on `table` and `columns`
+    # below: `table` defaults to the "data" constant everywhere it is called
+    # (grep confirms no caller passes a dynamic value), and `columns` are CSV
+    # header names read as identifiers, not values; both pass through
+    # _quote_ident, which doubles any embedded double-quote. Neither is
+    # user-supplied in the request-body sense the rule guards against.
     if not rows:
         raise LoaderError("cannot load table: no data rows (an empty dataset is rejected)")
     conn = sqlite3.connect(":memory:")
@@ -86,7 +107,7 @@ def load_table(rows: Sequence[dict[str, str]], *, table: str = "data") -> sqlite
     conn.execute(f"CREATE TABLE {_quote_ident(table)} ({quoted})")
     placeholders = ", ".join("?" for _ in columns)
     conn.executemany(
-        f"INSERT INTO {_quote_ident(table)} VALUES ({placeholders})",
+        f"INSERT INTO {_quote_ident(table)} VALUES ({placeholders})",  # noqa: S608
         [tuple(row.get(c, "") for c in columns) for row in rows],
     )
     conn.commit()
@@ -119,9 +140,7 @@ def read_csv_meta(path: Path) -> LoadedTable:
     for index, name in enumerate(header, start=1):
         column = name.strip()
         if not column:
-            raise LoaderError(
-                f"{path}: column {index} has an empty or whitespace-only header"
-            )
+            raise LoaderError(f"{path}: column {index} has an empty or whitespace-only header")
         if column in seen:
             raise LoaderError(f"{path}: duplicate header column {column!r}")
         seen.add(column)
@@ -131,12 +150,9 @@ def read_csv_meta(path: Path) -> LoadedTable:
     for line_number, record in enumerate(reader, start=2):
         if len(record) != len(columns):
             raise LoaderError(
-                f"{path}: row {line_number} has {len(record)} fields, "
-                f"expected {len(columns)}"
+                f"{path}: row {line_number} has {len(record)} fields, expected {len(columns)}"
             )
-        rows.append(
-            {col: (val or "").strip() for col, val in zip(columns, record, strict=True)}
-        )
+        rows.append({col: (val or "").strip() for col, val in zip(columns, record, strict=True)})
 
     if not rows:
         raise LoaderError(f"{path}: file has a header but no data rows")
@@ -185,6 +201,28 @@ def _format(value: float, unit: str, decimals: int) -> str:
     return f"{value:,.{decimals}f}"
 
 
+def _execute(conn: sqlite3.Connection, sql: str, spec: MetricSpec) -> sqlite3.Cursor:
+    """Run a metric's SQL, failing closed on a missing column.
+
+    A query that references a column absent from the export raises a sqlite3
+    ``OperationalError`` ("no such column: <name>"). Catch it and re-raise a
+    ``ValueError`` naming the missing column and the metric, so the operator sees
+    what is wrong rather than a raw driver error. Any other OperationalError is
+    re-raised as a ValueError too, so a bad spec never silent-passes.
+    """
+
+    try:
+        return conn.execute(sql)
+    except sqlite3.OperationalError as exc:
+        message = str(exc)
+        if message.startswith("no such column:"):
+            col = message.split(":", 1)[1].strip()
+            raise ValueError(
+                f"metric {spec.metric_id!r} references column {col!r} which is not in the export"
+            ) from exc
+        raise ValueError(f"metric {spec.metric_id!r} query failed: {message}") from exc
+
+
 def compute_figure(
     conn: sqlite3.Connection, spec: MetricSpec, *, clock: Clock | None = None
 ) -> Figure:
@@ -192,11 +230,13 @@ def compute_figure(
 
     Raises ``ValueError`` if the value query does not return exactly one scalar,
     so a malformed metric fails loudly rather than producing a silent wrong number.
+    Also raises ``ValueError`` naming any column a query references that is absent
+    from the export, so a bad spec against a messy export fails closed.
     """
 
     clock = clock or SystemClock()
 
-    cursor = conn.execute(spec.value_sql)
+    cursor = _execute(conn, spec.value_sql, spec)
     value_rows = cursor.fetchall()
     if len(value_rows) != 1 or len(value_rows[0]) != 1:
         raise ValueError(
@@ -206,7 +246,7 @@ def compute_figure(
     raw_value = value_rows[0][0]
     value = float(raw_value) if raw_value is not None else 0.0
 
-    slice_rows = conn.execute(spec.slice_sql).fetchall()
+    slice_rows = _execute(conn, spec.slice_sql, spec).fetchall()
 
     receipt = Receipt(
         metric_id=spec.metric_id,
@@ -217,6 +257,7 @@ def compute_figure(
         unit=spec.unit,
         computed_at=clock.now_iso(),
         definition=spec.definition,
+        kind=spec.kind,
     )
     return Figure(
         metric_id=spec.metric_id,
@@ -226,17 +267,48 @@ def compute_figure(
     )
 
 
+def run_data_checks(conn: sqlite3.Connection, checks: Sequence[DataCheck]) -> None:
+    """Assert every author-declared data-quality precondition, fail closed.
+
+    Each check's ``assert_sql`` must return exactly one scalar (mirroring
+    ``compute_figure``'s scalar guard); a wrong shape raises ``DataCheckError``
+    because a precondition that cannot be evaluated is not a precondition that
+    passed. A falsy scalar (None, 0, "0", "", "false") is a violated precondition
+    and raises ``DataCheckError`` naming the check and its author message. Runs
+    before any figure is computed, so a failure blocks the whole run.
+    """
+
+    for check in checks:
+        rows = conn.execute(check.assert_sql).fetchall()
+        if len(rows) != 1 or len(rows[0]) != 1:
+            raise DataCheckError(
+                f"data check {check.check_id!r} assert_sql must return exactly one "
+                f"scalar; got {len(rows)} rows"
+            )
+        scalar = rows[0][0]
+        if scalar is None or scalar in _FALSY:
+            detail = f": {check.message}" if check.message else ""
+            raise DataCheckError(f"data check {check.check_id!r} failed{detail}")
+
+
 def compute_figures(
     rows: Sequence[dict[str, str]],
     specs: Sequence[MetricSpec],
     *,
     clock: Clock | None = None,
     table: str = "data",
+    data_checks: Sequence[DataCheck] = (),
 ) -> list[Figure]:
-    """Compute every figure for a dataset. One connection, reused per metric."""
+    """Compute every figure for a dataset. One connection, reused per metric.
+
+    Author-declared ``data_checks`` run first, on the same connection the metrics
+    use, so the checks and the figures see identical loaded data. A failing check
+    raises ``DataCheckError`` before any figure is produced -- fail closed.
+    """
 
     conn = load_table(rows, table=table)
     try:
+        run_data_checks(conn, data_checks)
         return [compute_figure(conn, spec, clock=clock) for spec in specs]
     finally:
         conn.close()

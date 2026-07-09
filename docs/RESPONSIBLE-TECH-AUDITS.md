@@ -5,7 +5,7 @@ responsible-tech audit method: ethics, bias, privacy and a DPIA, transparency,
 accessibility, and security. This is a committed, dated artifact, regenerated on
 release. Sections marked TODO are scoped but not yet measured.
 
-Status: v0.1.
+Status: v0.1. *Last verified: 2026-07-05 · Recheck: quarterly*
 
 ## Ethics
 
@@ -91,8 +91,13 @@ review or approval UI lands, the same bar applies to it.
 The deterministic core has no third-party runtime dependency, which keeps the
 supply-chain surface small. The SQL in a spec is author-supplied and runs against
 an in-memory database loaded only with the org's own data; it is not a
-multi-tenant or network surface. TODO: commit the threat model and the
-supply-chain hardening (SBOM, signed releases, pinned actions) on the path to 1.0.
+multi-tenant or network surface. The threat model now ships at
+[`THREAT-MODEL.md`](THREAT-MODEL.md), and the supply-chain hardening it names is
+in place: SHA-pinned Actions, a least-privilege `GITHUB_TOKEN`, Sigstore-signed
+releases, PyPI Trusted Publishing over OIDC, and a CycloneDX SBOM on release.
+The remaining 1.0 security work is the retention and data-flow map, which
+completes with the suppression and export modes, and the drafting-seam model card
+that lands with v0.3.
 
 ## Legal note
 

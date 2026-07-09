@@ -7,12 +7,16 @@ it drew from, a content hash of that data slice, and a timestamp. It then drafts
 a narrative around the receipted figures and runs a fail-closed grounding gate
 that refuses to export if any number in the narrative does not trace to a receipt.
 
-> **Status: v0.1, early but working.** The deterministic path runs end to end and
+> **Status: Beta.** The deterministic path runs end to end and
 > is tested: service-data CSV in, receipted figures out, a drafted narrative, and
 > a grounding gate that blocks export on any unverifiable number. No language
 > model is involved in v0.1. A committed eval ([eval/report.md](eval/report.md))
 > scores the gate. Track progress in [docs/ROADMAP.md](docs/ROADMAP.md); the build
-> is specified in [CLAUDE.md](CLAUDE.md).
+> is specified in [CLAUDE.md](CLAUDE.md). No version has been tagged or released
+> yet (see [CHANGELOG.md](CHANGELOG.md)); supported-version policy, once a release
+> ships, is in [SECURITY.md](SECURITY.md#supported-versions).
+>
+> *Last verified: 2026-07-05 · Recheck: quarterly*
 
 ## The problem
 
@@ -179,11 +183,12 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Documentation | Applies |
 | Quality & Metrics | Applies — committed eval with Wilson CIs, fail-closed gate |
 | AI Evaluation | Applies when the drafting seam lands (v0.3); v0.1 has no model in any path |
-| Security & Supply-Chain | Applies — hardening (SBOM, signed releases, pinned actions) lands toward 1.0 |
-| CI/CD | Applies — `make verify` mirrors CI |
-| Accessibility | Applies to the chart output and the trace view — every chart ships an SVG with `role="img"`, `<title>`, and `<desc>` paired with an equivalent data table, and the trace-view HTML is semantic and high-contrast (one `<h1>`, `lang` set, table headers with `scope`, a `<caption>`); the CLI core stays headless |
-| Internationalization | N/A — English-only at v0.1; report copy is externalizable in the spec |
+| Security & Supply-Chain | Applies — SHA-pinned actions, least-privilege tokens, CycloneDX SBOM, and Sigstore-signed build provenance in `release.yml`; `ci.yml`'s `security` job runs pip-audit, osv-scanner, gitleaks, and zizmor on every push and PR. Open: CodeQL and OpenSSF Scorecard, both gated on the repo going public |
+| CI/CD | Applies — `make verify` mirrors CI; `release.yml` re-runs it at the tagged commit before signing or publishing |
+| Accessibility | Applies to the chart output and the trace view — every chart ships an SVG with `role="img"`, `<title>`, and `<desc>` paired with an equivalent data table, and the trace-view HTML is semantic and high-contrast (one `<h1>`, `lang` set, table headers with `scope`, a `<caption>`); `ci.yml`'s `accessibility` job runs pa11y (WCAG2AA) against the built trace view; the CLI core stays headless |
+| Internationalization | N/A — English-only at v0.1; report copy is externalizable in the spec; see [docs/I18N.md](docs/I18N.md) |
 | Observability | N/A — library/CLI, no long-running service |
+| Release & Versioning | Applies — tag-triggered release with SBOM + Sigstore attestation; PyPI Trusted Publishing; first tag pending (no version has shipped yet, see CHANGELOG.md) |
 
 ## For Claude Code
 

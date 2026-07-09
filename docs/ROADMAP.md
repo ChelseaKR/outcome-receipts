@@ -1,5 +1,7 @@
 # Roadmap
 
+*Last verified: 2026-07-05 · Recheck: quarterly*
+
 Planned direction for outcome-receipts. Dates are intentions, not promises;
 items move earlier when users ask for them. Feedback is welcome as GitHub issues.
 
@@ -21,7 +23,7 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
               receipt)
 ```
 
-## v0.1.0 — Receipts, no LLM (shipped)
+## v0.1.0 — Receipts, no LLM (scope complete on `main`; not yet tagged/released)
 
 * Service-data CSV in, a TOML metric spec, the deterministic SQLite engine,
   receipts, the deterministic template drafter, and the grounding gate.
@@ -30,6 +32,15 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
 * Definition of done: a messy figure set resolves to a receipted report, every
   number in the narrative binds to a receipt, and an injected unverifiable number
   is caught. Met.
+
+### Expansions
+
+* **EXP-02 author-declared data checks (pre-compute quality gate) — done.**
+  Spec authors declare `[[data_checks]]` data-quality assertions (each an
+  `assert_sql` returning a single scalar) that run before any figure is computed
+  and fail closed: a violated precondition raises before a receipt is produced and
+  blocks the whole run/export, extending the "fail closed everywhere" invariant to
+  the data the figures rest on.
 
 ## v0.2.0 — Small-cell suppression
 
@@ -57,6 +68,12 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
 
 * Each exported report carries a manifest of its receipts and slice hashes;
   `receipts verify` re-checks that the figures still compute from the cited data.
+* **EXP-11 — Hash-chained export ledger (shipped).** `run` appends every
+  successful export to an append-only, hash-chained ledger (report title, a
+  BLAKE2b hash of the receipts manifest, recipient, timestamp), each entry linked
+  to the prior by hash so tampering is detectable. `receipts verify-ledger`
+  re-hashes the chain and fails closed on any break. The record of what was
+  reported to whom is itself receipted. See ADR 0004.
 
 ## v1.0.0 — Stability commitments
 
@@ -82,7 +99,8 @@ and semantic-versioning guarantees on the spec and the receipts manifest schema.
 | Hallucinated-number rate | reported with Wilson CIs | REVIEW |
 | Small-cell suppression invariants | from primary CMS guidance, as tests | AUTO (v0.2) |
 | LLM judge calibration (Cohen's kappa) | fail-closed on drift | AUTO (v0.3) |
-| Supply chain | SBOM, signed releases, SHA-pinned actions | AUTO (toward 1.0) |
+| Supply chain | SBOM, signed releases, SHA-pinned actions | AUTO — landed in `release.yml` and `ci.yml`'s `security` job (pip-audit, osv-scanner, gitleaks, zizmor) |
+| Accessibility (trace.html) | zero pa11y WCAG2AA errors | AUTO — `ci.yml`'s `accessibility` job |
 
 ## Out of scope
 

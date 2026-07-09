@@ -67,19 +67,19 @@ def test_ragged_row_too_many_fields_names_the_row(tmp_path: Path) -> None:
 
 def test_empty_file_names_the_file(tmp_path: Path) -> None:
     path = _write(tmp_path, "")
-    with pytest.raises(LoaderError, match="data.csv: file is empty"):
+    with pytest.raises(LoaderError, match=r"data\.csv: file is empty"):
         read_csv(path)
 
 
 def test_blank_first_line_names_the_file(tmp_path: Path) -> None:
     path = _write(tmp_path, "\nclient_id,dest\nC1,permanent\n")
-    with pytest.raises(LoaderError, match="data.csv: no header row"):
+    with pytest.raises(LoaderError, match=r"data\.csv: no header row"):
         read_csv(path)
 
 
 def test_header_only_file_names_the_file(tmp_path: Path) -> None:
     path = _write(tmp_path, "client_id,dest\n")
-    with pytest.raises(LoaderError, match="data.csv: file has a header but no data rows"):
+    with pytest.raises(LoaderError, match=r"data\.csv: file has a header but no data rows"):
         read_csv(path)
 
 

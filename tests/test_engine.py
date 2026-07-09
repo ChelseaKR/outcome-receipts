@@ -98,6 +98,42 @@ def test_empty_slice_gives_empty_slice_hash() -> None:
     assert figure.receipt.slice_hash == EMPTY_SLICE_HASH
 
 
+def test_missing_column_in_value_sql_raises_named_error() -> None:
+    bad = MetricSpec(
+        metric_id="missing_value",
+        description="value query references an absent column",
+        value_sql="SELECT COUNT(*) FROM data WHERE missing_col = 'x'",
+        slice_sql="SELECT * FROM data",
+        unit="count",
+    )
+    with pytest.raises(ValueError, match="missing_col"):
+        compute_figures(ROWS, [bad], clock=FixedClock())
+
+
+def test_missing_column_in_slice_sql_raises_named_error() -> None:
+    bad = MetricSpec(
+        metric_id="missing_slice",
+        description="slice query references an absent column",
+        value_sql="SELECT COUNT(*) FROM data",
+        slice_sql="SELECT * FROM data WHERE missing_col = 'x'",
+        unit="count",
+    )
+    with pytest.raises(ValueError, match="missing_col"):
+        compute_figures(ROWS, [bad], clock=FixedClock())
+
+
+def test_other_operational_error_fails_closed_as_value_error() -> None:
+    bad = MetricSpec(
+        metric_id="missing_table",
+        description="query references a table that does not exist",
+        value_sql="SELECT COUNT(*) FROM nope",
+        slice_sql="SELECT * FROM data",
+        unit="count",
+    )
+    with pytest.raises(ValueError, match="missing_table"):
+        compute_figures(ROWS, [bad], clock=FixedClock())
+
+
 def test_malformed_metric_raises() -> None:
     conn = load_table(ROWS)
     bad = MetricSpec(
