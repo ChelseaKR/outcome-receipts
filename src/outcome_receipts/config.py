@@ -24,6 +24,7 @@ from outcome_receipts.models import (
 )
 
 _VALID_UNITS = frozenset({"count", "percent"})
+_VALID_KINDS = frozenset({"output", "outcome"})
 _VALID_CHART_KINDS = frozenset({"bar", "line"})
 
 
@@ -48,6 +49,11 @@ def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
         raise ValueError(
             f"metric {metric_id!r} unit {unit!r} must be one of {sorted(_VALID_UNITS)}"
         )
+    kind = str(body.get("kind", "output"))
+    if kind not in _VALID_KINDS:
+        raise ValueError(
+            f"metric {metric_id!r} kind {kind!r} must be one of {sorted(_VALID_KINDS)}"
+        )
     return MetricSpec(
         metric_id=str(metric_id),
         description=str(body.get("description", "")),
@@ -56,6 +62,7 @@ def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
         unit=unit,
         decimals=int(body.get("decimals", 0)),
         definition=str(body.get("definition", "")),
+        kind=kind,
     )
 
 

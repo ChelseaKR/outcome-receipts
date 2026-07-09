@@ -56,7 +56,7 @@ S afternoon · M day or two · L week or more.
 | R8 | **Human approval / sign-off step** before export (CLI confirm or a signed approval line in the manifest naming the approver). | P3,P4 | P2 | M | **[corroborates ROADMAP]** (the architecture names `approve` between suppress and export; no surface yet). |
 | R9 | **Clear, fail-closed error when a query references a missing column** in the export, naming the column. | P5 | P2 | S | Fail-closed everywhere ([`CLAUDE.md`](../CLAUDE.md)). Today a bad spec against a messy export is the most common stumble. **[NET-NEW]** ✅ Implemented 2026-07-02 |
 | R10 | **Period-comparison legibility** — label direction and magnitude in the trace view, and bind the change figure's receipt to both period receipts. | P4,P8 | P2 | S | Extends the shipped `[comparison]` feature; the change is already one SQL query. **[NET-NEW]** |
-| R11 | **Outputs-vs-outcomes label** on each metric so a reader is not misled (an activity count is not an outcome). | P8 | P3 | S | EV4: the output/outcome distinction is core to MEL. **[NET-NEW]** |
+| R11 | **Outputs-vs-outcomes label** on each metric so a reader is not misled (an activity count is not an outcome). | P8 | P3 | S | EV4: the output/outcome distinction is core to MEL. **[NET-NEW]** ✅ Implemented 2026-07-02 |
 
 ## Expansion backlog (new capability)
 
