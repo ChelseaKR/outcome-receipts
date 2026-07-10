@@ -31,16 +31,16 @@ def _multi_template_spec(tmp_path: Path, second_template: str) -> Path:
     """A minimal two-template spec over a one-row data file."""
 
     (tmp_path / "data.csv").write_text("client_id\nC001\n", encoding="utf-8")
-    spec = tmp_path / "report.toml"
-    spec.write_text(
-        '[data]\npath = "data.csv"\n'
-        '[report]\ntitle = "Shared"\n'
-        '[[report.templates]]\nid = "funder-a"\ntemplate = "served {clients}"\n'
-        f'[[report.templates]]\nid = "funder-b"\ntemplate = "{second_template}"\n'
+    toml_lines = [
+        '[data]\npath = "data.csv"\n',
+        '[report]\ntitle = "Shared"\n',
+        '[[report.templates]]\nid = "funder-a"\ntemplate = "served {clients}"\n',
+        f'[[report.templates]]\nid = "funder-b"\ntemplate = "{second_template}"\n',
         '[metrics.clients]\nvalue_sql = "SELECT COUNT(*) FROM data"\n'
         'slice_sql = "SELECT * FROM data"\n',
-        encoding="utf-8",
-    )
+    ]
+    spec = tmp_path / "report.toml"
+    spec.write_text("".join(toml_lines), encoding="utf-8")
     return spec
 
 
@@ -108,8 +108,14 @@ def test_spec_without_template_or_templates_is_rejected(tmp_path: Path) -> None:
 def test_run_writes_one_subdir_per_template_with_shared_figures(tmp_path: Path) -> None:
     out = tmp_path / "out"
     code = main(
-        ["run", "--config", str(EXAMPLES / "multi-funder" / "report.toml"),
-         "--out", str(out), "--reproducible"]
+        [
+            "run",
+            "--config",
+            str(EXAMPLES / "multi-funder" / "report.toml"),
+            "--out",
+            str(out),
+            "--reproducible",
+        ]
     )
     assert code == 0
     a_dir = out / "funder-a"
@@ -119,9 +125,7 @@ def test_run_writes_one_subdir_per_template_with_shared_figures(tmp_path: Path) 
         assert (sub / "receipts.json").exists()
         assert (sub / "trace.html").exists()
     # The shared figure set is byte-identical across the two funder formats.
-    assert _receipts_figures(a_dir / "receipts.json") == _receipts_figures(
-        b_dir / "receipts.json"
-    )
+    assert _receipts_figures(a_dir / "receipts.json") == _receipts_figures(b_dir / "receipts.json")
     # The narratives differ (terse vs fuller), each headed by its own title.
     assert a_dir.joinpath("report.md").read_text(encoding="utf-8") != b_dir.joinpath(
         "report.md"
@@ -135,8 +139,14 @@ def test_run_writes_one_subdir_per_template_with_shared_figures(tmp_path: Path) 
 def test_legacy_single_template_writes_flat_layout(tmp_path: Path) -> None:
     out = tmp_path / "out"
     code = main(
-        ["run", "--config", str(EXAMPLES / "housing-demo" / "report.toml"),
-         "--out", str(out), "--reproducible"]
+        [
+            "run",
+            "--config",
+            str(EXAMPLES / "housing-demo" / "report.toml"),
+            "--out",
+            str(out),
+            "--reproducible",
+        ]
     )
     assert code == 0
     # No per-template subdir: the files sit directly in the output dir.
@@ -150,9 +160,7 @@ def test_legacy_spec_effective_template_is_synthesized() -> None:
     spec = ReportSpec(title="Legacy", template="served {clients}")
     assert spec.templates == ()
     [only] = spec.effective_templates
-    assert only == TemplateSpec(
-        template_id="report", title="Legacy", template="served {clients}"
-    )
+    assert only == TemplateSpec(template_id="report", title="Legacy", template="served {clients}")
 
 
 # (d) an unbound number in one template blocks the whole export (fail-closed).

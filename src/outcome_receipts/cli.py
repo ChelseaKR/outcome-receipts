@@ -162,9 +162,7 @@ def _write_template_output(
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    spec, _rows, figures, comparison = _compute_all(
-        args.config, reproducible=args.reproducible
-    )
+    spec, _rows, figures, comparison = _compute_all(args.config, reproducible=args.reproducible)
 
     # The figures, comparison, and charts are the shared, receipted evidence: they
     # are computed once and rendered into every funder format below.
@@ -179,11 +177,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
         drafts.append((tspec, narrative, ground(narrative, figures)))
 
     print(f"figures computed: {len(figures)}")
-    print(f"chart and comparison numbers: {claims_result.total} "
-          f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})")
+    print(
+        f"chart and comparison numbers: {claims_result.total} "
+        f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})"
+    )
     for tspec, _narrative, result in drafts:
-        print(f"numbers in {tspec.template_id!r} narrative: {result.total} "
-              f"(bound {len(result.bound)}, unbound {len(result.unbound)})")
+        print(
+            f"numbers in {tspec.template_id!r} narrative: {result.total} "
+            f"(bound {len(result.bound)}, unbound {len(result.unbound)})"
+        )
 
     unbound_ok = claims_result.ok and all(result.ok for _t, _n, result in drafts)
     if not unbound_ok:
