@@ -84,9 +84,7 @@ def _index_by_metric_id(manifest: Mapping[str, Any]) -> dict[str, dict[str, Any]
     return index
 
 
-def _delta(
-    metric_id: str, prior: Mapping[str, Any], current: Mapping[str, Any]
-) -> FigureDelta:
+def _delta(metric_id: str, prior: Mapping[str, Any], current: Mapping[str, Any]) -> FigureDelta:
     """Compare one metric's prior and current receipts into a :class:`FigureDelta`.
 
     ``value`` is compared exactly: the stored numbers are deterministic, so there is
@@ -102,9 +100,7 @@ def _delta(
     if value_changed:
         reasons.append(f"value {prior.get('value')} -> {current.get('value')}")
     if row_count_changed:
-        reasons.append(
-            f"row count {prior.get('row_count')} -> {current.get('row_count')}"
-        )
+        reasons.append(f"row count {prior.get('row_count')} -> {current.get('row_count')}")
     if slice_hash_changed:
         reasons.append("slice hash changed")
     if query_changed:

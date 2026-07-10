@@ -232,9 +232,7 @@ def _cmd_diff(args: argparse.Namespace) -> int:
     prior = json.loads(Path(args.prior).read_text(encoding="utf-8"))
     current = json.loads(Path(args.current).read_text(encoding="utf-8"))
     diff = diff_manifests(prior, current)
-    markdown = render_diff_markdown(
-        diff, prior_label=args.prior, current_label=args.current
-    )
+    markdown = render_diff_markdown(diff, prior_label=args.prior, current_label=args.current)
     if args.out:
         Path(args.out).write_text(markdown, encoding="utf-8")
         print(f"wrote diff: {args.out}")

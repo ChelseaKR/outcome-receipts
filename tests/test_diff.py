@@ -47,9 +47,7 @@ def _manifest(*receipts: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_value_row_count_and_slice_hash_change_is_reported_with_all_reasons() -> None:
-    prior = _manifest(
-        _receipt("served", value=42.0, display="42", row_count=120, slice_hash="h1")
-    )
+    prior = _manifest(_receipt("served", value=42.0, display="42", row_count=120, slice_hash="h1"))
     current = _manifest(
         _receipt("served", value=47.0, display="47", row_count=131, slice_hash="h2")
     )
@@ -156,9 +154,7 @@ def test_render_diff_markdown_carries_counts_and_before_after_values() -> None:
     assert "dropped = 9" in md
 
 
-def test_cli_diff_over_tmp_files_exits_zero(
-    tmp_path: Path, capsys: Any
-) -> None:
+def test_cli_diff_over_tmp_files_exits_zero(tmp_path: Path, capsys: Any) -> None:
     prior_path = tmp_path / "prior.json"
     current_path = tmp_path / "current.json"
     prior_path.write_text(
