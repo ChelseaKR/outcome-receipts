@@ -203,9 +203,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     key = _load_key(getattr(args, "sign_key_file", None))
     bundle_path = out_dir / _BUNDLE_NAME
-    bundle_path.write_text(
-        bundle_manifest(_bundle_members(out_dir), key=key), encoding="utf-8"
-    )
+    bundle_path.write_text(bundle_manifest(_bundle_members(out_dir), key=key), encoding="utf-8")
 
     print("\ngrounding gate: PASS")
     print(f"  report:   {report_path}")
@@ -267,8 +265,10 @@ def _cmd_verify_bundle(args: argparse.Namespace) -> int:
     key = _load_key(getattr(args, "sign_key_file", None))
     result = verify_bundle(_bundle_members(out_dir), manifest, key=key)
 
-    print(f"members checked: {len(result.checks)} "
-          f"(ok {result.n_ok}, tampered {len(result.checks) - result.n_ok})")
+    print(
+        f"members checked: {len(result.checks)} "
+        f"(ok {result.n_ok}, tampered {len(result.checks) - result.n_ok})"
+    )
     for check in result.checks:
         status = "ok" if check.ok else "TAMPERED"
         print(f"  [{status}] {check.name}: {check.detail}")

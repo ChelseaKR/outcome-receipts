@@ -93,9 +93,7 @@ def bundle_manifest(files: Mapping[str, bytes], *, key: bytes | None = None) -> 
 
     canonical = _canonical(files)
     payload: dict[str, Any] = {
-        "members": [
-            {"name": name, "digest": _digest(files[name])} for name in sorted(files)
-        ],
+        "members": [{"name": name, "digest": _digest(files[name])} for name in sorted(files)],
         "bundle_digest": hashlib.blake2b(canonical, digest_size=_DIGEST_SIZE).hexdigest(),
     }
     if key is not None:
@@ -136,9 +134,7 @@ def verify_bundle(
                 checks.append(BundleCheck(name, True, "content digest matches"))
             else:
                 checks.append(
-                    BundleCheck(
-                        name, False, f"TAMPERED: digest {got} != manifest {want}"
-                    )
+                    BundleCheck(name, False, f"TAMPERED: digest {got} != manifest {want}")
                 )
 
     canonical = _canonical(files)
@@ -147,9 +143,7 @@ def verify_bundle(
     if hmac.compare_digest(recomputed_digest, stored_digest):
         checks.append(BundleCheck("bundle_digest", True, "bundle digest matches"))
     else:
-        checks.append(
-            BundleCheck("bundle_digest", False, "TAMPERED: bundle digest does not match")
-        )
+        checks.append(BundleCheck("bundle_digest", False, "TAMPERED: bundle digest does not match"))
 
     if key is not None:
         stored_signature = str(manifest.get("signature", ""))

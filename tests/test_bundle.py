@@ -62,9 +62,7 @@ def test_missing_member_fails() -> None:
     result = verify_bundle(without, manifest)
     assert not result.ok
     assert any(
-        c.name == "receipts.json" and "missing" in c.detail
-        for c in result.checks
-        if not c.ok
+        c.name == "receipts.json" and "missing" in c.detail for c in result.checks if not c.ok
     )
 
 
