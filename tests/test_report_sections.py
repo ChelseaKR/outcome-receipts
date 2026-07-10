@@ -82,7 +82,7 @@ def test_render_report_without_optional_sections_is_just_narrative_and_receipts(
 def _receipt(metric_id: str, value: float, definition: str) -> Receipt:
     return Receipt(
         metric_id=metric_id,
-        value_sql=f"SELECT count(*) FROM enrollments WHERE metric = '{metric_id}'",
+        value_sql=f"SELECT count(*) FROM enrollments WHERE metric = '{metric_id}'",  # noqa: S608 — fixture literal, never executed
         row_count=137,
         slice_hash="sha256:9f8c1e",
         value=value,

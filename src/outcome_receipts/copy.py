@@ -87,7 +87,7 @@ _EN = ReportCopy(
         "the count of rows it drew from, a content hash of that data slice, and "
         "a timestamp."
     ),
-    provenance_gate_pass_template=(
+    provenance_gate_pass_template=(  # noqa: S106 — template text, not a password
         "Before this report was exported, the grounding gate bound all "
         "{bound} of its numbers to a receipt; a number that traced "
         "to no receipt would have blocked the export."
@@ -108,9 +108,7 @@ _ES = ReportCopy(
     header_outcome="Resultado",
     header_change="Cambio",
     header_direction="Dirección",
-    rate_metric_note=(
-        "El cambio de una métrica de tasa se expresa en puntos porcentuales."
-    ),
+    rate_metric_note=("El cambio de una métrica de tasa se expresa en puntos porcentuales."),
     charts_heading="## Gráficos",
     chart_data_caption_template="Datos del gráfico anterior ({title}):",
     receipts_heading="## Recibos",
@@ -128,7 +126,7 @@ _ES = ReportCopy(
         "se extrajo, un hash de contenido de ese segmento de datos y una marca de "
         "tiempo."
     ),
-    provenance_gate_pass_template=(
+    provenance_gate_pass_template=(  # noqa: S106 — template text, not a password
         "Antes de exportar este informe, la verificación de fundamentación vinculó "
         "los {bound} números a un recibo; un número que no correspondiera a ningún "
         "recibo habría bloqueado la exportación."

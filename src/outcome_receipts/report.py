@@ -50,9 +50,7 @@ def render_comparison_table(result: ComparisonResult, *, locale: Locale = "en") 
     return "\n".join(lines)
 
 
-def render_charts_section(
-    charts: Sequence[Chart], *, chart_dir: str, locale: Locale = "en"
-) -> str:
+def render_charts_section(charts: Sequence[Chart], *, chart_dir: str, locale: Locale = "en") -> str:
     """Render the charts as image references with their accessible data tables.
 
     The SVG is referenced as an image; the data table beneath it is the text
@@ -98,9 +96,7 @@ def render_report(
     if comparison is not None:
         lines.extend(["", render_comparison_table(comparison, locale=locale)])
     if charts:
-        lines.extend(
-            ["", render_charts_section(charts, chart_dir=chart_dir, locale=locale)]
-        )
+        lines.extend(["", render_charts_section(charts, chart_dir=chart_dir, locale=locale)])
     if provenance is not None:
         lines.extend(["", provenance_markdown(provenance, locale=locale)])
     lines.extend(["", copy.receipts_heading, ""])
