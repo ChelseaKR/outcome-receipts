@@ -132,11 +132,7 @@ class BundleResult:
 
     @property
     def ok(self) -> bool:
-        return (
-            self.manifest.ok
-            and all(check.ok for check in self.artifacts)
-            and self.grounding.ok
-        )
+        return self.manifest.ok and all(check.ok for check in self.artifacts) and self.grounding.ok
 
     @property
     def failed_artifacts(self) -> tuple[ArtifactCheck, ...]:
@@ -164,9 +160,7 @@ def _report_narrative(report_text: str) -> str:
     return "\n".join(collected).strip()
 
 
-def _check_artifacts(
-    bundle_dir: Path, manifest: Mapping[str, Any]
-) -> tuple[ArtifactCheck, ...]:
+def _check_artifacts(bundle_dir: Path, manifest: Mapping[str, Any]) -> tuple[ArtifactCheck, ...]:
     if "artifacts" not in manifest:
         return (
             ArtifactCheck(
@@ -184,9 +178,7 @@ def _check_artifacts(
             continue
         got = hashlib.sha256(sibling.read_bytes()).hexdigest()
         if got != want:
-            checks.append(
-                ArtifactCheck(rel_path, False, f"digest {got} != manifest {want}")
-            )
+            checks.append(ArtifactCheck(rel_path, False, f"digest {got} != manifest {want}"))
         else:
             checks.append(ArtifactCheck(rel_path, True, "digest matches"))
     return tuple(checks)
@@ -209,8 +201,6 @@ def verify_bundle(bundle_dir: Path, figures: Sequence[Figure]) -> BundleResult:
     artifacts = _check_artifacts(bundle_dir, manifest)
 
     report_path = bundle_dir / "report.md"
-    report_text = (
-        report_path.read_text(encoding="utf-8") if report_path.is_file() else ""
-    )
+    report_text = report_path.read_text(encoding="utf-8") if report_path.is_file() else ""
     grounding = ground(_report_narrative(report_text), figures)
     return BundleResult(manifest_result, artifacts, grounding)

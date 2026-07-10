@@ -167,9 +167,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     }
     for chart in charts:
         digests[f"{_CHART_DIR}/{chart.chart_id}.svg"] = _sha256(chart.svg)
-    manifest_text = receipts_manifest(
-        figures, provenance=provenance, artifacts=digests
-    )
+    manifest_text = receipts_manifest(figures, provenance=provenance, artifacts=digests)
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -215,9 +213,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    _spec, _rows, figures, _comparison = _compute_all(
-        args.config, reproducible=args.reproducible
-    )
+    _spec, _rows, figures, _comparison = _compute_all(args.config, reproducible=args.reproducible)
     if args.bundle is not None:
         return _verify_bundle(args, figures)
 
@@ -256,8 +252,10 @@ def _verify_bundle(args: argparse.Namespace, figures: Sequence[Figure]) -> int:
     result = verify_bundle(Path(args.bundle), figures)
     manifest = result.manifest
 
-    print(f"receipts checked: {len(manifest.checks)} "
-          f"(re-derived {manifest.n_ok}, drift {len(manifest.checks) - manifest.n_ok})")
+    print(
+        f"receipts checked: {len(manifest.checks)} "
+        f"(re-derived {manifest.n_ok}, drift {len(manifest.checks) - manifest.n_ok})"
+    )
     for check in manifest.checks:
         status = "ok" if check.ok else "DRIFT"
         print(f"  [{status}] {check.metric_id}: {check.detail}")
@@ -265,8 +263,10 @@ def _verify_bundle(args: argparse.Namespace, figures: Sequence[Figure]) -> int:
     for artifact in result.artifacts:
         status = "ok" if artifact.ok else "MISMATCH"
         print(f"  [{status}] {artifact.path}: {artifact.detail}")
-    print(f"narrative grounding: {result.grounding.total} number(s), "
-          f"{len(result.grounding.unbound)} unbound")
+    print(
+        f"narrative grounding: {result.grounding.total} number(s), "
+        f"{len(result.grounding.unbound)} unbound"
+    )
     for span in result.grounding.unbound:
         print(f"  unverifiable number: {span.text!r}")
 
@@ -350,9 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_parser.add_argument("--config", required=True, help="path to the report spec TOML")
     verify_target = verify_parser.add_mutually_exclusive_group(required=True)
-    verify_target.add_argument(
-        "--receipts", help="path to the receipts.json manifest to verify"
-    )
+    verify_target.add_argument("--receipts", help="path to the receipts.json manifest to verify")
     verify_target.add_argument(
         "--bundle",
         help="path to an exported bundle directory to verify whole "

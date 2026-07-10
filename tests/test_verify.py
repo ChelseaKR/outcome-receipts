@@ -175,9 +175,7 @@ def test_missing_artifact_fails_closed(tmp_path: Path) -> None:
     (out / "trace.html").unlink()
     result = verify_bundle(out, _bundle_figures())
     assert not result.ok
-    assert any(
-        a.path == "trace.html" and "missing" in a.detail for a in result.failed_artifacts
-    )
+    assert any(a.path == "trace.html" and "missing" in a.detail for a in result.failed_artifacts)
 
 
 def test_missing_artifacts_key_fails_closed(tmp_path: Path) -> None:
@@ -205,9 +203,7 @@ def test_unbound_number_in_report_fails_grounding(tmp_path: Path) -> None:
     tampered = report.read_text(encoding="utf-8")
     manifest_path = out / "receipts.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["artifacts"]["report.md"] = hashlib.sha256(
-        tampered.encode("utf-8")
-    ).hexdigest()
+    manifest["artifacts"]["report.md"] = hashlib.sha256(tampered.encode("utf-8")).hexdigest()
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     result = verify_bundle(out, _bundle_figures())
