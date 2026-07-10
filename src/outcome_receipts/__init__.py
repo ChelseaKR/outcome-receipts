@@ -48,38 +48,38 @@ from outcome_receipts.report import receipts_manifest, render_report
 from outcome_receipts.verify import Check, VerifyResult, verify_manifest
 
 __all__ = [
-    "__version__",
-    # Pipeline
-    "compute_figures",
-    "compute_figure",
-    "read_csv",
-    "load_table",
-    # Grounding gate
-    "ground",
-    "redact_unbound",
-    "GroundingResult",
-    # Narrative
-    "draft",
-    # Verification
-    "verify_manifest",
-    "VerifyResult",
     "Check",
-    # Reporting
-    "render_report",
-    "receipts_manifest",
-    # Comparison
-    "compute_comparison",
-    "ComparisonResult",
-    # Configuration
-    "load_spec",
-    "Spec",
     # Clocks
     "Clock",
-    "SystemClock",
-    "FixedClock",
+    "ComparisonResult",
     # Core models
     "Figure",
+    "FixedClock",
+    "GroundingResult",
     "MetricSpec",
     "Receipt",
     "ReportSpec",
+    "Spec",
+    "SystemClock",
+    "VerifyResult",
+    "__version__",
+    # Comparison
+    "compute_comparison",
+    "compute_figure",
+    # Pipeline
+    "compute_figures",
+    # Narrative
+    "draft",
+    # Grounding gate
+    "ground",
+    # Configuration
+    "load_spec",
+    "load_table",
+    "read_csv",
+    "receipts_manifest",
+    "redact_unbound",
+    # Reporting
+    "render_report",
+    # Verification
+    "verify_manifest",
 ]
