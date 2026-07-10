@@ -49,17 +49,20 @@ def load_table(rows: Sequence[dict[str, str]], *, table: str = "data") -> sqlite
     in the first row; rows are expected to share a schema (CSV guarantees this).
     """
 
-    # S608 (SQL-injection lint) is a false positive on `table` and `columns`
-    # below: `table` defaults to the "data" constant everywhere it is called
-    # (grep confirms no caller passes a dynamic value), and `columns` are CSV
-    # header names read as identifiers, not values. Neither is user-supplied
-    # in the request-body sense the rule guards against.
+    # S608 (ruff) / python.sqlalchemy.security.sqlalchemy-execute-raw-query
+    # (semgrep — see .semgrep-waivers.yml) are both false positives on `table`
+    # and `columns` below: `table` defaults to the "data" constant everywhere
+    # it is called (grep confirms no caller passes a dynamic value), and
+    # `columns` are CSV header names read as identifiers, not values. Neither
+    # is user-supplied in the request-body sense either rule guards against.
     conn = sqlite3.connect(":memory:")
     if not rows:
+        # nosemgrep: sqlalchemy-execute-raw-query
         conn.execute(f'CREATE TABLE "{table}" (_empty TEXT)')
         return conn
     columns = list(rows[0].keys())
     quoted = ", ".join(f'"{c}" TEXT' for c in columns)
+    # nosemgrep: sqlalchemy-execute-raw-query
     conn.execute(f'CREATE TABLE "{table}" ({quoted})')
     placeholders = ", ".join("?" for _ in columns)
     conn.executemany(

@@ -1,0 +1,26 @@
+# Semgrep waiver ledger (SEC-10 hygiene anchor).
+#
+# `semgrep scan` (p/default + p/python) runs blocking on every PR in the `security` job
+# (see .github/workflows/ci.yml). Suppressions live inline as `# nosemgrep: <rule-id>` next to
+# (or immediately above) the flagged line — semgrep's own mechanism; this file does not configure
+# semgrep itself. This ledger is the single place a reviewer can see every active waiver, why it
+# exists, and when it was added, so a waiver can't quietly go stale or multiply unnoticed. Every
+# entry here must have a matching `# nosemgrep:` comment in the code.
+#
+# Adding a new waiver: get sign-off in the PR description (why this is a true false-positive, not
+# a fix-later), add the inline comment, then add a row here. Removing a waiver: delete both the
+# code comment and this row in the same PR.
+
+waivers:
+  - rule_id: sqlalchemy-execute-raw-query
+    locations:
+      - src/outcome_receipts/engine.py (load_table, CREATE TABLE — empty-rows branch)
+      - src/outcome_receipts/engine.py (load_table, CREATE TABLE — populated branch)
+    added: 2026-07-10
+    reason: >
+      Same false positive already documented for ruff's S608 on this function: `table` defaults
+      to the "data" constant everywhere it is called (grep confirms no caller passes a dynamic
+      value), and `columns` are CSV header names read as identifiers, not values. Neither is
+      user-supplied in the request-body sense the rule guards against. This is stdlib sqlite3, not
+      SQLAlchemy — the rule's message is generic to any raw-SQL f-string, which is why it also
+      fires here.

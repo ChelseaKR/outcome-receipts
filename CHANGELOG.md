@@ -40,6 +40,15 @@ retitled with the real release date when `v0.1.0` is tagged and
     claiming branch protection and a released `v0.1.0` that don't exist yet
     (see the 2026-07-05 remediation log for the evidence).
 
+### Added
+- **SAST (2026-07-10, SEC-07).** `ci.yml`'s `security` job gains a Semgrep step
+  (`p/default` + `p/python`, pinned scanner version, `--severity ERROR --error`)
+  that blocks the build on any ERROR-severity finding. The two findings it
+  surfaced on first run (`sqlalchemy-execute-raw-query` on the same
+  already-triaged `load_table` identifiers the `S608` waiver below covers) are
+  suppressed with inline `# nosemgrep:` comments tracked in the new
+  `.semgrep-waivers.yml` ledger, per SEC-10 waiver hygiene.
+
 ### Fixed
 - Two `S608` ruff findings in `comparison.py` and `engine.py` triaged as false
   positives (spec SQL and internal table/column identifiers are author-trusted,
