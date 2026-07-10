@@ -36,11 +36,19 @@ runs:
     # Third-party actions are pinned to a commit SHA with a version comment,
     # matching the supply-chain convention in .github/workflows/ci.yml.
     - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+    # Install into a dedicated venv rather than the runner's system Python,
+    # which is externally managed (PEP 668) on current ubuntu images. The env
+    # indirection keeps the ref out of shell-template interpolation.
     - name: Install outcome-receipts
       shell: bash
+      env:
+        OUTCOME_RECEIPTS_REF: ${{ inputs.version }}
       run: |
-        uv pip install --system \
-          "outcome-receipts @ git+https://github.com/ChelseaKR/outcome-receipts@${{ inputs.version }}"
+        uv venv "${RUNNER_TEMP}/outcome-receipts-venv"
+        uv pip install \
+          --python "${RUNNER_TEMP}/outcome-receipts-venv/bin/python" \
+          "outcome-receipts @ git+https://github.com/ChelseaKR/outcome-receipts@${OUTCOME_RECEIPTS_REF}"
+        echo "${RUNNER_TEMP}/outcome-receipts-venv/bin" >> "$GITHUB_PATH"
     - name: Verify receipts
       shell: bash
       run: |
