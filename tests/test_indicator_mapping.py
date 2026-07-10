@@ -70,9 +70,7 @@ def test_mapping_renders_in_the_report_receipts() -> None:
 
 
 def test_empty_mapping_is_omitted_from_the_report() -> None:
-    spec = MetricSpec(
-        metric_id="only", description="d", value_sql="SELECT 3", slice_sql="SELECT 1"
-    )
+    spec = MetricSpec(metric_id="only", description="d", value_sql="SELECT 3", slice_sql="SELECT 1")
     figures = compute_figures([{"a": "1"}], [spec], clock=FixedClock())
     report = render_report("Report", "There were 3.", figures)
     assert "indicator:" not in report
@@ -91,9 +89,7 @@ def test_mapping_is_in_the_manifest_when_set() -> None:
 
 
 def test_manifest_mapping_is_empty_string_when_unmapped() -> None:
-    spec = MetricSpec(
-        metric_id="only", description="d", value_sql="SELECT 3", slice_sql="SELECT 1"
-    )
+    spec = MetricSpec(metric_id="only", description="d", value_sql="SELECT 3", slice_sql="SELECT 1")
     figures = compute_figures([{"a": "1"}], [spec], clock=FixedClock())
     manifest = receipts_manifest(figures)
     # The keys are always present so a consumer can rely on the shape; empty means
@@ -115,9 +111,7 @@ def test_mapping_renders_in_the_trace_view_when_set() -> None:
 
 
 def test_trace_omits_mapping_labels_when_unmapped() -> None:
-    spec = MetricSpec(
-        metric_id="only", description="d", value_sql="SELECT 3", slice_sql="SELECT 1"
-    )
+    spec = MetricSpec(metric_id="only", description="d", value_sql="SELECT 3", slice_sql="SELECT 1")
     figures = compute_figures([{"a": "1"}], [spec], clock=FixedClock())
     html = render_trace_html("Report", figures)
     assert "<dt>Indicator</dt>" not in html

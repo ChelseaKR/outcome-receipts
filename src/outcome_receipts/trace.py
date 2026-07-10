@@ -131,14 +131,10 @@ def _figure_detail(figure: Figure) -> list[str]:
             lines.append(f"<dt>{label}</dt><dd>{_esc(value)}</dd>")
     lines.extend(
         [
-            "<dt>Query</dt>"
-            f"<dd><code>{_esc(receipt.value_sql)}</code></dd>",
-            "<dt>Rows in slice</dt>"
-            f"<dd>{receipt.row_count}</dd>",
-            "<dt>Slice hash</dt>"
-            f'<dd class="hash">{_esc(receipt.slice_hash)}</dd>',
-            "<dt>Computed at</dt>"
-            f"<dd>{_esc(receipt.computed_at)}</dd>",
+            f"<dt>Query</dt><dd><code>{_esc(receipt.value_sql)}</code></dd>",
+            f"<dt>Rows in slice</dt><dd>{receipt.row_count}</dd>",
+            f'<dt>Slice hash</dt><dd class="hash">{_esc(receipt.slice_hash)}</dd>',
+            f"<dt>Computed at</dt><dd>{_esc(receipt.computed_at)}</dd>",
             "</dl>",
             "</section>",
         ]
