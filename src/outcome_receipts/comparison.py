@@ -260,9 +260,7 @@ def compute_reconciliation(
         result_rows: list[ReconciledRow] = []
         figures: list[Figure] = []
         for row in reconciliation.rows:
-            outcome_row, outcome_figures = _compare_metric(
-                conn, row.outcome, current, prior, clock
-            )
+            outcome_row, outcome_figures = _compare_metric(conn, row.outcome, current, prior, clock)
             financial_row, financial_figures = _compare_metric(
                 conn, row.financial, current, prior, clock
             )

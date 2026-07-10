@@ -34,16 +34,36 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 BOARD = EXAMPLES / "board-report" / "report.toml"
 
 ROWS = [
-    {"client_id": "A", "enrolled_date": "2025-01-10", "exit_destination": "permanent",
-     "cost": "1000"},
-    {"client_id": "B", "enrolled_date": "2025-02-10", "exit_destination": "temporary",
-     "cost": "500"},
-    {"client_id": "C", "enrolled_date": "2025-03-10", "exit_destination": "permanent",
-     "cost": "1500"},
-    {"client_id": "D", "enrolled_date": "2025-04-10", "exit_destination": "permanent",
-     "cost": "2000"},
-    {"client_id": "E", "enrolled_date": "2025-05-10", "exit_destination": "permanent",
-     "cost": "800"},
+    {
+        "client_id": "A",
+        "enrolled_date": "2025-01-10",
+        "exit_destination": "permanent",
+        "cost": "1000",
+    },
+    {
+        "client_id": "B",
+        "enrolled_date": "2025-02-10",
+        "exit_destination": "temporary",
+        "cost": "500",
+    },
+    {
+        "client_id": "C",
+        "enrolled_date": "2025-03-10",
+        "exit_destination": "permanent",
+        "cost": "1500",
+    },
+    {
+        "client_id": "D",
+        "enrolled_date": "2025-04-10",
+        "exit_destination": "permanent",
+        "cost": "2000",
+    },
+    {
+        "client_id": "E",
+        "enrolled_date": "2025-05-10",
+        "exit_destination": "permanent",
+        "cost": "800",
+    },
 ]
 
 Q1 = PeriodSpec(
@@ -67,8 +87,7 @@ SPEND = MetricSpec(
     metric_id="row_financial",
     description="program spend in the quarter",
     value_sql=(
-        "SELECT CAST(COALESCE(SUM(CAST(cost AS REAL)), 0) AS INTEGER) "
-        "FROM data WHERE ({period})"
+        "SELECT CAST(COALESCE(SUM(CAST(cost AS REAL)), 0) AS INTEGER) FROM data WHERE ({period})"
     ),
     slice_sql="SELECT * FROM data WHERE ({period})",
 )

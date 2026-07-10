@@ -140,7 +140,8 @@ def test_reconciliation_without_rows_is_rejected(tmp_path: Path) -> None:
 def test_reconciliation_row_without_outcome_is_rejected(tmp_path: Path) -> None:
     spec = _write(
         tmp_path,
-        '[reconciliation]\ncurrent = "q2"\nprior = "q1"\n' + _RECON_PERIODS
+        '[reconciliation]\ncurrent = "q2"\nprior = "q1"\n'
+        + _RECON_PERIODS
         + '[[reconciliation.rows]]\nlabel = "L"\n'
         '[reconciliation.rows.financial]\nvalue_sql = "SELECT 1"\nslice_sql = "SELECT 1"\n',
     )
@@ -151,7 +152,8 @@ def test_reconciliation_row_without_outcome_is_rejected(tmp_path: Path) -> None:
 def test_reconciliation_row_without_financial_is_rejected(tmp_path: Path) -> None:
     spec = _write(
         tmp_path,
-        '[reconciliation]\ncurrent = "q2"\nprior = "q1"\n' + _RECON_PERIODS
+        '[reconciliation]\ncurrent = "q2"\nprior = "q1"\n'
+        + _RECON_PERIODS
         + '[[reconciliation.rows]]\nlabel = "L"\n'
         '[reconciliation.rows.outcome]\nvalue_sql = "SELECT 1"\nslice_sql = "SELECT 1"\n',
     )

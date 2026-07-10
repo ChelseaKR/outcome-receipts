@@ -169,12 +169,8 @@ def _parse_comparison(raw: object) -> ComparisonSpec | None:
     metric_section = raw.get("metrics", {})
     if not metric_section:
         raise ValueError("[comparison] must define at least one [comparison.metrics.<id>]")
-    metrics = tuple(
-        _parse_metric(metric_id, body) for metric_id, body in metric_section.items()
-    )
-    return ComparisonSpec(
-        current=current, prior=prior, periods=periods, metrics=metrics
-    )
+    metrics = tuple(_parse_metric(metric_id, body) for metric_id, body in metric_section.items())
+    return ComparisonSpec(current=current, prior=prior, periods=periods, metrics=metrics)
 
 
 def _slug(text: str) -> str:
@@ -217,9 +213,7 @@ def _parse_reconciliation(raw: object) -> ReconciliationSpec | None:
                 financial=_parse_metric(f"{row_id}_financial", entry["financial"]),
             )
         )
-    return ReconciliationSpec(
-        current=current, prior=prior, periods=periods, rows=tuple(rows)
-    )
+    return ReconciliationSpec(current=current, prior=prior, periods=periods, rows=tuple(rows))
 
 
 def load_spec(path: str | Path) -> Spec:
