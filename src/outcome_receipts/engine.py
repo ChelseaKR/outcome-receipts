@@ -102,9 +102,7 @@ def _slice_hash(column_names: Sequence[str], slice_rows: list[tuple[object, ...]
         separators=(",", ":"),
         ensure_ascii=False,
     )
-    return hashlib.blake2b(
-        payload.encode("utf-8"), digest_size=HASH_DIGEST_SIZE
-    ).hexdigest()
+    return hashlib.blake2b(payload.encode("utf-8"), digest_size=HASH_DIGEST_SIZE).hexdigest()
 
 
 def _format(value: float, unit: str, decimals: int) -> str:
