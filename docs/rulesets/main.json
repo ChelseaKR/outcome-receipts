@@ -33,7 +33,7 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           { "context": "verify" },
-          { "context": "security (pip-audit · osv-scanner · gitleaks · zizmor)" },
+          { "context": "security (semgrep · pip-audit · osv-scanner · gitleaks · zizmor)" },
           { "context": "accessibility (pa11y, WCAG2AA, trace.html)" }
         ]
       }
