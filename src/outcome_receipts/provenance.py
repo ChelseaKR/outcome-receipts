@@ -68,8 +68,7 @@ def provenance_markdown(prov: Provenance) -> str:
         lines.extend(
             [
                 "",
-                f"This report was reviewed and approved for export by "
-                f"{prov.approved_by}{when}.",
+                f"This report was reviewed and approved for export by {prov.approved_by}{when}.",
             ]
         )
     return "\n".join(lines)
