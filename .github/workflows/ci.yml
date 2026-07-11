@@ -38,6 +38,9 @@ jobs:
           git diff --exit-code eval/report.md
 
   security:
+    # The display name is a required-status-check context in the applied main
+    # ruleset, so it stays stable even as tools are added; semgrep also runs in
+    # this job (SEC-07). Renaming it requires updating the live ruleset first.
     name: security (pip-audit · osv-scanner · gitleaks · zizmor)
     runs-on: ubuntu-latest
     steps:
@@ -49,6 +52,22 @@ jobs:
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
         with:
           version: "0.11.19"
+
+      # SEC-07: SAST. Pinned scanner version + pinned registry configs so the
+      # gate is deterministic across scanner releases (rule *contents* can
+      # still evolve server-side since p/default and p/python are fetched from
+      # the Semgrep registry). --error makes any ERROR-severity finding fail
+      # the build — no `|| true`, no advisory-only mode.
+      - name: Semgrep (SAST)
+        # Waivers for verified false-positives live in .semgrep-waivers.yml (inline
+        # `# nosemgrep:` comments do the actual suppression; that file is the audit ledger).
+        run: >
+          uvx --from semgrep==1.168.0 semgrep scan
+          --config p/default
+          --config p/python
+          --severity ERROR
+          --error
+          --metrics off
 
       - name: Install (the same .venv make verify uses; pip-audit is a dev-group member)
         run: make install
