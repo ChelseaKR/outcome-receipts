@@ -54,6 +54,37 @@ def test_changed_slice_changes_the_hash() -> None:
     assert more.value == 3.0
 
 
+def test_renamed_column_changes_the_hash() -> None:
+    """Identical slice values under a different column name hash differently.
+
+    Canonicalization v1 folds the sorted column names into the payload, so a
+    schema change a funder should see is not silent. Under the earlier rows-only
+    payload these two slices hashed identically.
+    """
+
+    rows = [{"dest": "permanent"}, {"dest": "temporary"}]
+    original = MetricSpec(
+        metric_id="m",
+        description="destinations",
+        value_sql="SELECT COUNT(*) FROM data",
+        slice_sql="SELECT dest FROM data",
+        unit="count",
+    )
+    renamed = MetricSpec(
+        metric_id="m",
+        description="destinations",
+        value_sql="SELECT COUNT(*) FROM data",
+        slice_sql="SELECT dest AS outcome FROM data",
+        unit="count",
+    )
+    a = compute_figures(rows, [original], clock=FixedClock())[0]
+    b = compute_figures(rows, [renamed], clock=FixedClock())[0]
+    assert a.value == b.value
+    assert a.receipt.column_names == ("dest",)
+    assert b.receipt.column_names == ("outcome",)
+    assert a.receipt.slice_hash != b.receipt.slice_hash
+
+
 def test_slice_hash_is_row_order_independent() -> None:
     forward = compute_figures(ROWS, [COUNT], clock=FixedClock())[0]
     reverse = compute_figures(list(reversed(ROWS)), [COUNT], clock=FixedClock())[0]
