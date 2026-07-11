@@ -14,13 +14,14 @@
 waivers:
   - rule_id: sqlalchemy-execute-raw-query
     locations:
-      - src/outcome_receipts/engine.py (load_table, CREATE TABLE — empty-rows branch)
-      - src/outcome_receipts/engine.py (load_table, CREATE TABLE — populated branch)
+      - src/outcome_receipts/engine.py (load_table, CREATE TABLE)
     added: 2026-07-10
     reason: >
       Same false positive already documented for ruff's S608 on this function: `table` defaults
       to the "data" constant everywhere it is called (grep confirms no caller passes a dynamic
-      value), and `columns` are CSV header names read as identifiers, not values. Neither is
-      user-supplied in the request-body sense the rule guards against. This is stdlib sqlite3, not
-      SQLAlchemy — the rule's message is generic to any raw-SQL f-string, which is why it also
-      fires here.
+      value), and `columns` are CSV header names read as identifiers, not values; both pass
+      through _quote_ident, which doubles any embedded double-quote. Neither is user-supplied in
+      the request-body sense the rule guards against. This is stdlib sqlite3, not SQLAlchemy —
+      the rule's message is generic to any raw-SQL f-string, which is why it also fires here.
+      (2026-07-11: the empty-rows branch no longer executes SQL — FIX-07 made it raise
+      LoaderError — so the waiver covers the single remaining CREATE TABLE call.)

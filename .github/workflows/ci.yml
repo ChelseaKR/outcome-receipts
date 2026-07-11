@@ -30,7 +30,7 @@ jobs:
       # Drive CI through the Makefile so it runs the same path as `make verify`.
       - name: Install
         run: make install
-      - name: Verify (ruff, mypy --strict, pytest)
+      - name: Verify (ruff, mypy --strict, pytest with >=90% branch coverage)
         run: make verify
       - name: Eval report is current
         run: |
