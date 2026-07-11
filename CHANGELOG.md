@@ -123,6 +123,14 @@ retitled with the real release date when `v0.1.0` is tagged and
   statement.
 - The Accessibility standard now applies to the chart output (SVG plus a paired
   data table) and the trace-view HTML rather than being N/A.
+- **Tooling enforces the declared code-quality bar.** `ruff` now runs CLAUDE.md's
+  full select set (`E,W,F,I,UP,B,SIM,S,C90,RUF`) with `max-complexity = 10`, so
+  security (`S`), complexity (`C90`), and Ruff-specific (`RUF`) rules are
+  merge-blocking. `pytest` runs under `pytest-cov` with a `--cov-fail-under=90`
+  branch-coverage gate (currently 93%), wired into the pytest addopts so
+  `make verify` and CI enforce the same bar. Tests ignore `S101` (assert use),
+  and the engine's deterministic spec-driven SQL composition ignores `S608` in
+  `engine.py` and `comparison.py`.
 
 ## [0.1.0] — scope completed 2026-06-27, not yet tagged/released
 
