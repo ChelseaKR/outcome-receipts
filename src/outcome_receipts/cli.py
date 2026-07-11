@@ -32,7 +32,7 @@ from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import ComparisonResult, compute_comparison
 from outcome_receipts.config import Spec, load_spec
 from outcome_receipts.draft import draft
-from outcome_receipts.engine import compute_figures, read_csv
+from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import evaluate
 from outcome_receipts.grounding import ground
 from outcome_receipts.ledger import append_export, verify_chain
@@ -69,14 +69,18 @@ def _load_and_compute(
     config: str, *, reproducible: bool
 ) -> tuple[Spec, list[dict[str, str]], list[Figure]]:
     spec = load_spec(config)
-    rows = read_csv(spec.data_path)
+    table = read_csv_meta(spec.data_path)
+    print(
+        f"loaded {spec.data_path}: {table.row_count} rows, "
+        f"{len(table.columns)} columns, digest {table.digest[:16]}"
+    )
     figures = compute_figures(
-        rows,
+        table.rows,
         spec.report.metrics,
         clock=_clock(reproducible=reproducible),
         data_checks=spec.report.data_checks,
     )
-    return spec, rows, figures
+    return spec, table.rows, figures
 
 
 def _compute_all(
@@ -148,7 +152,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # Build every artifact string in memory first so the manifest, written last,
     # can hash its siblings. The manifest never hashes itself; the report embeds
     # the receipts section but not the artifact digests, so the hash relation is
-    # one-directional (no circularity). See ADR 0004. Write order: charts, then
+    # one-directional (no circularity). See ADR 0006. Write order: charts, then
     # report, then trace, then the manifest.
     report_text = render_report(
         spec.report.title,

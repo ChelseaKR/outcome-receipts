@@ -37,7 +37,10 @@ def test_fresh_manifest_re_derives() -> None:
     manifest = json.loads(receipts_manifest(figures))
     result = verify_manifest(figures, manifest)
     assert result.ok
-    assert result.n_ok == len(figures)
+    # Every check passes: one per figure plus the manifest-level schema_version
+    # and hash-descriptor checks now carried by a versioned manifest.
+    assert result.n_ok == len(result.checks)
+    assert result.n_ok == len(figures) + 2
 
 
 def test_tampered_value_is_drift() -> None:

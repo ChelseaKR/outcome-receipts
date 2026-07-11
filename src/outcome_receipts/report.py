@@ -13,7 +13,13 @@ from collections.abc import Mapping, Sequence
 from outcome_receipts.charts import Chart
 from outcome_receipts.comparison import ComparisonResult
 from outcome_receipts.evaluate import EvalReport
-from outcome_receipts.models import Figure
+from outcome_receipts.models import (
+    HASH_ALGORITHM,
+    HASH_CANONICALIZATION,
+    HASH_DIGEST_SIZE,
+    SCHEMA_VERSION,
+    Figure,
+)
 from outcome_receipts.provenance import Provenance, provenance_markdown, provenance_record
 
 
@@ -122,10 +128,22 @@ def receipts_manifest(
     When ``artifacts`` is given (a mapping of bundle-relative path to its sha256
     hex digest), the manifest records those digests so ``verify --bundle`` can
     check that the sibling files were not swapped after export. The manifest never
-    hashes itself; the hash relation is one-directional. See ADR 0004.
+    hashes itself; the hash relation is one-directional. See ADR 0006.
+
+    The manifest is versioned: ``schema_version`` names the manifest schema and
+    ``hash`` describes exactly how every ``slice_hash`` was produced (algorithm,
+    digest size, canonicalization rule set), so a consumer can validate and
+    re-derive without reading the engine. See ``docs/schema/receipts.schema.json``
+    and ADR 0005.
     """
 
     payload: dict[str, object] = {
+        "schema_version": SCHEMA_VERSION,
+        "hash": {
+            "algorithm": HASH_ALGORITHM,
+            "digest_size": HASH_DIGEST_SIZE,
+            "canonicalization": HASH_CANONICALIZATION,
+        },
         "receipts": [
             {
                 "metric_id": f.receipt.metric_id,
@@ -137,10 +155,11 @@ def receipts_manifest(
                 "value_sql": f.receipt.value_sql,
                 "row_count": f.receipt.row_count,
                 "slice_hash": f.receipt.slice_hash,
+                "column_names": list(f.receipt.column_names),
                 "computed_at": f.receipt.computed_at,
             }
             for f in sorted(figures, key=lambda f: f.metric_id)
-        ]
+        ],
     }
     if provenance is not None:
         payload["provenance"] = provenance_record(provenance)

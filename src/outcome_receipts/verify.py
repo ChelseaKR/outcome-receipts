@@ -23,7 +23,14 @@ from pathlib import Path
 from typing import Any
 
 from outcome_receipts.grounding import ground
-from outcome_receipts.models import Figure, GroundingResult
+from outcome_receipts.models import (
+    HASH_ALGORITHM,
+    HASH_CANONICALIZATION,
+    HASH_DIGEST_SIZE,
+    SCHEMA_VERSION,
+    Figure,
+    GroundingResult,
+)
 
 # The receipt fields re-derivation compares. ``computed_at`` is excluded on
 # purpose; see the module docstring.
@@ -66,6 +73,46 @@ def _recomputed_fields(figure: Figure) -> dict[str, Any]:
     }
 
 
+def _schema_checks(manifest: Mapping[str, Any]) -> list[Check]:
+    """Version and hash-descriptor checks against the current constants.
+
+    Run before any field re-derivation so a manifest written under a different
+    schema fails with a named reason ("schema_version: manifest '0.9' != expected
+    '1.0'") rather than as a wave of opaque per-receipt slice-hash drift. Each
+    descriptor is checked only when the manifest carries it, so a pre-schema
+    manifest (no ``schema_version``, no ``hash``) is not flagged here and falls
+    through to plain re-derivation.
+    """
+
+    checks: list[Check] = []
+    if "schema_version" in manifest:
+        got = manifest["schema_version"]
+        ok = got == SCHEMA_VERSION
+        detail = (
+            "schema_version matches"
+            if ok
+            else f"schema_version: manifest {got!r} != expected {SCHEMA_VERSION!r}"
+        )
+        checks.append(Check("schema_version", ok, detail))
+    if "hash" in manifest:
+        got_hash = manifest["hash"]
+        expected = {
+            "algorithm": HASH_ALGORITHM,
+            "digest_size": HASH_DIGEST_SIZE,
+            "canonicalization": HASH_CANONICALIZATION,
+        }
+        drifts = [
+            f"{key}: manifest {got_hash.get(key)!r} != expected {want!r}"
+            for key, want in expected.items()
+            if got_hash.get(key) != want
+        ]
+        if drifts:
+            checks.append(Check("hash", False, "hash descriptor drift — " + "; ".join(drifts)))
+        else:
+            checks.append(Check("hash", True, "hash descriptor matches"))
+    return checks
+
+
 def _compare(stored: Mapping[str, Any], recomputed: Mapping[str, Any]) -> list[str]:
     drifts: list[str] = []
     for field in _CHECKED_FIELDS:
@@ -82,11 +129,16 @@ def verify_manifest(figures: Sequence[Figure], manifest: Mapping[str, Any]) -> V
     Every receipt must re-derive to a figure with the same value, slice hash, row
     count, query, unit, and display. A receipt with no matching figure, or a figure
     with no receipt, is reported as a failure so the two sets must agree exactly.
+
+    When the manifest carries a ``schema_version`` or ``hash`` descriptor, they are
+    checked against the current constants first, so a manifest written under a
+    different schema fails with a named version/descriptor reason before any
+    per-receipt re-derivation is attempted.
     """
 
     by_id = {figure.metric_id: figure for figure in figures}
     receipts = manifest.get("receipts", [])
-    checks: list[Check] = []
+    checks: list[Check] = _schema_checks(manifest)
     seen: set[str] = set()
     for stored in receipts:
         metric_id = str(stored.get("metric_id", ""))

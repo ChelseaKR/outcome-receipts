@@ -1,6 +1,6 @@
-# 0004 — Whole-bundle verification
+# 0006 — Whole-bundle verification
 
-Status: accepted
+Status: accepted (2026-07-11)
 
 ## Context
 
