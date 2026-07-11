@@ -8,7 +8,7 @@ The eval renderer shows the gated grounding rate and whether it passed.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from outcome_receipts.charts import Chart
 from outcome_receipts.comparison import ComparisonResult
@@ -113,12 +113,22 @@ def render_report(
     return "\n".join(lines) + "\n"
 
 
-def receipts_manifest(figures: Sequence[Figure], *, provenance: Provenance | None = None) -> str:
+def receipts_manifest(
+    figures: Sequence[Figure],
+    *,
+    provenance: Provenance | None = None,
+    artifacts: Mapping[str, str] | None = None,
+) -> str:
     """Render the receipts as a JSON manifest for machine verification.
 
     When ``provenance`` is given, the manifest also carries the machine-readable
     provenance attestation, so a consumer can check the no-model and gate-passed
     claims without re-reading the prose.
+
+    When ``artifacts`` is given (a mapping of bundle-relative path to its sha256
+    hex digest), the manifest records those digests so ``verify --bundle`` can
+    check that the sibling files were not swapped after export. The manifest never
+    hashes itself; the hash relation is one-directional. See ADR 0006.
 
     The manifest is versioned: ``schema_version`` names the manifest schema and
     ``hash`` describes exactly how every ``slice_hash`` was produced (algorithm,
@@ -153,6 +163,8 @@ def receipts_manifest(figures: Sequence[Figure], *, provenance: Provenance | Non
     }
     if provenance is not None:
         payload["provenance"] = provenance_record(provenance)
+    if artifacts is not None:
+        payload["artifacts"] = dict(sorted(artifacts.items()))
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 

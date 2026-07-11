@@ -108,6 +108,14 @@
       "description": "Optional machine-readable attestation that no number was written by a model and the gate bound every number before export.",
       "type": "object",
       "additionalProperties": true
+    },
+    "artifacts": {
+      "description": "Optional map of bundle-relative artifact path (report.md, trace.html, chart SVGs) to the sha256 hex digest of its bytes, recorded at export so `verify --bundle` can check that sibling files were not swapped. See docs/decisions/0006-whole-bundle-verification.md.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
     }
   }
 }

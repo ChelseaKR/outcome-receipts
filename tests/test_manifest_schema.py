@@ -131,6 +131,17 @@ def test_emitted_manifest_validates_against_published_schema() -> None:
     assert errors == [], errors
 
 
+def test_manifest_with_artifacts_validates_against_published_schema() -> None:
+    """A run-exported manifest carries `artifacts`; the schema must allow it."""
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    artifacts = {"report.md": "0" * 64, "trace.html": "a" * 64}
+    manifest = json.loads(receipts_manifest(_figures(), artifacts=artifacts))
+    assert manifest["artifacts"] == artifacts
+    assert "artifacts" in schema["properties"]
+    errors = _validate(manifest, schema)
+    assert errors == [], errors
+
+
 def test_wrong_schema_version_is_a_named_failure() -> None:
     figures = _figures()
     manifest = json.loads(receipts_manifest(figures))
