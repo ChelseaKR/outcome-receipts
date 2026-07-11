@@ -1,6 +1,6 @@
-# 0004 — Receipt canonicalization and a versioned manifest schema
+# 0005 — Receipt canonicalization and a versioned manifest schema
 
-Status: accepted (working tree, uncommitted)
+Status: accepted (2026-07-11)
 
 ## Context
 

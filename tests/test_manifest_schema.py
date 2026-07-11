@@ -5,7 +5,7 @@ and a ``hash`` descriptor ride alongside the receipts, and a JSON Schema is
 published at ``docs/schema/receipts.schema.json``. These tests pin that the
 emitted manifest carries the new keys, structurally validates against the
 published schema (checked with the standard library only, to keep runtime
-dependencies empty — see ADR 0004), and that ``verify`` names a schema_version
+dependencies empty — see ADR 0005), and that ``verify`` names a schema_version
 mismatch before re-deriving fields.
 """
 
@@ -58,7 +58,7 @@ def test_manifest_receipts_carry_column_names() -> None:
 
 # --- A tiny stdlib structural validator for a subset of JSON Schema. ---
 # We validate the emitted manifest against the published schema using only the
-# standard library, so the zero runtime-dependency posture holds (ADR 0004).
+# standard library, so the zero runtime-dependency posture holds (ADR 0005).
 
 _JSON_TYPES: dict[str, type | tuple[type, ...]] = {
     "object": dict,

@@ -124,7 +124,7 @@ def receipts_manifest(figures: Sequence[Figure], *, provenance: Provenance | Non
     ``hash`` describes exactly how every ``slice_hash`` was produced (algorithm,
     digest size, canonicalization rule set), so a consumer can validate and
     re-derive without reading the engine. See ``docs/schema/receipts.schema.json``
-    and ADR 0004.
+    and ADR 0005.
     """
 
     payload: dict[str, object] = {

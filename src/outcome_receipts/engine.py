@@ -183,7 +183,7 @@ def _slice_hash(column_names: Sequence[str], slice_rows: list[tuple[object, ...]
 
     A slice with zero rows still returns ``EMPTY_SLICE_HASH`` regardless of its
     columns, preserving the invariant that an empty slice is a single visible
-    sentinel rather than a family of column-dependent hashes. See ADR 0004.
+    sentinel rather than a family of column-dependent hashes. See ADR 0005.
     """
 
     if not slice_rows:

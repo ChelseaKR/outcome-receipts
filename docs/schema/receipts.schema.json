@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ChelseaKR/outcome-receipts/docs/schema/receipts.schema.json",
   "title": "Outcome Receipts manifest",
-  "description": "The receipts.json manifest exported alongside a report. Every figure carries a receipt: the exact query, the slice it was computed over, the value, and how the slice hash was produced. The schema is versioned; see docs/decisions/0004-receipt-canonicalization-and-schema.md.",
+  "description": "The receipts.json manifest exported alongside a report. Every figure carries a receipt: the exact query, the slice it was computed over, the value, and how the slice hash was produced. The schema is versioned; see docs/decisions/0005-receipt-canonicalization-and-schema.md.",
   "type": "object",
   "required": ["schema_version", "hash", "receipts"],
   "additionalProperties": false,
