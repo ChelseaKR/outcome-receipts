@@ -17,16 +17,36 @@ from outcome_receipts.grounding import ground
 from outcome_receipts.models import ComparisonSpec, MetricSpec, PeriodSpec
 
 ROWS = [
-    {"client_id": "A", "enrolled_date": "2025-01-10", "exit_date": "2025-02-01",
-     "exit_destination": "permanent"},
-    {"client_id": "B", "enrolled_date": "2025-02-10", "exit_date": "2025-03-01",
-     "exit_destination": "temporary"},
-    {"client_id": "C", "enrolled_date": "2025-03-10", "exit_date": "2025-04-01",
-     "exit_destination": "permanent"},
-    {"client_id": "D", "enrolled_date": "2025-04-10", "exit_date": "2025-05-01",
-     "exit_destination": "permanent"},
-    {"client_id": "E", "enrolled_date": "2025-05-10", "exit_date": "2025-06-01",
-     "exit_destination": "permanent"},
+    {
+        "client_id": "A",
+        "enrolled_date": "2025-01-10",
+        "exit_date": "2025-02-01",
+        "exit_destination": "permanent",
+    },
+    {
+        "client_id": "B",
+        "enrolled_date": "2025-02-10",
+        "exit_date": "2025-03-01",
+        "exit_destination": "temporary",
+    },
+    {
+        "client_id": "C",
+        "enrolled_date": "2025-03-10",
+        "exit_date": "2025-04-01",
+        "exit_destination": "permanent",
+    },
+    {
+        "client_id": "D",
+        "enrolled_date": "2025-04-10",
+        "exit_date": "2025-05-01",
+        "exit_destination": "permanent",
+    },
+    {
+        "client_id": "E",
+        "enrolled_date": "2025-05-10",
+        "exit_date": "2025-06-01",
+        "exit_destination": "permanent",
+    },
 ]
 
 Q1 = PeriodSpec(

@@ -54,6 +54,37 @@ def test_changed_slice_changes_the_hash() -> None:
     assert more.value == 3.0
 
 
+def test_renamed_column_changes_the_hash() -> None:
+    """Identical slice values under a different column name hash differently.
+
+    Canonicalization v1 folds the sorted column names into the payload, so a
+    schema change a funder should see is not silent. Under the earlier rows-only
+    payload these two slices hashed identically.
+    """
+
+    rows = [{"dest": "permanent"}, {"dest": "temporary"}]
+    original = MetricSpec(
+        metric_id="m",
+        description="destinations",
+        value_sql="SELECT COUNT(*) FROM data",
+        slice_sql="SELECT dest FROM data",
+        unit="count",
+    )
+    renamed = MetricSpec(
+        metric_id="m",
+        description="destinations",
+        value_sql="SELECT COUNT(*) FROM data",
+        slice_sql="SELECT dest AS outcome FROM data",
+        unit="count",
+    )
+    a = compute_figures(rows, [original], clock=FixedClock())[0]
+    b = compute_figures(rows, [renamed], clock=FixedClock())[0]
+    assert a.value == b.value
+    assert a.receipt.column_names == ("dest",)
+    assert b.receipt.column_names == ("outcome",)
+    assert a.receipt.slice_hash != b.receipt.slice_hash
+
+
 def test_slice_hash_is_row_order_independent() -> None:
     forward = compute_figures(ROWS, [COUNT], clock=FixedClock())[0]
     reverse = compute_figures(list(reversed(ROWS)), [COUNT], clock=FixedClock())[0]
@@ -82,17 +113,56 @@ def test_thousands_separator_in_count_display() -> None:
     assert figure.display == "1,234"
 
 
-def test_empty_data_gives_empty_slice_hash() -> None:
+def test_empty_slice_gives_empty_slice_hash() -> None:
+    # An empty *slice* (a metric whose query matches no row over non-empty data)
+    # yields the sentinel hash. Empty *input* is a separate, rejected case; see
+    # test_loader_hardening.py.
     spec = MetricSpec(
         metric_id="n",
-        description="rows",
-        value_sql="SELECT COUNT(*) FROM data",
+        description="rows with an impossible destination",
+        value_sql="SELECT COUNT(*) FROM data WHERE dest = 'nowhere'",
+        slice_sql="SELECT * FROM data WHERE dest = 'nowhere'",
+        unit="count",
+    )
+    [figure] = compute_figures(ROWS, [spec], clock=FixedClock())
+    assert figure.value == 0.0
+    assert figure.receipt.slice_hash == EMPTY_SLICE_HASH
+
+
+def test_missing_column_in_value_sql_raises_named_error() -> None:
+    bad = MetricSpec(
+        metric_id="missing_value",
+        description="value query references an absent column",
+        value_sql="SELECT COUNT(*) FROM data WHERE missing_col = 'x'",
         slice_sql="SELECT * FROM data",
         unit="count",
     )
-    [figure] = compute_figures([], [spec], clock=FixedClock())
-    assert figure.value == 0.0
-    assert figure.receipt.slice_hash == EMPTY_SLICE_HASH
+    with pytest.raises(ValueError, match="missing_col"):
+        compute_figures(ROWS, [bad], clock=FixedClock())
+
+
+def test_missing_column_in_slice_sql_raises_named_error() -> None:
+    bad = MetricSpec(
+        metric_id="missing_slice",
+        description="slice query references an absent column",
+        value_sql="SELECT COUNT(*) FROM data",
+        slice_sql="SELECT * FROM data WHERE missing_col = 'x'",
+        unit="count",
+    )
+    with pytest.raises(ValueError, match="missing_col"):
+        compute_figures(ROWS, [bad], clock=FixedClock())
+
+
+def test_other_operational_error_fails_closed_as_value_error() -> None:
+    bad = MetricSpec(
+        metric_id="missing_table",
+        description="query references a table that does not exist",
+        value_sql="SELECT COUNT(*) FROM nope",
+        slice_sql="SELECT * FROM data",
+        unit="count",
+    )
+    with pytest.raises(ValueError, match="missing_table"):
+        compute_figures(ROWS, [bad], clock=FixedClock())
 
 
 def test_malformed_metric_raises() -> None:
