@@ -14,6 +14,28 @@ retitled with the real release date when `v0.1.0` is tagged and
 ## [Unreleased]
 
 ### Added
+- **Release integrity hardening (2026-07-09).**
+  - `release.yml`'s `pypi-publish` job now publishes the exact `dist/` bytes the
+    `release` job built and Sigstore-attested (artifact hand-off plus a
+    `sha256sum -c` re-check) instead of rebuilding — the published files are
+    provably the attested files (BUG-2).
+  - `release.yml`'s `verify` job fails closed unless the release tag is an
+    annotated tag that carries a signature and points at the verified commit
+    (REL-08 / BUG-3).
+  - `__version__` is single-sourced from package metadata
+    (`importlib.metadata.version`), so pyproject.toml is the only place the
+    version is written; new `tests/test_version.py` pins `__version__`,
+    `receipts --version`, and the installed metadata together (REL-02 / BUG-4).
+  - `docs/rulesets/main.json`: the exported branch ruleset of record for `main`
+    (require PR; required checks `verify`/`security`/`accessibility`; dismiss
+    stale reviews; no force-push; linear history; signed commits; no bypass
+    actors), ready for the owner to apply (CICD-12).
+  - `ci.yml` hygiene: `setup-uv` aligned to the same v6 SHA as `release.yml`
+    with `version: "0.11.19"` pinned everywhere, dependency cache keyed on
+    `uv.lock`, and the pa11y step reads `$GITHUB_WORKSPACE` from the
+    environment instead of interpolating `${{ github.workspace }}` into the
+    shell body (BUG-7).
+
 - **Standards-conformance remediation (2026-07-05).** Closes the P0/P1 gaps found
   by the 2026-07-05 audit against the portfolio `STANDARDS/`:
   - `release.yml` gains a `verify` job (`make install && make verify` at the
