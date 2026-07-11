@@ -1,11 +1,12 @@
 """Report-spec loading.
 
 A report is configured by a TOML file: the data source, the report title and
-template, the metric definitions, and two optional sections. ``[[charts]]`` draws
-a chart from named figures, and ``[comparison]`` compares a set of metrics across
-two periods. Every number either section renders is still a figure with a receipt;
-nothing here introduces an ungrounded path to a number. File paths resolve
-relative to the spec's own directory so a spec and its data move together.
+template, the metric definitions, and three optional sections. ``[[charts]]`` draws
+a chart from named figures, ``[comparison]`` compares a set of metrics across two
+periods, and ``[[data_checks]]`` declares data-quality preconditions asserted before
+any figure is computed. Every number a chart or comparison renders is still a figure
+with a receipt; nothing here introduces an ungrounded path to a number. File paths
+resolve relative to the spec's own directory so a spec and its data move together.
 """
 
 from __future__ import annotations
@@ -18,12 +19,14 @@ from typing import Any
 from outcome_receipts.models import (
     ChartSpec,
     ComparisonSpec,
+    DataCheck,
     MetricSpec,
     PeriodSpec,
     ReportSpec,
 )
 
 _VALID_UNITS = frozenset({"count", "percent"})
+_VALID_KINDS = frozenset({"output", "outcome"})
 _VALID_CHART_KINDS = frozenset({"bar", "line"})
 
 
@@ -41,12 +44,17 @@ def _resolve(base: Path, value: str) -> Path:
 
 
 def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
-    if "value_sql" not in body or "slice_sql" not in body:
+    if not str(body.get("value_sql", "")).strip() or not str(body.get("slice_sql", "")).strip():
         raise ValueError(f"metric {metric_id!r} must set value_sql and slice_sql")
     unit = str(body.get("unit", "count"))
     if unit not in _VALID_UNITS:
         raise ValueError(
             f"metric {metric_id!r} unit {unit!r} must be one of {sorted(_VALID_UNITS)}"
+        )
+    kind = str(body.get("kind", "output"))
+    if kind not in _VALID_KINDS:
+        raise ValueError(
+            f"metric {metric_id!r} kind {kind!r} must be one of {sorted(_VALID_KINDS)}"
         )
     return MetricSpec(
         metric_id=str(metric_id),
@@ -56,6 +64,7 @@ def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
         unit=unit,
         decimals=int(body.get("decimals", 0)),
         definition=str(body.get("definition", "")),
+        kind=kind,
     )
 
 
@@ -90,6 +99,26 @@ def _parse_charts(raw: object) -> tuple[ChartSpec, ...]:
     return tuple(charts)
 
 
+def _parse_data_checks(raw: object) -> tuple[DataCheck, ...]:
+    if not raw:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError("[[data_checks]] must be an array of tables")
+    checks: list[DataCheck] = []
+    for entry in raw:
+        if "id" not in entry or "assert_sql" not in entry:
+            raise ValueError("each [[data_checks]] entry must set 'id' and 'assert_sql'")
+        checks.append(
+            DataCheck(
+                check_id=str(entry["id"]),
+                description=str(entry.get("description", "")),
+                assert_sql=str(entry["assert_sql"]),
+                message=str(entry.get("message", "")),
+            )
+        )
+    return tuple(checks)
+
+
 def _parse_comparison(raw: object) -> ComparisonSpec | None:
     if not raw:
         return None
@@ -115,18 +144,14 @@ def _parse_comparison(raw: object) -> ComparisonSpec | None:
     metric_section = raw.get("metrics", {})
     if not metric_section:
         raise ValueError("[comparison] must define at least one [comparison.metrics.<id>]")
-    metrics = tuple(
-        _parse_metric(metric_id, body) for metric_id, body in metric_section.items()
-    )
+    metrics = tuple(_parse_metric(metric_id, body) for metric_id, body in metric_section.items())
     current = str(raw["current"])
     prior = str(raw["prior"])
     known = {period.period_id for period in periods}
     for name in (current, prior):
         if name not in known:
             raise ValueError(f"[comparison] references unknown period {name!r}")
-    return ComparisonSpec(
-        current=current, prior=prior, periods=tuple(periods), metrics=metrics
-    )
+    return ComparisonSpec(current=current, prior=prior, periods=tuple(periods), metrics=metrics)
 
 
 def load_spec(path: str | Path) -> Spec:
@@ -149,6 +174,7 @@ def load_spec(path: str | Path) -> Spec:
     metrics = tuple(_parse_metric(metric_id, body) for metric_id, body in metric_section.items())
     charts = _parse_charts(data.get("charts"))
     comparison = _parse_comparison(data.get("comparison"))
+    data_checks = _parse_data_checks(data.get("data_checks"))
 
     report = ReportSpec(
         title=str(report_section.get("title", "Outcome report")),
@@ -156,5 +182,6 @@ def load_spec(path: str | Path) -> Spec:
         metrics=metrics,
         charts=charts,
         comparison=comparison,
+        data_checks=data_checks,
     )
     return Spec(data_path=_resolve(base, str(data_section["path"])), report=report)

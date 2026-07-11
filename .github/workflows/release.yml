@@ -14,23 +14,105 @@ on:
 permissions:
   contents: read
 
+# Serialize releases of the same tag so a re-run (workflow_dispatch) can't race
+# a concurrent build/publish of that tag.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+# Single source of truth for which tag this run builds, signs, and publishes.
+# Referenced as "$RELEASE_TAG" in run: steps (never interpolated via ${{ }}
+# into a shell body — tag names are attacker-influenced for a tag-pusher and
+# ${{ }} interpolation directly into `run:` is a template-injection vector).
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
 jobs:
+  # Gate: nothing downstream signs, attests, or publishes anything unless this
+  # job passes at the exact commit the tag points to. Closes the gap where an
+  # untested commit could be tagged and shipped with a Sigstore attestation.
+  verify:
+    name: verify at tagged commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - name: Install uv (pinned)
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.19"
+          enable-cache: false # signing/publish path: no cache poisoning surface
+      # REL-08: fail closed unless the tag is an annotated tag object that
+      # carries a signature and points at the exact commit this job verifies.
+      # The tag object is read through the GitHub API because the checkout
+      # above fetches only the dereferenced commit and persist-credentials:
+      # false rules out a later authenticated `git fetch`. GitHub's own
+      # `verification.verified` result is printed for the audit trail; the
+      # hard gate is annotated + signature present + target == HEAD, since
+      # `verified: true` additionally requires the maintainer's key to be
+      # registered with the GitHub account.
+      - name: Tag is annotated, signed, and points at HEAD (fail closed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref_json=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")
+          obj_type=$(jq -r '.object.type' <<<"$ref_json")
+          if [ "$obj_type" != "tag" ]; then
+            echo "::error::$RELEASE_TAG is a lightweight tag (points straight at a $obj_type); release tags must be signed annotated tags (git tag -s)."
+            exit 1
+          fi
+          tag_sha=$(jq -r '.object.sha' <<<"$ref_json")
+          tag_json=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha")
+          sig=$(jq -r '.verification.signature // empty' <<<"$tag_json")
+          if [ -z "$sig" ]; then
+            echo "::error::$RELEASE_TAG is annotated but carries no signature; release tags must be signed (git tag -s)."
+            exit 1
+          fi
+          target_type=$(jq -r '.object.type' <<<"$tag_json")
+          target_sha=$(jq -r '.object.sha' <<<"$tag_json")
+          head_sha=$(git rev-parse HEAD)
+          if [ "$target_type" != "commit" ] || [ "$target_sha" != "$head_sha" ]; then
+            echo "::error::$RELEASE_TAG points at $target_type $target_sha, not the verified commit $head_sha."
+            exit 1
+          fi
+          verified=$(jq -r '.verification.verified' <<<"$tag_json")
+          reason=$(jq -r '.verification.reason' <<<"$tag_json")
+          echo "Tag $RELEASE_TAG: annotated, signed, points at $head_sha (GitHub signature check: verified=$verified reason=$reason)."
+      - name: Install
+        run: make install
+      - name: Verify (ruff, mypy --strict, pytest)
+        run: make verify
+      - name: CHANGELOG has a section for this release
+        run: |
+          set -euo pipefail
+          grep -q "^## \[${RELEASE_TAG#v}\]" CHANGELOG.md || {
+            echo "No CHANGELOG section found for ${RELEASE_TAG}"
+            exit 1
+          }
+
   release:
     name: build · provenance · SBOM · GitHub release
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: write # create/edit the GitHub release
       id-token: write # Sigstore signing for provenance and SBOM attestations
       attestations: write # build-provenance and SBOM attestations
     steps:
-      - name: Checkout
+      - name: Checkout tagged commit
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
       - name: Install uv (pinned)
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "0.11.19"
+          enable-cache: false # signing/publish path: no cache poisoning surface
       - name: Build wheel + sdist
         run: uv build
       - name: Attest build provenance (signed via Sigstore)
@@ -43,7 +125,7 @@ jobs:
           # Install the freshly built wheel into an isolated environment and
           # describe exactly what ships. The dependency set is empty at v0.1,
           # and the SBOM records that rather than asserting it in prose.
-          uv venv --python 3.11 .sbom-venv
+          uv venv --python 3.12 .sbom-venv
           uv pip install --python .sbom-venv/bin/python dist/*.whl
           uvx --from cyclonedx-bom==7.3.0 cyclonedx-py environment .sbom-venv/bin/python \
             --pyproject pyproject.toml \
@@ -63,14 +145,30 @@ jobs:
           name: sbom-cyclonedx
           path: dist/outcome-receipts.cdx.json
           if-no-files-found: error
+      # Release integrity (BUG-2/REL-16 half 1): hand the exact bytes that were
+      # Sigstore-attested above to the publish job. pypi-publish must never
+      # rebuild — a second build's output is not covered by the attestation.
+      - name: Record attested artifact digests
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum ./*.whl ./*.tar.gz | tee SHA256SUMS)
+      - name: Upload attested dist for the publish job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-attested
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
       - name: Publish artifacts to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          gh release view "$TAG" >/dev/null 2>&1 \
-            || gh release create "$TAG" --title "outcome-receipts $TAG" --generate-notes
-          gh release upload "$TAG" dist/* --clobber
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
+            || gh release create "$RELEASE_TAG" --title "outcome-receipts $RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" dist/* --clobber
 
   pypi-publish:
     name: publish to PyPI (Trusted Publishing)
@@ -82,16 +180,21 @@ jobs:
     permissions:
       id-token: write # OIDC token for PyPI Trusted Publishing (no long-lived secret)
     steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      # Release integrity (BUG-2): publish the exact bytes the release job
+      # built and Sigstore-attested. No checkout, no toolchain, no rebuild in
+      # this job — a rebuilt wheel/sdist would not be covered by the
+      # attestations, so the only inputs here are the attested artifacts.
+      - name: Download attested dist from the release job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          persist-credentials: false
-      - name: Install uv (pinned)
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
-        with:
-          version: "0.11.19"
-      - name: Build wheel + sdist
-        run: uv build
+          name: dist-attested
+          path: dist
+      - name: Re-check artifact digests against the attested manifest
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c SHA256SUMS
+          rm SHA256SUMS # not a distribution file; PyPI upload takes dist/ wholesale
       # Trusted Publishing: requires a one-time PyPI "pending publisher" for project
       # "outcome-receipts" (repo ChelseaKR/outcome-receipts, workflow release.yml,
       # environment pypi). No API token needed once configured.

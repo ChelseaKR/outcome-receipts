@@ -206,3 +206,160 @@ def test_eval_json_reports_the_gate(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_exit_codes_are_distinct_constants() -> None:
     assert (EXIT_OK, EXIT_VERIFY_FAIL, EXIT_GATE_FAIL) == (0, 1, 2)
+
+
+def test_run_json_records_the_ledger_entry(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "out"
+    ledger = tmp_path / "ledger.jsonl"
+    code = main(
+        [
+            "run",
+            "--config",
+            HOUSING,
+            "--out",
+            str(out),
+            "--reproducible",
+            "--ledger",
+            str(ledger),
+            "--json",
+        ]
+    )
+    assert code == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ledger"]["path"] == str(ledger)
+    assert payload["ledger"]["index"] == 0
+    assert len(payload["ledger"]["entry_hash"]) == 64
+    assert ledger.exists()
+
+
+def test_run_gate_failure_appends_no_ledger_entry(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from collections.abc import Sequence
+
+    import outcome_receipts.cli as cli
+    from outcome_receipts.draft import draft as real_draft
+    from outcome_receipts.models import Figure, ReportSpec
+
+    def _tampered_draft(spec: ReportSpec, figures: Sequence[Figure]) -> str:
+        return real_draft(spec, figures) + " We also served 99999 ghosts."
+
+    monkeypatch.setattr(cli, "draft", _tampered_draft)
+
+    out = tmp_path / "out"
+    ledger = tmp_path / "ledger.jsonl"
+    code = main(
+        [
+            "run",
+            "--config",
+            HOUSING,
+            "--out",
+            str(out),
+            "--reproducible",
+            "--ledger",
+            str(ledger),
+            "--json",
+        ]
+    )
+    assert code == EXIT_GATE_FAIL
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ledger"] is None
+    assert not ledger.exists()
+
+
+def test_verify_ledger_json_passes_on_an_intact_chain(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "out"
+    ledger = tmp_path / "ledger.jsonl"
+    assert (
+        main(
+            [
+                "run",
+                "--config",
+                HOUSING,
+                "--out",
+                str(out),
+                "--reproducible",
+                "--ledger",
+                str(ledger),
+            ]
+        )
+        == EXIT_OK
+    )
+    capsys.readouterr()
+
+    code = main(["verify-ledger", "--ledger", str(ledger), "--json"])
+    assert code == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "verify-ledger"
+    assert payload["ok"] is True
+    assert payload["ledger"] == str(ledger)
+    assert payload["problems"] == []
+
+
+def test_verify_ledger_json_fails_on_a_tampered_chain(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "out"
+    ledger = tmp_path / "ledger.jsonl"
+    assert (
+        main(
+            [
+                "run",
+                "--config",
+                HOUSING,
+                "--out",
+                str(out),
+                "--reproducible",
+                "--ledger",
+                str(ledger),
+            ]
+        )
+        == EXIT_OK
+    )
+    capsys.readouterr()
+
+    record = json.loads(ledger.read_text(encoding="utf-8").splitlines()[0])
+    record["report_title"] = "tampered"
+    ledger.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    code = main(["verify-ledger", "--ledger", str(ledger), "--json"])
+    assert code == EXIT_VERIFY_FAIL
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["problems"]
+
+
+def test_verify_bundle_json_reports_receipts_artifacts_and_grounding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "out"
+    assert main(["run", "--config", HOUSING, "--out", str(out), "--reproducible"]) == EXIT_OK
+    capsys.readouterr()
+
+    code = main(["verify", "--config", HOUSING, "--bundle", str(out), "--json"])
+    assert code == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "verify"
+    assert payload["mode"] == "bundle"
+    assert payload["ok"] is True
+    assert payload["drift"] == 0
+    assert payload["artifacts"]
+    assert all(artifact["ok"] for artifact in payload["artifacts"])
+    assert payload["grounding"]["unbound"] == []
+
+
+def test_init_json_carries_the_scaffolded_spec(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = EXAMPLES / "housing-demo" / "services.csv"
+    spec_path = tmp_path / "report.toml"
+    code = main(["init", "--data", str(data), "--out", str(spec_path), "--json"])
+    assert code == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "init"
+    assert payload["out"] == str(spec_path)
+    assert payload["spec_toml"] == spec_path.read_text(encoding="utf-8")

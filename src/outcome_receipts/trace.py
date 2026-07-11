@@ -70,10 +70,7 @@ def _esc(text: str) -> str:
     """Escape text for inclusion in HTML."""
 
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -120,14 +117,10 @@ def _figure_detail(figure: Figure) -> list[str]:
         f'{_esc(figure.metric_id)}: <span class="value">{_esc(figure.display)}</span></h2>',
         f"<p>{_esc(definition)}</p>",
         "<dl>",
-        "<dt>Query</dt>"
-        f"<dd><code>{_esc(receipt.value_sql)}</code></dd>",
-        "<dt>Rows in slice</dt>"
-        f"<dd>{receipt.row_count}</dd>",
-        "<dt>Slice hash</dt>"
-        f'<dd class="hash">{_esc(receipt.slice_hash)}</dd>',
-        "<dt>Computed at</dt>"
-        f"<dd>{_esc(receipt.computed_at)}</dd>",
+        f"<dt>Query</dt><dd><code>{_esc(receipt.value_sql)}</code></dd>",
+        f"<dt>Rows in slice</dt><dd>{receipt.row_count}</dd>",
+        f'<dt>Slice hash</dt><dd class="hash">{_esc(receipt.slice_hash)}</dd>',
+        f"<dt>Computed at</dt><dd>{_esc(receipt.computed_at)}</dd>",
         "</dl>",
         "</section>",
     ]

@@ -1,0 +1,7 @@
+# Code owners for outcome-receipts.
+# Requires branch protection with "require code owner review" enabled to take
+# effect (tracked as part of P0-1 in the 2026-07-05 remediation plan; not yet
+# wired since main has no branch protection).
+
+* @ChelseaKR
+/.github/workflows/ @ChelseaKR

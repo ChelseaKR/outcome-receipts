@@ -22,7 +22,10 @@ def test_grant_report_parses_charts_and_comparison() -> None:
     assert comparison.prior == "q1"
     assert {p.period_id for p in comparison.periods} == {"q1", "q2"}
     assert {m.metric_id for m in comparison.metrics} == {
-        "clients_served", "exits", "exits_permanent", "pct_permanent"
+        "clients_served",
+        "exits",
+        "exits_permanent",
+        "pct_permanent",
     }
 
 
