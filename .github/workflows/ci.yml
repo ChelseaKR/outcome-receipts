@@ -38,7 +38,10 @@ jobs:
           git diff --exit-code eval/report.md
 
   security:
-    name: security (semgrep · pip-audit · osv-scanner · gitleaks · zizmor)
+    # The display name is a required-status-check context in the applied main
+    # ruleset, so it stays stable even as tools are added; semgrep also runs in
+    # this job (SEC-07). Renaming it requires updating the live ruleset first.
+    name: security (pip-audit · osv-scanner · gitleaks · zizmor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
