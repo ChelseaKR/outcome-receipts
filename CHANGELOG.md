@@ -14,6 +14,15 @@ retitled with the real release date when `v0.1.0` is tagged and
 ## [Unreleased]
 
 ### Added
+- **Machine-readable CLI output and an explicit exit-code contract (FIX-09).**
+  Every command (`init`, `run`, `audit`, `verify`, `verify-ledger`, `eval`)
+  accepts `--json`, before or after the subcommand, and then emits one JSON
+  object on stdout instead of the human-readable lines. Exit codes are
+  single-sourced module constants documented in the README: 0 success, 1 a
+  failed audit/verify/verify-ledger/eval check, 2 the grounding gate refused
+  to export. The JSON is presentational only; it never changes the exit code
+  or what is written to disk. New `tests/test_cli.py` pins the JSON shapes
+  and the code table.
 - **Release integrity hardening (2026-07-09).**
   - `release.yml`'s `pypi-publish` job now publishes the exact `dist/` bytes the
     `release` job built and Sigstore-attested (artifact hand-off plus a

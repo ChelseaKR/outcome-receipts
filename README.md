@@ -160,6 +160,34 @@ mismatch is drift (the data changed, the spec changed, or the manifest was edite
 verify reports each drifted receipt and exits non-zero, so a silent divergence
 cannot pass.
 
+### CLI output and exit codes
+
+Every command prints human-readable lines by default. Pass `--json` to any command
+to get a single machine-readable JSON object on stdout instead, with the prose
+suppressed. The JSON is purely presentational; it never changes the exit code.
+
+```sh
+receipts run --config examples/housing-demo/report.toml --out out --reproducible --json
+receipts verify --config examples/grant-report/report.toml --receipts out/grant/receipts.json --json
+```
+
+The `run` object reports the gate result, the figure and narrative tallies, any
+unbound numbers, the paths it wrote, and the export-ledger entry it appended. The
+`audit`, `verify`, `verify-ledger`, and `eval` objects report their own pass or
+fail and the details behind it; the `init` object carries the scaffolded spec and
+where it was written. The `--json` flag is accepted before or after the
+subcommand, so `receipts --json run ...` and `receipts run ... --json` are
+equivalent.
+
+The exit code is the contract a script should read. It is stable across the human
+and JSON forms.
+
+| Code | Meaning |
+| ---- | ------- |
+| 0 | Success. The command ran and the grounding gate, where one applies, passed. |
+| 1 | A verification or eval check failed closed: `audit` found an unbound number, `verify` found receipt or artifact drift, `verify-ledger` found a broken hash chain, or the `eval` gate did not pass. |
+| 2 | The grounding gate refused to export. `run` found an unbound number and wrote nothing. |
+
 ## What it does not do
 
 * It does **not let a model invent numbers.** Figures come from queries; the gate
