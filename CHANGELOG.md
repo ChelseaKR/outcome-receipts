@@ -14,6 +14,17 @@ retitled with the real release date when `v0.1.0` is tagged and
 ## [Unreleased]
 
 ### Added
+- **Human approval sign-off gate before export (R8).** `receipts run` now
+  records a named human approver after the grounding gate passes and before
+  any file is written. `--approved-by NAME` records the approver
+  non-interactively (for CI); an interactive run prompts for a typed name;
+  a non-interactive run with no approver aborts fail-closed with the new
+  exit code 3 (`EXIT_APPROVAL_FAIL`) and writes nothing. The approver and
+  approval time are recorded in the report's provenance statement and in the
+  manifest (`provenance.approved_by`, `provenance.approved_at`; `approved_by`
+  is stated explicitly as `null` when nothing was approved). `run --json`
+  carries the approval in the payload and never prompts. New merge-blocking
+  `tests/test_approval.py`.
 - **Machine-readable CLI output and an explicit exit-code contract (FIX-09).**
   Every command (`init`, `run`, `audit`, `verify`, `verify-ledger`, `eval`)
   accepts `--json`, before or after the subcommand, and then emits one JSON

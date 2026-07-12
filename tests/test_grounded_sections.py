@@ -59,7 +59,9 @@ def test_an_ungrounded_chart_number_would_be_caught() -> None:
 
 def test_cli_run_writes_report_charts_and_manifest(tmp_path: Path) -> None:
     out = tmp_path / "grant"
-    code = main(["run", "--config", str(GRANT), "--out", str(out), "--reproducible"])
+    run_args = ["run", "--config", str(GRANT), "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    code = main(run_args)
     assert code == 0
     assert (out / "report.md").exists()
     assert (out / "receipts.json").exists()

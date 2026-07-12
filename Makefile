@@ -24,9 +24,10 @@ eval:
 		--config examples/housing-demo/report.toml \
 		--out eval/report.md
 
-# Run the demo end to end and write outputs to ./out.
+# Run the demo end to end and write outputs to ./out. The demo approver makes
+# the non-interactive export explicit; a real report is signed off by a person.
 run:
-	.venv/bin/receipts run --config examples/housing-demo/report.toml --out out
+	.venv/bin/receipts run --config examples/housing-demo/report.toml --out out --approved-by "make run (demo)"
 
 clean:
 	rm -rf out .pytest_cache .mypy_cache .ruff_cache

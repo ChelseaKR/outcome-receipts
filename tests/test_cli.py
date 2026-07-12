@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from outcome_receipts.cli import (
+    EXIT_APPROVAL_FAIL,
     EXIT_GATE_FAIL,
     EXIT_OK,
     EXIT_VERIFY_FAIL,
@@ -33,7 +34,9 @@ def test_run_json_parses_and_reports_a_passing_gate(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "out"
-    code = main(["run", "--config", HOUSING, "--out", str(out), "--reproducible", "--json"])
+    run_args = ["run", "--config", HOUSING, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI", "--json"]
+    code = main(run_args)
     assert code == EXIT_OK
 
     payload = json.loads(capsys.readouterr().out)
@@ -53,7 +56,9 @@ def test_run_json_flag_before_subcommand_is_equivalent(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "out"
-    code = main(["--json", "run", "--config", HOUSING, "--out", str(out), "--reproducible"])
+    run_args = ["--json", "run", "--config", HOUSING, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    code = main(run_args)
     assert code == EXIT_OK
     payload = json.loads(capsys.readouterr().out)
     assert payload["command"] == "run"
@@ -64,7 +69,9 @@ def test_run_json_charts_report_a_chart_output_path(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "grant"
-    code = main(["run", "--config", GRANT, "--out", str(out), "--reproducible", "--json"])
+    run_args = ["run", "--config", GRANT, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI", "--json"]
+    code = main(run_args)
     assert code == EXIT_OK
     payload = json.loads(capsys.readouterr().out)
     assert payload["claims"]["total"] > 0
@@ -75,7 +82,9 @@ def test_run_human_output_still_prints_the_existing_lines(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "out"
-    code = main(["run", "--config", HOUSING, "--out", str(out), "--reproducible"])
+    run_args = ["run", "--config", HOUSING, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    code = main(run_args)
     assert code == EXIT_OK
     captured = capsys.readouterr().out
     assert "figures computed: 4" in captured
@@ -134,7 +143,9 @@ def test_verify_of_a_fresh_manifest_exits_ok(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "out"
-    assert main(["run", "--config", HOUSING, "--out", str(out), "--reproducible"]) == EXIT_OK
+    run_args = ["run", "--config", HOUSING, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    assert main(run_args) == EXIT_OK
     capsys.readouterr()
 
     receipts = out / "receipts.json"
@@ -151,7 +162,9 @@ def test_verify_drift_fails_with_the_documented_code(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "out"
-    assert main(["run", "--config", HOUSING, "--out", str(out), "--reproducible"]) == EXIT_OK
+    run_args = ["run", "--config", HOUSING, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    assert main(run_args) == EXIT_OK
     capsys.readouterr()
 
     receipts = out / "receipts.json"
@@ -185,7 +198,9 @@ def test_run_gate_failure_uses_the_gate_exit_code(
     monkeypatch.setattr(cli, "draft", _tampered_draft)
 
     out = tmp_path / "out"
-    code = main(["run", "--config", HOUSING, "--out", str(out), "--reproducible", "--json"])
+    run_args = ["run", "--config", HOUSING, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI", "--json"]
+    code = main(run_args)
     assert code == EXIT_GATE_FAIL
     payload = json.loads(capsys.readouterr().out)
     assert payload["gate_pass"] is False
@@ -205,7 +220,34 @@ def test_eval_json_reports_the_gate(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_exit_codes_are_distinct_constants() -> None:
-    assert (EXIT_OK, EXIT_VERIFY_FAIL, EXIT_GATE_FAIL) == (0, 1, 2)
+    assert (EXIT_OK, EXIT_VERIFY_FAIL, EXIT_GATE_FAIL, EXIT_APPROVAL_FAIL) == (0, 1, 2, 3)
+
+
+def test_run_json_without_approver_aborts_fail_closed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Under --json there is no interactive prompt, so a missing --approved-by
+    # must abort with the approval exit code, emit one JSON object with a null
+    # approval, and write nothing.
+    out = tmp_path / "out"
+    code = main(["run", "--config", HOUSING, "--out", str(out), "--reproducible", "--json"])
+    assert code == EXIT_APPROVAL_FAIL
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["gate_pass"] is True
+    assert payload["approval"] is None
+    assert payload["outputs"]["report"] is None
+    assert not out.exists()
+
+
+def test_run_json_records_the_approval(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    out = tmp_path / "out"
+    run_args = ["run", "--config", HOUSING, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "Jane Doe", "--json"]
+    code = main(run_args)
+    assert code == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["approval"]["approved_by"] == "Jane Doe"
+    assert payload["approval"]["approved_at"]
 
 
 def test_run_json_records_the_ledger_entry(
@@ -223,6 +265,8 @@ def test_run_json_records_the_ledger_entry(
             "--reproducible",
             "--ledger",
             str(ledger),
+            "--approved-by",
+            "CI",
             "--json",
         ]
     )
@@ -260,6 +304,8 @@ def test_run_gate_failure_appends_no_ledger_entry(
             "--reproducible",
             "--ledger",
             str(ledger),
+            "--approved-by",
+            "CI",
             "--json",
         ]
     )
@@ -285,6 +331,8 @@ def test_verify_ledger_json_passes_on_an_intact_chain(
                 "--reproducible",
                 "--ledger",
                 str(ledger),
+                "--approved-by",
+                "CI",
             ]
         )
         == EXIT_OK
@@ -316,6 +364,8 @@ def test_verify_ledger_json_fails_on_a_tampered_chain(
                 "--reproducible",
                 "--ledger",
                 str(ledger),
+                "--approved-by",
+                "CI",
             ]
         )
         == EXIT_OK
@@ -337,7 +387,9 @@ def test_verify_bundle_json_reports_receipts_artifacts_and_grounding(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "out"
-    assert main(["run", "--config", HOUSING, "--out", str(out), "--reproducible"]) == EXIT_OK
+    run_args = ["run", "--config", HOUSING, "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    assert main(run_args) == EXIT_OK
     capsys.readouterr()
 
     code = main(["verify", "--config", HOUSING, "--bundle", str(out), "--json"])

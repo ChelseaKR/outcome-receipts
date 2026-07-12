@@ -69,6 +69,10 @@ EXIT_GATE_FAIL = 2
 """The grounding gate refused to export: ``run`` found an unbound number and wrote
 nothing."""
 
+EXIT_APPROVAL_FAIL = 3
+"""The export was not approved: the grounding gate passed but no named human
+signed off, so ``run`` wrote nothing."""
+
 
 def _clock(*, reproducible: bool) -> Clock:
     return FixedClock() if reproducible else SystemClock()
@@ -161,6 +165,46 @@ def _claims_text(comparison: ComparisonResult | None, charts: Sequence[Chart]) -
     return " ".join(parts)
 
 
+def _approver(
+    title: str,
+    narrative_result: GroundingResult,
+    claims_result: GroundingResult,
+    args: argparse.Namespace,
+) -> str | None:
+    """Resolve the human approver for this export, or ``None`` to abort.
+
+    ``--approved-by NAME`` records the approver non-interactively, for CI and
+    reproducible runs. Otherwise, on a TTY and unless ``--yes/--no-confirm`` was
+    given, prompt for a sign-off: the reviewer types their name to approve, blank
+    to abort. Off a TTY with no ``--approved-by``, there is nobody to prompt, so we
+    return ``None`` and let the caller fail closed rather than hang on ``input()``.
+    Under ``--json`` the prompt is also skipped (stdout carries exactly one JSON
+    object), so an approver must arrive via ``--approved-by``.
+    """
+
+    if args.approved_by is not None:
+        name: str = args.approved_by.strip()
+        return name or None
+
+    if args.no_confirm or args.json or not sys.stdin.isatty():
+        return None
+
+    figures_computed = narrative_result.total + claims_result.total
+    numbers_bound = len(narrative_result.bound) + len(claims_result.bound)
+    print("\nready to export:")
+    print(f"  title:            {title}")
+    print(f"  figures computed: {figures_computed}")
+    print(f"  numbers bound:    {numbers_bound}")
+    try:
+        entered = input(
+            "Approve this report for export? Type your name to sign off (blank to abort): "
+        )
+    except EOFError:
+        return None
+    entered_name = entered.strip()
+    return entered_name or None
+
+
 def _run_payload(
     *,
     gate_pass: bool,
@@ -169,6 +213,7 @@ def _run_payload(
     claims_result: GroundingResult,
     outputs: dict[str, str | None],
     ledger: dict[str, object] | None,
+    approval: dict[str, object] | None,
 ) -> dict[str, object]:
     """The machine-readable record of a ``run`` invocation."""
 
@@ -183,6 +228,7 @@ def _run_payload(
         ],
         "outputs": outputs,
         "ledger": ledger,
+        "approval": approval,
     }
 
 
@@ -267,31 +313,66 @@ def _cmd_run(args: argparse.Namespace) -> int:
     claims_result = ground(_claims_text(comparison, charts), figures)
     gate_pass = narrative_result.ok and claims_result.ok
 
-    outputs: dict[str, str | None] = {
+    empty_outputs: dict[str, str | None] = {
         "report": None,
         "receipts": None,
         "trace": None,
         "charts": None,
     }
-    entry: LedgerEntry | None = None
-    ledger_path: Path | None = None
-    if gate_pass:
-        provenance = Provenance(
-            numbers_bound=len(narrative_result.bound) + len(claims_result.bound),
-            numbers_unbound=0,
-        )
-        outputs, entry, ledger_path = _export_outputs(
-            args, spec, figures, narrative, charts, comparison, provenance
+
+    def _fail_payload() -> dict[str, object]:
+        return _run_payload(
+            gate_pass=gate_pass,
+            figures=figures,
+            narrative_result=narrative_result,
+            claims_result=claims_result,
+            outputs=empty_outputs,
+            ledger=None,
+            approval=None,
         )
 
+    if not args.json:
+        print(f"figures computed: {len(figures)}")
+        print(
+            f"numbers in narrative: {narrative_result.total} "
+            f"(bound {len(narrative_result.bound)}, unbound {len(narrative_result.unbound)})"
+        )
+        print(
+            f"chart and comparison numbers: {claims_result.total} "
+            f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})"
+        )
+
+    if not gate_pass:
+        if args.json:
+            _emit_json(_fail_payload())
+            return EXIT_GATE_FAIL
+        print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
+        for span in (*narrative_result.unbound, *claims_result.unbound):
+            print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
+        return EXIT_GATE_FAIL
+
+    # Human sign-off gate. The grounding gate proves every number traces to a
+    # receipt; this gate records that a named person approved the export. It runs
+    # only after the grounding gate PASSes and before any file is written, so a
+    # missing sign-off aborts fail-closed with nothing on disk.
+    approver = _approver(spec.report.title, narrative_result, claims_result, args)
+    if approver is None:
+        if args.json:
+            _emit_json(_fail_payload())
+        print("export aborted: no approver sign-off", file=sys.stderr)
+        return EXIT_APPROVAL_FAIL
+
+    provenance = Provenance(
+        numbers_bound=len(narrative_result.bound) + len(claims_result.bound),
+        numbers_unbound=0,
+        approved_by=approver,
+        approved_at=_clock(reproducible=args.reproducible).now_iso(),
+    )
+    outputs, entry, ledger_path = _export_outputs(
+        args, spec, figures, narrative, charts, comparison, provenance
+    )
+
     if args.json:
-        ledger: dict[str, object] | None = None
-        if entry is not None and ledger_path is not None:
-            ledger = {
-                "path": str(ledger_path),
-                "index": entry.index,
-                "entry_hash": entry.entry_hash,
-            }
         _emit_json(
             _run_payload(
                 gate_pass=gate_pass,
@@ -299,35 +380,27 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 narrative_result=narrative_result,
                 claims_result=claims_result,
                 outputs=outputs,
-                ledger=ledger,
+                ledger={
+                    "path": str(ledger_path),
+                    "index": entry.index,
+                    "entry_hash": entry.entry_hash,
+                },
+                approval={
+                    "approved_by": provenance.approved_by,
+                    "approved_at": provenance.approved_at,
+                },
             )
         )
-        return EXIT_OK if gate_pass else EXIT_GATE_FAIL
-
-    print(f"figures computed: {len(figures)}")
-    print(
-        f"numbers in narrative: {narrative_result.total} "
-        f"(bound {len(narrative_result.bound)}, unbound {len(narrative_result.unbound)})"
-    )
-    print(
-        f"chart and comparison numbers: {claims_result.total} "
-        f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})"
-    )
-
-    if not gate_pass:
-        print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
-        for span in (*narrative_result.unbound, *claims_result.unbound):
-            print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
-        return EXIT_GATE_FAIL
+        return EXIT_OK
 
     print("\ngrounding gate: PASS")
+    print(f"  approved: {approver}")
     print(f"  report:   {outputs['report']}")
     print(f"  receipts: {outputs['receipts']}")
     print(f"  trace:    {outputs['trace']}")
     if outputs["charts"] is not None:
         print(f"  charts:   {outputs['charts']} ({len(charts)} SVG)")
-    if entry is not None:
-        print(f"  ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
+    print(f"  ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
     return EXIT_OK
 
 
@@ -598,6 +671,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--recipient",
         default=None,
         help="who the report was exported to, recorded in the export ledger",
+    )
+    run_parser.add_argument(
+        "--approved-by",
+        metavar="NAME",
+        help="record NAME as the human approver, non-interactively (for CI); "
+        "skips the interactive sign-off prompt",
+    )
+    run_parser.add_argument(
+        "--yes",
+        "--no-confirm",
+        dest="no_confirm",
+        action="store_true",
+        help="skip the interactive sign-off prompt; requires --approved-by, "
+        "otherwise the export aborts with no approver",
     )
     run_parser.set_defaults(func=_cmd_run)
 
