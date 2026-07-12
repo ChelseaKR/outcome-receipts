@@ -203,13 +203,29 @@ def _slice_hash(column_names: Sequence[str], slice_rows: list[tuple[object, ...]
 def _format(value: float, unit: str, decimals: int) -> str:
     """Render a value to its display string, deterministically.
 
-    A count is an integer with thousands separators; a percent appends ``%``. The
-    display is what the drafter writes and what the grounding gate matches, so it
-    must be a single canonical form per figure.
+    The display is what the drafter writes and what the grounding gate matches, so
+    each unit has exactly one canonical form per figure (see ADR 0004):
+
+    - ``count``: an integer with thousands separators when ``decimals`` is 0,
+      otherwise a fixed-decimal number (e.g. ``1,234``).
+    - ``percent``: a fixed-decimal number with a trailing ``%`` (e.g. ``67%``).
+    - ``money``: a ``$``-prefixed, thousands-separated, fixed-decimal amount
+      (e.g. ``$1,234.50``); set ``decimals = 2`` for cents.
+    - ``duration``: a thousands-separated, fixed-decimal number of days with a
+      ``days`` suffix (e.g. ``30 days``). Days is the one canonical unit; convert
+      other durations to days in the metric SQL.
+    - ``rate``: a thousands-separated, fixed-decimal number with no unit marker
+      (e.g. ``4.2``); the column or definition names the denominator.
     """
 
     if unit == "percent":
         return f"{value:.{decimals}f}%"
+    if unit == "money":
+        return f"${value:,.{decimals}f}"
+    if unit == "duration":
+        return f"{value:,.{decimals}f} days"
+    if unit == "rate":
+        return f"{value:,.{decimals}f}"
     if decimals == 0:
         return f"{round(value):,}"
     return f"{value:,.{decimals}f}"

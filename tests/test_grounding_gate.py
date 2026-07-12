@@ -15,7 +15,7 @@ from outcome_receipts.config import load_spec
 from outcome_receipts.draft import draft
 from outcome_receipts.engine import compute_figures, read_csv
 from outcome_receipts.grounding import ground, redact_unbound
-from outcome_receipts.models import Figure
+from outcome_receipts.models import Figure, MetricSpec
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "housing-demo"
 
@@ -72,6 +72,46 @@ def test_redact_unbound_replaces_only_the_ungrounded_numbers() -> None:
     assert "[UNVERIFIED]" in cleaned
     # The grounded figures survive redaction.
     assert "12 clients" in cleaned
+
+
+def test_money_figure_binds_to_its_span_in_prose() -> None:
+    # A money display ($1,234.50) placed in narrative must bind to its figure: the
+    # gate's regex captures the leading $ and _normalize strips the $ and commas
+    # from both the span and the display so they compare equal.
+    spec = MetricSpec(
+        metric_id="aid",
+        description="total aid disbursed",
+        value_sql="SELECT 1234.5",
+        slice_sql="SELECT 1",
+        unit="money",
+        decimals=2,
+    )
+    [figure] = compute_figures([{"x": "1"}], [spec], clock=FixedClock())
+    assert figure.display == "$1,234.50"
+
+    result = ground(f"The program disbursed {figure.display} in emergency aid.", [figure])
+    assert result.ok
+    assert any(span.text == "$1,234.50" for span in result.bound)
+
+
+def test_duration_figure_binds_to_the_number_a_reader_sees() -> None:
+    # A duration display (30 days) binds to the bare "30" span: the suffix is
+    # stripped from the display in _normalize, not captured from prose, so it does
+    # not swallow the following word.
+    spec = MetricSpec(
+        metric_id="stay",
+        description="median length of stay",
+        value_sql="SELECT 30",
+        slice_sql="SELECT 1",
+        unit="duration",
+        decimals=0,
+    )
+    [figure] = compute_figures([{"x": "1"}], [spec], clock=FixedClock())
+    assert figure.display == "30 days"
+
+    result = ground(f"The median length of stay was {figure.display}.", [figure])
+    assert result.ok
+    assert any(span.text == "30" for span in result.bound)
 
 
 def test_empty_narrative_grounds_vacuously() -> None:

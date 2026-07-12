@@ -40,8 +40,11 @@ class MetricSpec:
     ``value_sql`` is a query returning a single scalar (the figure's value).
     ``slice_sql`` returns the rows the figure is computed over; it is used for the
     row count and the slice hash, the evidence that the value came from a specific
-    set of records. ``unit`` selects formatting: ``count`` or ``percent``.
-    ``format`` is an optional override of the default formatting for the unit.
+    set of records. ``unit`` selects formatting: ``count``, ``percent``, ``money``
+    (a ``$``-prefixed amount), ``duration`` (a number of ``days``), or ``rate`` (a
+    bare fixed-decimal number). ``decimals`` sets the fixed-decimal places; ``money``
+    typically uses 2. Each unit has one canonical display form (see ADR 0004), the
+    single string the grounding gate binds.
 
     ``description`` is a short label. ``definition`` is the precise, plain-language
     statement of what the figure counts: the time window, who is in scope, and the
@@ -111,7 +114,9 @@ class Receipt:
     column is visible rather than silent; those names are folded into the hash
     payload, so two slices with identical values under different column names
     hash differently. ``computed_at`` comes from an injected clock so a committed
-    eval is reproducible. ``definition`` carries the figure's plain-language
+    eval is reproducible. ``unit`` is the metric's unit (``count``, ``percent``,
+    ``money``, ``duration``, or ``rate``), carried so a consumer can re-derive the
+    display. ``definition`` carries the figure's plain-language
     definition forward from its ``MetricSpec`` so the receipt is self-describing
     without the spec on hand. ``kind`` carries the same forward label
     distinguishing an activity count (``output``) from a change in condition
