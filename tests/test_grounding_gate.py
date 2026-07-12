@@ -15,7 +15,7 @@ from outcome_receipts.config import load_spec
 from outcome_receipts.draft import draft
 from outcome_receipts.engine import compute_figures, read_csv
 from outcome_receipts.grounding import ground, redact_unbound
-from outcome_receipts.models import MetricSpec
+from outcome_receipts.models import Figure, MetricSpec
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "housing-demo"
 
@@ -115,7 +115,7 @@ def test_duration_figure_binds_to_the_number_a_reader_sees() -> None:
 
 
 def test_empty_narrative_grounds_vacuously() -> None:
-    figures = compute_figures([], (), clock=FixedClock())
+    figures: list[Figure] = []
     result = ground("No numbers here.", figures)
     assert result.ok
     assert result.total == 0

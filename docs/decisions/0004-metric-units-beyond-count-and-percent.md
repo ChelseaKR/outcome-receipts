@@ -1,6 +1,6 @@
 # 0004 — Metric units beyond count and percent
 
-Status: accepted (working tree, uncommitted)
+Status: accepted
 
 ## Context
 

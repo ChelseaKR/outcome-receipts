@@ -4,8 +4,9 @@ The receipts manifest proves every figure, but it is JSON, so the grant manager 
 program officer who actually receives the report cannot read it. This renders the
 same receipts as one self-contained HTML page a non-engineer opens in a browser:
 a summary table of every figure with its value and plain-language definition, then
-a detail block per figure carrying the receipt that backs it (the query, the row
-count, the slice hash, the timestamp). No SQL and no Python are needed to read it.
+a detail block per figure carrying the receipt that backs it (any recorded
+logic-model mapping, the query, the row count, the slice hash, the timestamp). No
+SQL and no Python are needed to read it.
 
 The page is a single file with inline styling and no script, so it travels beside
 the report and opens offline, keeping the project's zero-dependency posture. It is
@@ -87,6 +88,7 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
         '<th scope="col">Figure</th>'
         '<th scope="col">Value</th>'
         '<th scope="col">What it counts</th>'
+        '<th scope="col">Caveat</th>'
         '<th scope="col">Rows</th>'
         "</tr>",
         "</thead>",
@@ -95,11 +97,13 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
     for figure in figures:
         receipt = figure.receipt
         definition = receipt.definition or "(no definition recorded)"
+        caveat = receipt.caveat or "(none)"
         lines.append(
             "<tr>"
             f'<td><a href="#{_anchor(figure.metric_id)}">{_esc(figure.metric_id)}</a></td>'
             f'<td class="value">{_esc(figure.display)}</td>'
             f"<td>{_esc(definition)}</td>"
+            f"<td>{_esc(caveat)}</td>"
             f"<td>{receipt.row_count}</td>"
             "</tr>"
         )
@@ -110,20 +114,39 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
 def _figure_detail(figure: Figure) -> list[str]:
     receipt = figure.receipt
     definition = receipt.definition or "(no definition recorded)"
-    return [
+    lines = [
         f'<section class="figure" id="{_anchor(figure.metric_id)}" '
         f'aria-labelledby="{_anchor(figure.metric_id)}-h">',
         f'<h2 id="{_anchor(figure.metric_id)}-h">'
         f'{_esc(figure.metric_id)}: <span class="value">{_esc(figure.display)}</span></h2>',
         f"<p>{_esc(definition)}</p>",
-        "<dl>",
-        f"<dt>Query</dt><dd><code>{_esc(receipt.value_sql)}</code></dd>",
-        f"<dt>Rows in slice</dt><dd>{receipt.row_count}</dd>",
-        f'<dt>Slice hash</dt><dd class="hash">{_esc(receipt.slice_hash)}</dd>',
-        f"<dt>Computed at</dt><dd>{_esc(receipt.computed_at)}</dd>",
-        "</dl>",
-        "</section>",
     ]
+    if receipt.caveat:
+        lines.append(f'<p class="caveat">Caveat: {_esc(receipt.caveat)}</p>')
+    lines += [
+        "<dl>",
+    ]
+    # The logic-model mapping ties the figure to a theory-of-change row. Each field
+    # is optional, so a mapping term shows only when it was recorded; a figure with
+    # no mapping renders exactly as before.
+    for label, value in (
+        ("Indicator", receipt.indicator),
+        ("Data source", receipt.data_source),
+        ("Collection frequency", receipt.collection_frequency),
+    ):
+        if value:
+            lines.append(f"<dt>{label}</dt><dd>{_esc(value)}</dd>")
+    lines.extend(
+        [
+            f"<dt>Query</dt><dd><code>{_esc(receipt.value_sql)}</code></dd>",
+            f"<dt>Rows in slice</dt><dd>{receipt.row_count}</dd>",
+            f'<dt>Slice hash</dt><dd class="hash">{_esc(receipt.slice_hash)}</dd>',
+            f"<dt>Computed at</dt><dd>{_esc(receipt.computed_at)}</dd>",
+            "</dl>",
+            "</section>",
+        ]
+    )
+    return lines
 
 
 def render_trace_html(
