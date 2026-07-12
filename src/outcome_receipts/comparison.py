@@ -81,15 +81,19 @@ def _delta_spec(spec: MetricSpec, current: PeriodSpec, prior: PeriodSpec) -> Met
     )
 
 
-def _magnitude_display(value: float, decimals: int) -> str:
-    """Format the absolute change as a bare number the grounding gate can bind.
+def _magnitude_display(value: float, unit: str, decimals: int) -> str:
+    """Format the absolute change so the grounding gate can bind it.
 
-    A percentage metric's change is in percentage points, so it is shown without a
-    percent sign; the column header names the unit. This keeps the displayed token
-    a plain number that the gate matches, while the receipt keeps the signed value.
+    A ``money`` or ``duration`` change keeps its unit's decoration (the ``$`` prefix,
+    the ``days`` suffix), because a currency delta shown as a bare number would read
+    wrong. A ``percent`` change is in percentage points and a ``rate`` change is a
+    bare number, so both drop their marker and format as a plain number; the column
+    header names the unit. Either way the display stays a single token the gate
+    matches, while the receipt keeps the signed value.
     """
 
-    return _format(abs(value), "count", decimals)
+    display_unit = unit if unit in {"money", "duration"} else "count"
+    return _format(abs(value), display_unit, decimals)
 
 
 @dataclass(frozen=True)
@@ -156,7 +160,10 @@ def _compare_metric(
     prior_fig = compute_figure(conn, _for_period(spec, prior), clock=clock)
     current_fig = compute_figure(conn, _for_period(spec, current), clock=clock)
     raw_delta = compute_figure(conn, _delta_spec(spec, current, prior), clock=clock)
-    delta_fig = replace(raw_delta, display=_magnitude_display(raw_delta.value, spec.decimals))
+    delta_fig = replace(
+        raw_delta,
+        display=_magnitude_display(raw_delta.value, spec.unit, spec.decimals),
+    )
     row = ComparisonRow(
         base_metric_id=spec.metric_id,
         description=spec.description,

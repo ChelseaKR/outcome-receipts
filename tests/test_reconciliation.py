@@ -173,7 +173,18 @@ def test_table_renders_outcome_beside_financial_with_change_and_direction() -> N
 
 def test_example_board_report_grounds_and_gate_passes(tmp_path: Path) -> None:
     out = tmp_path / "board"
-    code = main(["run", "--config", str(BOARD), "--out", str(out), "--reproducible"])
+    code = main(
+        [
+            "run",
+            "--config",
+            str(BOARD),
+            "--out",
+            str(out),
+            "--reproducible",
+            "--approved-by",
+            "CI",
+        ]
+    )
     assert code == 0
     report = (out / "report.md").read_text(encoding="utf-8")
     assert "## Board reconciliation" in report

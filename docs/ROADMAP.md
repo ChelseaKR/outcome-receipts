@@ -74,6 +74,9 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
   to the prior by hash so tampering is detectable. `receipts verify-ledger`
   re-hashes the chain and fails closed on any break. The record of what was
   reported to whom is itself receipted. See ADR 0004.
+* **Shipped:** `receipts verify` is packaged as a reusable composite GitHub Action
+  (`action.yml`), so a downstream repo can gate CI on receipt drift with
+  `uses: ChelseaKR/outcome-receipts@v1`. See [ci-action.md](ci-action.md).
 
 ## v1.0.0 — Stability commitments
 
@@ -89,6 +92,14 @@ and semantic-versioning guarantees on the spec and the receipts manifest schema.
   rate is reported with Wilson confidence intervals.
 * Fixtures are seeded synthetic with planted ground-truth figures and a planted
   unverifiable number; zero real personal data.
+* **FIX-11 — property-based and mutation testing on the invariant core (done).**
+  The grounding gate is covered by Hypothesis property tests
+  (`tests/test_grounding_properties.py`): over adversarial narratives that mix
+  receipted figure displays with randomly injected numbers, every ungrounded
+  number lands in `unbound`, `ok` is true iff `unbound` is empty, redaction is
+  total, and grounding is idempotent after redaction. Mutation testing (mutmut,
+  `make mutation`) is scoped to `grounding.py` and `engine.py`; the property
+  tests kill every mutant in the grounding gate itself.
 
 ## Metrics ledger
 
@@ -101,6 +112,7 @@ and semantic-versioning guarantees on the spec and the receipts manifest schema.
 | LLM judge calibration (Cohen's kappa) | fail-closed on drift | AUTO (v0.3) |
 | Supply chain | SBOM, signed releases, SHA-pinned actions | AUTO — landed in `release.yml` and `ci.yml`'s `security` job (pip-audit, osv-scanner, gitleaks, zizmor) |
 | Accessibility (trace.html) | zero pa11y WCAG2AA errors | AUTO — `ci.yml`'s `accessibility` job |
+| Gate invariants (property + mutation) | Hypothesis properties; 0 surviving mutants in the grounding gate | AUTO |
 
 ## Out of scope
 

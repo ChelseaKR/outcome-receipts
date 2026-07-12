@@ -8,12 +8,19 @@ The eval renderer shows the gated grounding rate and whether it passed.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from outcome_receipts.charts import Chart
 from outcome_receipts.comparison import ComparisonResult, ReconciliationResult
+from outcome_receipts.diff import FigureDelta, ManifestDiff
 from outcome_receipts.evaluate import EvalReport
-from outcome_receipts.models import Figure
+from outcome_receipts.models import (
+    HASH_ALGORITHM,
+    HASH_CANONICALIZATION,
+    HASH_DIGEST_SIZE,
+    SCHEMA_VERSION,
+    Figure,
+)
 from outcome_receipts.provenance import Provenance, provenance_markdown, provenance_record
 
 
@@ -88,6 +95,69 @@ def render_reconciliation_table(result: ReconciliationResult) -> str:
     return "\n".join(lines)
 
 
+def _delta_display(delta: FigureDelta, key: str) -> str:
+    """The display string for one side of a changed figure, blank if absent."""
+
+    side = delta.prior if key == "prior" else delta.current
+    if side is None:
+        return ""
+    return str(side.get("display", side.get("value", "")))
+
+
+def render_diff_markdown(
+    diff: ManifestDiff,
+    *,
+    prior_label: str = "prior",
+    current_label: str = "current",
+) -> str:
+    """Render a manifest-to-manifest diff as a Markdown "Receipts diff" section.
+
+    A summary line counts the added, removed, changed, and unchanged figures. A
+    table then lists each changed figure with its before and after value and the
+    reasons it moved, followed by bulleted Added and Removed lists. Every value in
+    the table is copied from a receipt, so the diff asserts no number that is not
+    already grounded in one of the two manifests.
+    """
+
+    lines = [
+        "## Receipts diff",
+        "",
+        f"Comparing {current_label} with {prior_label}. "
+        f"{len(diff.added)} added, {len(diff.removed)} removed, "
+        f"{len(diff.changed)} changed, {len(diff.unchanged)} unchanged. "
+        "Each figure is a receipt; a move is reported only when the value, row "
+        "count, slice hash, or query differs, never the timestamp alone.",
+        "",
+    ]
+    if diff.changed:
+        lines.append(f"| Metric | {prior_label} value | {current_label} value | why |")
+        lines.append("|--------|------------|--------------|-----|")
+        for delta in diff.changed:
+            why = "; ".join(delta.reasons)
+            lines.append(
+                f"| {delta.metric_id} | {_delta_display(delta, 'prior')} | "
+                f"{_delta_display(delta, 'current')} | {why} |"
+            )
+        lines.append("")
+    if diff.added:
+        lines.append("### Added")
+        lines.append("")
+        for receipt in diff.added:
+            metric_id = receipt.get("metric_id", "")
+            display = receipt.get("display", receipt.get("value", ""))
+            lines.append(f"- {metric_id} = {display}")
+        lines.append("")
+    if diff.removed:
+        lines.append("### Removed")
+        lines.append("")
+        for receipt in diff.removed:
+            metric_id = receipt.get("metric_id", "")
+            display = receipt.get("display", receipt.get("value", ""))
+            lines.append(f"- {metric_id} = {display}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def render_charts_section(charts: Sequence[Chart], *, chart_dir: str) -> str:
     """Render the charts as image references with their accessible data tables.
 
@@ -107,6 +177,28 @@ def render_charts_section(charts: Sequence[Chart], *, chart_dir: str) -> str:
         lines.append(chart.data_table)
         lines.append("")
     return "\n".join(lines).rstrip()
+
+
+def _receipt_lines(figure: Figure) -> list[str]:
+    receipt = figure.receipt
+    lines = [f"- **{figure.metric_id}** = {figure.display}", f"  - kind: {receipt.kind}"]
+    optional = (
+        ("definition", receipt.definition),
+        ("indicator", receipt.indicator),
+        ("data source", receipt.data_source),
+        ("collection frequency", receipt.collection_frequency),
+        ("caveat", receipt.caveat),
+    )
+    lines.extend(f"  - {label}: {value}" for label, value in optional if value)
+    lines.extend(
+        [
+            f"  - query: `{receipt.value_sql}`",
+            f"  - rows in slice: {receipt.row_count}",
+            f"  - slice hash: `{receipt.slice_hash}`",
+            f"  - computed at: {receipt.computed_at}",
+        ]
+    )
+    return lines
 
 
 def render_report(
@@ -140,27 +232,41 @@ def render_report(
         lines.extend(["", provenance_markdown(provenance)])
     lines.extend(["", "## Receipts", ""])
     for figure in sorted(figures, key=lambda f: f.metric_id):
-        receipt = figure.receipt
-        lines.append(f"- **{figure.metric_id}** = {figure.display}")
-        lines.append(f"  - kind: {receipt.kind}")
-        if receipt.definition:
-            lines.append(f"  - definition: {receipt.definition}")
-        lines.append(f"  - query: `{receipt.value_sql}`")
-        lines.append(f"  - rows in slice: {receipt.row_count}")
-        lines.append(f"  - slice hash: `{receipt.slice_hash}`")
-        lines.append(f"  - computed at: {receipt.computed_at}")
+        lines.extend(_receipt_lines(figure))
     return "\n".join(lines) + "\n"
 
 
-def receipts_manifest(figures: Sequence[Figure], *, provenance: Provenance | None = None) -> str:
+def receipts_manifest(
+    figures: Sequence[Figure],
+    *,
+    provenance: Provenance | None = None,
+    artifacts: Mapping[str, str] | None = None,
+) -> str:
     """Render the receipts as a JSON manifest for machine verification.
 
     When ``provenance`` is given, the manifest also carries the machine-readable
     provenance attestation, so a consumer can check the no-model and gate-passed
     claims without re-reading the prose.
+
+    When ``artifacts`` is given (a mapping of bundle-relative path to its sha256
+    hex digest), the manifest records those digests so ``verify --bundle`` can
+    check that the sibling files were not swapped after export. The manifest never
+    hashes itself; the hash relation is one-directional. See ADR 0006.
+
+    The manifest is versioned: ``schema_version`` names the manifest schema and
+    ``hash`` describes exactly how every ``slice_hash`` was produced (algorithm,
+    digest size, canonicalization rule set), so a consumer can validate and
+    re-derive without reading the engine. See ``docs/schema/receipts.schema.json``
+    and ADR 0005.
     """
 
     payload: dict[str, object] = {
+        "schema_version": SCHEMA_VERSION,
+        "hash": {
+            "algorithm": HASH_ALGORITHM,
+            "digest_size": HASH_DIGEST_SIZE,
+            "canonicalization": HASH_CANONICALIZATION,
+        },
         "receipts": [
             {
                 "metric_id": f.receipt.metric_id,
@@ -169,16 +275,23 @@ def receipts_manifest(figures: Sequence[Figure], *, provenance: Provenance | Non
                 "unit": f.receipt.unit,
                 "kind": f.receipt.kind,
                 "definition": f.receipt.definition,
+                "indicator": f.receipt.indicator,
+                "data_source": f.receipt.data_source,
+                "collection_frequency": f.receipt.collection_frequency,
+                "caveat": f.receipt.caveat,
                 "value_sql": f.receipt.value_sql,
                 "row_count": f.receipt.row_count,
                 "slice_hash": f.receipt.slice_hash,
+                "column_names": list(f.receipt.column_names),
                 "computed_at": f.receipt.computed_at,
             }
             for f in sorted(figures, key=lambda f: f.metric_id)
-        ]
+        ],
     }
     if provenance is not None:
         payload["provenance"] = provenance_record(provenance)
+    if artifacts is not None:
+        payload["artifacts"] = dict(sorted(artifacts.items()))
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
