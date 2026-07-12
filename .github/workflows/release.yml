@@ -136,6 +136,19 @@ jobs:
             --output-format JSON \
             --validate \
             --output-file "dist/outcome-receipts.cdx.json"
+          # Reproducible CycloneDX output omits its random serial number, while
+          # GitHub's SBOM predicate detector requires one. Derive a stable UUIDv5
+          # from the immutable release URL so each tag gets a unique, repeatable
+          # serial without weakening reproducibility.
+          serial_number=$(.sbom-venv/bin/python -c \
+            'import os, uuid; value = "https://github.com/ChelseaKR/outcome-receipts/releases/tag/" + os.environ["RELEASE_TAG"]; print("urn:uuid:" + str(uuid.uuid5(uuid.NAMESPACE_URL, value)))')
+          jq --arg serial_number "$serial_number" \
+            '.serialNumber = $serial_number' \
+            dist/outcome-receipts.cdx.json > dist/outcome-receipts.cdx.tmp
+          mv dist/outcome-receipts.cdx.tmp dist/outcome-receipts.cdx.json
+          jq -e \
+            '.bomFormat == "CycloneDX" and (.specVersion | type == "string") and (.serialNumber | startswith("urn:uuid:"))' \
+            dist/outcome-receipts.cdx.json >/dev/null
       - name: Attest the SBOM (signed via Sigstore)
         # `actions/attest-sbom` v2 rejected the CycloneDX 1.6 document emitted
         # by cyclonedx-bom 7.3. `actions/attest` v4 is the maintained successor
