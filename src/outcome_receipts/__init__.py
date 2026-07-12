@@ -16,6 +16,7 @@ Supported v0.x surface:
 - Verification: :func:`verify_manifest`, :class:`VerifyResult`, :class:`Check`
 - Reporting: :func:`render_report`, :func:`receipts_manifest`
 - Comparison: :func:`compute_comparison`, :class:`ComparisonResult`
+- Diffing: :func:`diff_manifests`, :class:`FigureDelta`, :class:`ManifestDiff`
 - Configuration: :func:`load_spec`, :class:`Spec`
 - Clocks: :class:`Clock`, :class:`SystemClock`, :class:`FixedClock`
 - Core models: :class:`Figure`, :class:`MetricSpec`, :class:`Receipt`,
@@ -36,6 +37,7 @@ __version__ = version("outcome-receipts")
 from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import ComparisonResult, compute_comparison
 from outcome_receipts.config import Spec, load_spec
+from outcome_receipts.diff import FigureDelta, ManifestDiff, diff_manifests
 from outcome_receipts.draft import draft
 from outcome_receipts.engine import (
     compute_figure,
@@ -61,8 +63,10 @@ __all__ = [
     "ComparisonResult",
     # Core models
     "Figure",
+    "FigureDelta",
     "FixedClock",
     "GroundingResult",
+    "ManifestDiff",
     "MetricSpec",
     "Receipt",
     "ReportSpec",
@@ -75,6 +79,7 @@ __all__ = [
     "compute_figure",
     # Pipeline
     "compute_figures",
+    "diff_manifests",
     # Narrative
     "draft",
     # Grounding gate

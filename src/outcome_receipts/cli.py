@@ -12,6 +12,8 @@ Commands:
           on any drift
   verify-ledger
           re-hash the append-only export ledger and fail if the chain is broken
+  diff    compare two receipts manifests from different reporting cycles and report
+          which figures moved, were added, or removed, and why
   eval    score the drafted narrative's grounding and write the eval report
 
 Every command exits with a code from the contract below, and ``--json`` makes any
@@ -35,6 +37,7 @@ from outcome_receipts.charts import Chart, render_charts
 from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import ComparisonResult, compute_comparison
 from outcome_receipts.config import Spec, load_spec
+from outcome_receipts.diff import diff_manifests
 from outcome_receipts.draft import draft
 from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import EvalReport, evaluate
@@ -44,6 +47,7 @@ from outcome_receipts.models import Figure, GroundingResult, NumericSpan
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
     receipts_manifest,
+    render_diff_markdown,
     render_eval_markdown,
     render_report,
 )
@@ -587,6 +591,43 @@ def _eval_payload(report: EvalReport, *, out: str | None) -> dict[str, object]:
     }
 
 
+def _cmd_diff(args: argparse.Namespace) -> int:
+    prior = json.loads(Path(args.prior).read_text(encoding="utf-8"))
+    current = json.loads(Path(args.current).read_text(encoding="utf-8"))
+    diff = diff_manifests(prior, current)
+    markdown = render_diff_markdown(diff, prior_label=args.prior, current_label=args.current)
+    if args.json:
+        _emit_json(
+            {
+                "command": "diff",
+                "prior": args.prior,
+                "current": args.current,
+                "added": list(diff.added),
+                "removed": list(diff.removed),
+                "changed": [
+                    {
+                        "metric_id": item.metric_id,
+                        "prior": item.prior,
+                        "current": item.current,
+                        "reasons": list(item.reasons),
+                    }
+                    for item in diff.changed
+                ],
+                "unchanged": list(diff.unchanged),
+                "out": args.out,
+            }
+        )
+        if args.out:
+            Path(args.out).write_text(markdown, encoding="utf-8")
+        return EXIT_OK
+    if args.out:
+        Path(args.out).write_text(markdown, encoding="utf-8")
+        print(f"wrote diff: {args.out}")
+    else:
+        print(markdown)
+    return 0
+
+
 def _cmd_eval(args: argparse.Namespace) -> int:
     spec, _rows, figures = _load_and_compute(args.config, reproducible=True, quiet=args.json)
     narrative = draft(spec.report, figures)
@@ -723,6 +764,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--ledger", required=True, help="path to the export-ledger.jsonl to check"
     )
     verify_ledger_parser.set_defaults(func=_cmd_verify_ledger)
+
+    diff_parser = sub.add_parser(
+        "diff",
+        help="compare two receipts manifests and report what moved and why",
+        parents=[json_parent],
+    )
+    diff_parser.add_argument("prior", help="path to the prior cycle's receipts.json")
+    diff_parser.add_argument("current", help="path to the current cycle's receipts.json")
+    diff_parser.add_argument("--out", help="write the diff markdown here instead of stdout")
+    diff_parser.set_defaults(func=_cmd_diff)
 
     eval_parser = sub.add_parser(
         "eval", help="score the drafted narrative's grounding", parents=[json_parent]
