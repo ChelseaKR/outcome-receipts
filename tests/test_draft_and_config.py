@@ -61,6 +61,21 @@ def test_load_spec_rejects_unknown_unit(tmp_path: Path) -> None:
         load_spec(bad)
 
 
+@pytest.mark.parametrize("unit", ["count", "percent", "money", "duration", "rate"])
+def test_load_spec_accepts_each_supported_unit(tmp_path: Path, unit: str) -> None:
+    good = tmp_path / f"{unit}.toml"
+    good.write_text(
+        '[data]\npath = "x.csv"\n'
+        '[report]\ntemplate = "{m}"\n'
+        f'[metrics.m]\nunit = "{unit}"\n'
+        'value_sql = "SELECT 1"\nslice_sql = "SELECT 1"\n',
+        encoding="utf-8",
+    )
+    spec = load_spec(good)
+    [metric] = spec.report.metrics
+    assert metric.unit == unit
+
+
 def test_load_spec_requires_a_metric(tmp_path: Path) -> None:
     bad = tmp_path / "bad.toml"
     bad.write_text('[data]\npath = "x.csv"\n[report]\ntemplate = "none"\n', encoding="utf-8")

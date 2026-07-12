@@ -172,3 +172,24 @@ def test_cli_diff_over_tmp_files_exits_zero(tmp_path: Path, capsys: Any) -> None
     out = capsys.readouterr().out
     assert "## Receipts diff" in out
     assert "value 42.0 -> 47.0" in out
+
+
+def test_cli_diff_json_obeys_machine_readable_contract(tmp_path: Path, capsys: Any) -> None:
+    prior_path = tmp_path / "prior.json"
+    current_path = tmp_path / "current.json"
+    prior_path.write_text(
+        json.dumps(_manifest(_receipt("served", value=42.0, display="42"))),
+        encoding="utf-8",
+    )
+    current_path.write_text(
+        json.dumps(_manifest(_receipt("served", value=47.0, display="47"))),
+        encoding="utf-8",
+    )
+
+    code = main(["diff", str(prior_path), str(current_path), "--json"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "diff"
+    assert payload["changed"][0]["metric_id"] == "served"
+    assert payload["changed"][0]["reasons"] == ["value 42.0 -> 47.0"]
