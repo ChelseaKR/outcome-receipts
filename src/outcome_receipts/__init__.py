@@ -47,6 +47,7 @@ from outcome_receipts.engine import (
 )
 from outcome_receipts.grounding import ground, redact_unbound
 from outcome_receipts.models import (
+    DraftingSpec,
     Figure,
     GroundingResult,
     MetricSpec,
@@ -61,6 +62,7 @@ __all__ = [
     # Clocks
     "Clock",
     "ComparisonResult",
+    "DraftingSpec",
     # Core models
     "Figure",
     "FigureDelta",

@@ -281,6 +281,16 @@ class TemplateSpec:
 
 
 @dataclass(frozen=True)
+class DraftingSpec:
+    """Optional narrative provider policy; deterministic and disabled by default."""
+
+    provider: str = "deterministic"
+    enabled: bool = False
+    model_id: str = ""
+    max_tokens: int = 1200
+
+
+@dataclass(frozen=True)
 class ReportSpec:
     """A report template plus the metrics it needs.
 
@@ -307,6 +317,7 @@ class ReportSpec:
     data_checks: tuple[DataCheck, ...] = field(default_factory=tuple)
     reconciliation: ReconciliationSpec | None = None
     templates: tuple[TemplateSpec, ...] = field(default_factory=tuple)
+    drafting: DraftingSpec = field(default_factory=DraftingSpec)
 
     @property
     def effective_templates(self) -> tuple[TemplateSpec, ...]:

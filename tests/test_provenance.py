@@ -45,6 +45,13 @@ def test_provenance_record_is_machine_readable() -> None:
     assert record["numbers_from"] == "deterministic_sql"
     assert record["grounding_gate"] == "pass"
     assert record["numbers_bound"] == 4
+    assert record["narrative_drafter"] == "deterministic"
+
+
+def test_provenance_records_bedrock_narrative_without_claiming_model_numbers() -> None:
+    record = provenance_record(Provenance(numbers_bound=4, narrative_drafter="bedrock"))
+    assert record["narrative_drafter"] == "bedrock"
+    assert record["model_wrote_numbers"] is False
 
 
 def test_unbound_count_marks_the_gate_failed() -> None:

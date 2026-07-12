@@ -42,6 +42,7 @@ class Provenance:
     approved_at: str | None = None
     suppression_applied: bool = False
     aggregate_only: bool = True
+    narrative_drafter: str = "deterministic"
 
     @property
     def gate_pass(self) -> bool:
@@ -90,6 +91,7 @@ def provenance_record(prov: Provenance) -> dict[str, object]:
         "approved_by": prov.approved_by,
         "suppression_applied": prov.suppression_applied,
         "aggregate_only": prov.aggregate_only,
+        "narrative_drafter": prov.narrative_drafter,
     }
     if prov.approved_by is not None:
         record["approved_at"] = prov.approved_at

@@ -40,6 +40,7 @@ from pathlib import Path
 from outcome_receipts import __version__
 from outcome_receipts.bundle import bundle_manifest
 from outcome_receipts.bundle import verify_bundle as verify_signed_bundle
+from outcome_receipts.cards import write_cards
 from outcome_receipts.charts import Chart, render_charts
 from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import (
@@ -56,6 +57,11 @@ from outcome_receipts.evaluate import EvalReport, evaluate
 from outcome_receipts.grounding import ground
 from outcome_receipts.ledger import LedgerEntry, append_export, verify_chain
 from outcome_receipts.mapping import build_mapping_queue
+from outcome_receipts.model_draft import (
+    DraftingPolicyError,
+    NarrativeDrafter,
+    build_narrative_drafter,
+)
 from outcome_receipts.models import Figure, GroundingResult, NumericSpan, TemplateSpec
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
@@ -381,8 +387,14 @@ def _export_outputs(
 
 
 def _draft_templates(
-    spec: Spec, figures: Sequence[Figure]
+    spec: Spec, figures: Sequence[Figure], drafter: NarrativeDrafter | None = None
 ) -> list[tuple[TemplateSpec, str, GroundingResult]]:
+    if drafter is not None:
+        return [
+            (template, narrative, ground(narrative, figures))
+            for template in spec.report.effective_templates
+            for narrative in (drafter.draft(template.template, figures),)
+        ]
     if not spec.report.templates:
         template = spec.report.effective_templates[0]
         narrative = draft(spec.report, figures)
@@ -440,6 +452,7 @@ def _write_template_exports(
     key: bytes | None,
     *,
     suppression_applied: bool = False,
+    narrative_drafter: str = "deterministic",
 ) -> tuple[list[tuple[TemplateSpec, dict[str, str | None], LedgerEntry]], Path, bool]:
     base_out = Path(args.out)
     fan_out = bool(spec.report.templates)
@@ -453,6 +466,7 @@ def _write_template_exports(
             approved_at=approved_at,
             suppression_applied=suppression_applied,
             aggregate_only=True,
+            narrative_drafter=narrative_drafter,
         )
         out_dir = base_out / template.template_id if fan_out else base_out
         outputs, entry, _ = _export_outputs(
@@ -491,11 +505,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
     spec, _rows, figures, comparison, reconciliation = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
     )
+    narrative_drafter = build_narrative_drafter(
+        spec.report.drafting, allow_cloud=args.allow_cloud_drafting
+    )
     # First gate: generated/deterministic text must bind to the real computed
     # figures before privacy transforms can hide an invented number.
     raw_charts = render_charts(spec.report.charts, figures)
     raw_claims = ground(_claims_text(comparison, reconciliation, raw_charts), figures)
-    raw_drafts = _draft_templates(spec, figures)
+    raw_drafts = _draft_templates(spec, figures, narrative_drafter)
     raw_gate_pass = raw_claims.ok and all(result.ok for _t, _n, result in raw_drafts)
 
     suppressed_figures, suppression = suppress_figures(figures)
@@ -503,7 +520,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     comparison, reconciliation = _redact_report_structures(comparison, reconciliation, publishable)
     charts = render_charts(spec.report.charts, publishable)
     claims_result = ground(_claims_text(comparison, reconciliation, charts), publishable)
-    drafts = _draft_templates(spec, publishable)
+    drafts = _draft_templates(spec, publishable, narrative_drafter)
     combined_result = ground(" ".join(narrative for _t, narrative, _r in drafts), publishable)
     gate_pass = raw_gate_pass and claims_result.ok and all(result.ok for _t, _n, result in drafts)
     template_payload = {
@@ -579,6 +596,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         approved_at,
         key,
         suppression_applied=True,
+        narrative_drafter="bedrock" if narrative_drafter is not None else "deterministic",
     )
     if args.json:
         flat_outputs: object = (
@@ -933,6 +951,17 @@ def _cmd_map(args: argparse.Namespace) -> int:
     return EXIT_OK if queue.ok else EXIT_VERIFY_FAIL
 
 
+def _cmd_cards(args: argparse.Namespace) -> int:
+    current = write_cards(Path(args.out), check=args.check)
+    if args.json:
+        _emit_json({"command": "cards", "ok": current, "out": args.out, "check": args.check})
+    elif args.check:
+        print("responsible-AI cards: current" if current else "responsible-AI cards: DRIFT")
+    else:
+        print(f"wrote model and data cards: {args.out}")
+    return EXIT_OK if current else EXIT_VERIFY_FAIL
+
+
 def build_parser() -> argparse.ArgumentParser:
     # ``--json`` is understood both before the subcommand (on the top parser) and
     # after it (via this shared parent), so `receipts --json run …` and
@@ -958,6 +987,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--config", required=True, help="path to the report spec TOML")
     run_parser.add_argument("--out", default="out", help="output directory")
+    run_parser.add_argument(
+        "--allow-cloud-drafting",
+        action="store_true",
+        help="authorize the config-enabled Bedrock drafter for this run",
+    )
     run_parser.add_argument(
         "--reproducible",
         action="store_true",
@@ -1086,6 +1120,13 @@ def build_parser() -> argparse.ArgumentParser:
     map_parser.add_argument("--out", help="write the review queue JSON here")
     map_parser.set_defaults(func=_cmd_map)
 
+    cards_parser = sub.add_parser(
+        "cards", help="generate or check the model and data cards", parents=[json_parent]
+    )
+    cards_parser.add_argument("--out", default="docs", help="card output directory")
+    cards_parser.add_argument("--check", action="store_true", help="fail if committed cards drift")
+    cards_parser.set_defaults(func=_cmd_cards)
+
     return parser
 
 
@@ -1093,7 +1134,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     func = args.func
-    result: int = func(args)
+    try:
+        result: int = func(args)
+    except DraftingPolicyError as exc:
+        print(f"drafting policy: FAIL — {exc}", file=sys.stderr)
+        return EXIT_VERIFY_FAIL
     return result
 
 

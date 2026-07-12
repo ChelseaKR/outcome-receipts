@@ -24,6 +24,7 @@ from outcome_receipts.models import (
     ChartSpec,
     ComparisonSpec,
     DataCheck,
+    DraftingSpec,
     MetricSpec,
     PeriodSpec,
     ReconciliationRow,
@@ -274,6 +275,19 @@ def load_spec(path: str | Path) -> Spec:
     comparison = _parse_comparison(data.get("comparison"))
     data_checks = _parse_data_checks(data.get("data_checks"))
     reconciliation = _parse_reconciliation(data.get("reconciliation"))
+    drafting_raw = report_section.get("drafting", {})
+    if not isinstance(drafting_raw, dict):
+        raise ValueError("[report.drafting] must be a table")
+    drafting = DraftingSpec(
+        provider=str(drafting_raw.get("provider", "deterministic")),
+        enabled=bool(drafting_raw.get("enabled", False)),
+        model_id=str(drafting_raw.get("model_id", "")),
+        max_tokens=int(drafting_raw.get("max_tokens", 1200)),
+    )
+    if drafting.provider not in {"deterministic", "bedrock"}:
+        raise ValueError("report.drafting.provider must be 'deterministic' or 'bedrock'")
+    if drafting.enabled and drafting.provider == "bedrock" and not drafting.model_id:
+        raise ValueError("enabled Bedrock drafting requires report.drafting.model_id")
 
     report = ReportSpec(
         title=title,
@@ -284,5 +298,6 @@ def load_spec(path: str | Path) -> Spec:
         data_checks=data_checks,
         reconciliation=reconciliation,
         templates=templates,
+        drafting=drafting,
     )
     return Spec(data_path=_resolve(base, str(data_section["path"])), report=report)

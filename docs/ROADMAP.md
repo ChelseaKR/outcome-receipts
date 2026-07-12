@@ -57,11 +57,16 @@ compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> expor
 
 ## v0.3.0 — The drafting seam
 
-* An optional Claude-on-Bedrock drafter that writes the narrative prose around the
+* ✅ An optional Claude-on-Bedrock drafter that writes the narrative prose around the
   receipted figures, guarded by the same grounding gate. Off by default and
-  policy-gated, so the deterministic drafter remains the zero-dependency default.
+  policy-gated by config plus `--allow-cloud-drafting`, so the deterministic
+  drafter remains the zero-dependency default. The manifest records which
+  narrative drafter was used; both raw and publishable drafts must pass the gate.
 * If an LLM judge scores narrative faithfulness, calibrate against human labels
   with Cohen's kappa and fail closed on drift.
+* ✅ Generated [model](MODEL-CARD.md) and [data](DATA-CARD.md) cards describe the
+  provider boundary, limitations, evaluation, privacy, and retention. Tagged
+  release verification fails if committed cards drift from the generator.
 
 ## v0.4.0 — The metric-mapping agent
 

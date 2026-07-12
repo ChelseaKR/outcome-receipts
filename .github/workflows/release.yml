@@ -86,6 +86,8 @@ jobs:
         run: make install
       - name: Verify (ruff, mypy --strict, pytest)
         run: make verify
+      - name: Model and data cards match the release generator
+        run: uv run receipts cards --out docs --check
       - name: CHANGELOG has a section for this release
         run: |
           set -euo pipefail

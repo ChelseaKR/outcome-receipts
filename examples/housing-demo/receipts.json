@@ -14,6 +14,7 @@
     "approved_by": "CI",
     "grounding_gate": "pass",
     "model_wrote_numbers": false,
+    "narrative_drafter": "deterministic",
     "numbers_bound": 1,
     "numbers_from": "deterministic_sql",
     "numbers_unbound": 0,
