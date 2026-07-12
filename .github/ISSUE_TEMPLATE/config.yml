@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/ChelseaKR/outcome-receipts/discussions
+    about: Ask about setup, metric definitions, or the trust chain without filing a bug.
+  - name: Report a vulnerability privately
+    url: https://github.com/ChelseaKR/outcome-receipts/security/advisories/new
+    about: Do not disclose security or privacy vulnerabilities in a public issue.

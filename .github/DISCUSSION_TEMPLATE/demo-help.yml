@@ -1,0 +1,27 @@
+title: "Demo help: "
+labels: ["demo-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask about the synthetic demo here. Do not include client-level data, identifiers, credentials, or a real service export.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Include the command or generated page involved. Redact local paths and sensitive information.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I included no client data, identifiers, credentials, or real service export.
+          required: true

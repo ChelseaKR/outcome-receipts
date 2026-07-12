@@ -12,6 +12,7 @@ one place.
 ## Primary Docs
 
 - [Readme](../README.md)
+- [Five-minute demo](TRY_THE_DEMO.md)
 - [Project Scope](PROJECT-SCOPE.md)
 - [Documentation Audit](DOCUMENTATION-AUDIT.md)
 - [Roadmap](ROADMAP.md)
@@ -28,3 +29,9 @@ one place.
 - [Research Roadmap](RESEARCH-ROADMAP.md)
 - [Threat Model](THREAT-MODEL.md)
 - [User Research](USER-RESEARCH.md)
+
+## Adoption and outreach
+
+- [Six-week discovery campaign](launch/CAMPAIGN.md)
+- [Canonical explainer](launch/every-number-has-a-receipt.md)
+- [Outreach kit](launch/OUTREACH.md)

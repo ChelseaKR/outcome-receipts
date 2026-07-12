@@ -14,6 +14,13 @@ retitled with the real release date when `v0.1.0` is tagged and
 ## [Unreleased]
 
 ### Added
+- **Repository discovery and practitioner-feedback kit.** Added a five-minute
+  demo walkthrough, an exact-text social preview asset, structured demo and
+  schema-mapping issue forms, a Discussions template, a pull-request checklist,
+  an executable six-week discovery campaign, channel-ready outreach drafts, a
+  canonical explainer, and a rolling GitHub-traffic snapshot script. The public
+  call to action is a verified demo run rather than a vanity star count, and all
+  feedback paths warn against posting client-level data or real service exports.
 - **Human approval sign-off gate before export (R8).** `receipts run` now
   records a named human approver after the grounding gate passes and before
   any file is written. `--approved-by NAME` records the approver
@@ -46,10 +53,11 @@ retitled with the real release date when `v0.1.0` is tagged and
     (`importlib.metadata.version`), so pyproject.toml is the only place the
     version is written; new `tests/test_version.py` pins `__version__`,
     `receipts --version`, and the installed metadata together (REL-02 / BUG-4).
-  - `docs/rulesets/main.json`: the exported branch ruleset of record for `main`
-    (require PR; required checks `verify`/`security`/`accessibility`; dismiss
-    stale reviews; no force-push; linear history; signed commits; no bypass
-    actors), ready for the owner to apply (CICD-12).
+  - `docs/rulesets/main.json`: the intended full branch ruleset for `main`. The
+    live `protect-main` ruleset currently enforces required checks, blocks
+    force-pushes and deletion, and has no bypass actors. Pull-request, review,
+    linear-history, and signed-commit rules remain recorded here for a future
+    multi-maintainer policy update (CICD-12).
   - `ci.yml` hygiene: `setup-uv` aligned to the same v6 SHA as `release.yml`
     with `version: "0.11.19"` pinned everywhere, dependency cache keyed on
     `uv.lock`, and the pa11y step reads `$GITHUB_WORKSPACE` from the

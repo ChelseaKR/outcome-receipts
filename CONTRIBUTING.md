@@ -33,12 +33,12 @@ Individual targets: `make lint`, `make type`, `make test`, `make eval`, `make ru
 
 ## Branch model
 
-Work on a short-lived topic branch cut from `main`, one logical change per branch, and open a
-pull request back into `main`. **`main` is not yet protected on GitHub** (no ruleset, no
-required check — this is a known, tracked gap, not an oversight); the convention below is
-followed by discipline until the ruleset lands, not mechanically enforced:
-every gate must be green before merge, and direct pushes to `main` are avoided even though
-GitHub does not currently block them.
+Work on a short-lived topic branch cut from `main`, one logical change per branch,
+and open a pull request back into `main`. The active `protect-main` ruleset blocks
+force-pushes and branch deletion and requires the `verify`, `security`, and
+`accessibility` checks. It does not currently require a pull request because the
+repository has one maintainer, so direct pushes remain prohibited by project
+policy rather than by GitHub. Every gate must be green before merge.
 
 ## Commit messages
 
