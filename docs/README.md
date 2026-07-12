@@ -1,6 +1,8 @@
 # Outcome Receipts Docs
 
-This index is the handoff point for the documentation sweep last reviewed on 2026-07-08. It keeps the project map, audit record, and main operating docs in one place.
+This index is the handoff point for the documentation set last reviewed on
+2026-07-11. It keeps the project map, audit record, and main operating docs in
+one place.
 
 ## Documentation Audit
 
