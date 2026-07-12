@@ -232,7 +232,7 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Code Quality | Applies — ruff, mypy --strict, pytest, merge-blocking |
 | Documentation | Applies |
 | Quality & Metrics | Applies — committed eval with Wilson CIs, fail-closed gate |
-| AI Evaluation | Applies when the drafting seam lands (v0.3); v0.1 has no model in any path |
+| AI Evaluation | Applies only to the optional Bedrock drafting seam; numeric invention is merge-blocked, while a future model judge requires human-label calibration before use |
 | Security & Supply-Chain | Applies — SHA-pinned actions, least-privilege tokens, CycloneDX SBOM, and Sigstore-signed build provenance in `release.yml`; `ci.yml`'s `security` job runs pip-audit, osv-scanner, gitleaks, and zizmor on every push and PR. Open: CodeQL and OpenSSF Scorecard, both gated on the repo going public |
 | CI/CD | Applies — `make verify` mirrors CI; `release.yml` re-runs it at the tagged commit before signing or publishing |
 | Accessibility | Applies to the chart output and the trace view — every chart ships an SVG with `role="img"`, `<title>`, and `<desc>` paired with an equivalent data table, and the trace-view HTML is semantic and high-contrast (one `<h1>`, `lang` set, table headers with `scope`, a `<caption>`); `ci.yml`'s `accessibility` job runs pa11y (WCAG2AA) against the built trace view; the CLI core stays headless |

@@ -37,6 +37,7 @@ PROMISED = (
     "SystemClock",
     "FixedClock",
     "Figure",
+    "DraftingSpec",
     "MetricSpec",
     "Receipt",
     "ReportSpec",
