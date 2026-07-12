@@ -171,6 +171,15 @@ def test_table_renders_outcome_beside_financial_with_change_and_direction() -> N
     assert "| 3,000 | 2,800 | 200 | decrease |" in table
 
 
+def test_reconciliation_table_has_spanish_label_and_direction_parity() -> None:
+    result = compute_reconciliation(ROWS, _spec(), clock=FixedClock())
+    table = render_reconciliation_table(result, locale="es")
+    assert "## Conciliación de la junta directiva" in table
+    assert "(resultado)" in table and "(financiero)" in table
+    assert "| 3,000 | 2,800 | 200 | disminución |" in table
+    assert "| Elemento | Q1 2025 | Q2 2025 | Cambio | Dirección |" in table
+
+
 def test_example_board_report_grounds_and_gate_passes(tmp_path: Path) -> None:
     out = tmp_path / "board"
     code = main(

@@ -323,6 +323,7 @@ def _export_outputs(
         charts=charts,
         chart_dir=_CHART_DIR,
         provenance=provenance,
+        locale=args.locale,
     )
     trace_text = render_trace_html(
         export_title, figures, provenance=provenance, comparison=comparison
@@ -913,6 +914,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--recipient",
         default=None,
         help="who the report was exported to, recorded in the export ledger",
+    )
+    run_parser.add_argument(
+        "--locale",
+        default="en",
+        choices=("en", "es"),
+        help="language for the report's prose and labels (figures are unchanged)",
     )
     run_parser.add_argument(
         "--sign-key-file",
