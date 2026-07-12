@@ -20,6 +20,7 @@ housing, a permanent-housing rate of {pct_permanent}.
 description = "Distinct clients with any enrollment in the period."
 definition = "Each person enrolled in the housing program during the reporting period, counted once by client_id even if they enrolled more than once. The unit is the person, not the enrollment."
 kind = "output"
+caveat = "Client records missing a client_id are dropped before counting, so this figure may slightly undercount clients with incomplete intake data."
 unit = "count"
 value_sql = "SELECT COUNT(DISTINCT client_id) FROM data"
 slice_sql = "SELECT client_id FROM data"

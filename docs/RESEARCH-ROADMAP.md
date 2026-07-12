@@ -62,7 +62,7 @@ S afternoon · M day or two · L week or more.
 
 | ID | Expansion | Personas | Pri | Effort | Evidence / notes |
 | --- | --- | --- | --- | --- | --- |
-| E1 | **Caveat / footnote binding** — attach a qualifying note to a figure so it travels with the receipt and the narrative, inside the gate rather than as loose prose. | P1,P2 | P1 | M | Real reports carry caveats; today they live outside the gate (theme 2). **[NET-NEW]** |
+| E1 | **Caveat / footnote binding** — attach a qualifying note to a figure so it travels with the receipt and the narrative, inside the gate rather than as loose prose. | P1,P2 | P1 | M | Real reports carry caveats; today they live outside the gate (theme 2). **[NET-NEW]** ✅ Implemented 2026-07-02 |
 | E2 | **Common-report / multi-funder reuse export** — generate the same receipted figure set into more than one funder template format. | P1,P3 | P1 | M | EV2: only ~1/3 of funders accept a common report and reporting outsources burden; reuse is the time win. Parallels the v1.0 "second template format." **[corroborates ROADMAP v1.0]** (partial) · **[NET-NEW]** framing |
 | E3 | **Logic-model / indicator mapping** — optional `indicator` and `data_source` fields per metric tying a figure to a theory-of-change row, with collection frequency. | P8,C-group | P2 | M | EV4. Makes the tool legible to evaluators without becoming a measurement product. **[NET-NEW]** |
 | E4 | **Metric-mapping agent** — map a funder template's required metrics to `MetricSpec`s over a schema-variant export (HMIS CSV and common funder shapes), with a review queue for low-confidence mappings. | P5 | P2 | L | **[corroborates ROADMAP v0.4]** — the hard, unserved part. EV3 (scattered data) confirms the need. Lands after trust machinery. |

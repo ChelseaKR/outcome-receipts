@@ -106,6 +106,8 @@ def render_report(
         lines.append(f"  - kind: {receipt.kind}")
         if receipt.definition:
             lines.append(f"  - definition: {receipt.definition}")
+        if receipt.caveat:
+            lines.append(f"  - caveat: {receipt.caveat}")
         lines.append(f"  - query: `{receipt.value_sql}`")
         lines.append(f"  - rows in slice: {receipt.row_count}")
         lines.append(f"  - slice hash: `{receipt.slice_hash}`")
@@ -152,6 +154,7 @@ def receipts_manifest(
                 "unit": f.receipt.unit,
                 "kind": f.receipt.kind,
                 "definition": f.receipt.definition,
+                "caveat": f.receipt.caveat,
                 "value_sql": f.receipt.value_sql,
                 "row_count": f.receipt.row_count,
                 "slice_hash": f.receipt.slice_hash,

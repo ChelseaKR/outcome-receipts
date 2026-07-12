@@ -274,6 +274,7 @@ def compute_figure(
         computed_at=clock.now_iso(),
         definition=spec.definition,
         kind=spec.kind,
+        caveat=spec.caveat,
         column_names=columns,
     )
     return Figure(

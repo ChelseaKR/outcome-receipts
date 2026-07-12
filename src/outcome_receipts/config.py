@@ -65,6 +65,7 @@ def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
         decimals=int(body.get("decimals", 0)),
         definition=str(body.get("definition", "")),
         kind=kind,
+        caveat=str(body.get("caveat", "")),
     )
 
 

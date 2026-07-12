@@ -40,7 +40,7 @@ def test_trace_is_an_accessible_html_document() -> None:
     assert '<html lang="en">' in html
     assert html.count("<h1") == 1
     assert "<caption>Figures in this report</caption>" in html
-    assert html.count('scope="col"') == 4
+    assert html.count('scope="col"') == 5
 
 
 def test_trace_shows_value_and_definition() -> None:

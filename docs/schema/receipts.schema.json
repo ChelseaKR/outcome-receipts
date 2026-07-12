@@ -73,6 +73,10 @@
             "description": "The plain-language definition of what the figure counts.",
             "type": "string"
           },
+          "caveat": {
+            "description": "An optional qualifying note that travels with the figure and its receipt.",
+            "type": "string"
+          },
           "value_sql": {
             "description": "The query that produced the scalar value.",
             "type": "string"
