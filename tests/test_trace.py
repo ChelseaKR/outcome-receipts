@@ -42,7 +42,7 @@ def test_trace_is_an_accessible_html_document() -> None:
     assert '<html lang="en">' in html
     assert html.count("<h1") == 1
     assert "<caption>Figures in this report</caption>" in html
-    assert html.count('scope="col"') == 4
+    assert html.count('scope="col"') == 5
 
 
 def test_trace_shows_value_and_definition() -> None:
@@ -80,7 +80,9 @@ def test_missing_definition_is_labelled_not_blank() -> None:
 
 def test_cli_run_writes_the_trace_view(tmp_path: Path) -> None:
     out = tmp_path / "grant"
-    assert main(["run", "--config", str(GRANT), "--out", str(out), "--reproducible"]) == 0
+    run_args = ["run", "--config", str(GRANT), "--out", str(out)]
+    run_args += ["--reproducible", "--approved-by", "CI"]
+    assert main(run_args) == 0
     trace = (out / "trace.html").read_text(encoding="utf-8")
     assert trace.startswith("<!doctype html>")
     # A grant-report figure and its definition reach the page.

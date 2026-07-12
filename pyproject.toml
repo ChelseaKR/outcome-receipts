@@ -32,7 +32,15 @@ dependencies = []
 receipts = "outcome_receipts.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-cov>=5", "mypy>=1.8", "ruff>=0.5", "pip-audit>=2.10"]
+dev = [
+  "pytest>=8",
+  "pytest-cov>=5",
+  "mypy>=1.8",
+  "ruff>=0.5",
+  "pip-audit>=2.10",
+  "hypothesis>=6",
+  "mutmut>=2.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/ChelseaKR/outcome-receipts"
@@ -77,3 +85,18 @@ addopts = """
 [tool.coverage.run]
 source = ["outcome_receipts"]
 branch = true
+
+# Mutation testing is scoped to the invariant core — the grounding gate and the
+# metric engine that feeds it. A surviving mutant here is a change to that core
+# no test noticed, which is exactly where an undetected regression would break
+# the "no invented number" promise. Run opt-in via `make mutation`; it is slow
+# and deliberately kept out of `make verify`.
+[tool.mutmut]
+paths_to_mutate = "src/outcome_receipts/grounding.py,src/outcome_receipts/engine.py"
+tests_dir = "tests/"
+# Run the suite through the project venv so the mutated package (installed
+# editable) is the one under test; the bare `python` on PATH may be a different
+# interpreter without the package. `-o addopts=` neutralizes the project-wide
+# coverage addopts so a coverage-threshold failure is never mistaken for a
+# killed mutant.
+runner = ".venv/bin/python -m pytest -x -q -o addopts= --assert=plain -p no:cacheprovider"

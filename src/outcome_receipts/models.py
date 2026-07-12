@@ -15,6 +15,23 @@ from dataclasses import dataclass, field
 # visible rather than silently indistinguishable.
 EMPTY_SLICE_HASH = "0" * 64
 
+# The schema version of the receipts manifest. Bumped when the shape of
+# receipts.json or the meaning of a receipt field changes in a way that a
+# consumer or the re-derivation check must know about. ``verify`` names a
+# version mismatch before it tries to re-derive fields, so a manifest written
+# under an older schema fails with a clear reason rather than as opaque drift.
+SCHEMA_VERSION = "1.0"
+
+# The hash descriptor. It rides in the manifest so a consumer knows exactly how
+# every ``slice_hash`` was produced without reading the engine. ``canonicalization``
+# names the rule set that turns a slice into the hashed bytes (see the ADR); it is
+# bumped whenever those rules change, because a changed canonicalization changes
+# every hash. ``v1`` folds the sorted column names into the payload, so a slice of
+# identical values under renamed columns hashes differently.
+HASH_ALGORITHM = "blake2b"
+HASH_DIGEST_SIZE = 32
+HASH_CANONICALIZATION = "v1"
+
 
 @dataclass(frozen=True)
 class MetricSpec:
@@ -23,8 +40,11 @@ class MetricSpec:
     ``value_sql`` is a query returning a single scalar (the figure's value).
     ``slice_sql`` returns the rows the figure is computed over; it is used for the
     row count and the slice hash, the evidence that the value came from a specific
-    set of records. ``unit`` selects formatting: ``count`` or ``percent``.
-    ``format`` is an optional override of the default formatting for the unit.
+    set of records. ``unit`` selects formatting: ``count``, ``percent``, ``money``
+    (a ``$``-prefixed amount), ``duration`` (a number of ``days``), or ``rate`` (a
+    bare fixed-decimal number). ``decimals`` sets the fixed-decimal places; ``money``
+    typically uses 2. Each unit has one canonical display form (see ADR 0004), the
+    single string the grounding gate binds.
 
     ``description`` is a short label. ``definition`` is the precise, plain-language
     statement of what the figure counts: the time window, who is in scope, and the
@@ -37,6 +57,16 @@ class MetricSpec:
     served) from an ``outcome`` (a change in condition, such as a housing-retention
     rate). It rides in the receipt so a reader does not misread a busy output as
     the outcome it is meant to produce.
+
+    ``indicator``, ``data_source``, and ``collection_frequency`` are the optional
+    logic-model mapping. They tie the figure to a row in a theory of change: the
+    named indicator it measures, the system the data comes from, and how often that
+    data is collected. Each defaults to empty, which means the figure is not mapped;
+    when set they ride into the receipt so the mapping travels with the number.
+
+    ``caveat`` is an optional qualifying note (e.g. a data-quality limitation)
+    that travels with the receipt, so a limitation on the figure rides inside the
+    receipt chain and renders next to the figure instead of living as loose prose.
     """
 
     metric_id: str
@@ -47,6 +77,10 @@ class MetricSpec:
     decimals: int = 0
     definition: str = ""
     kind: str = "output"
+    indicator: str = ""
+    data_source: str = ""
+    collection_frequency: str = ""
+    caveat: str = ""
 
 
 @dataclass(frozen=True)
@@ -75,13 +109,24 @@ class Receipt:
 
     ``slice_hash`` is a BLAKE2b hash of the canonicalized rows the figure was
     computed over, so the same data reproduces the same receipt and a changed
-    slice is detectable. ``computed_at`` comes from an injected clock so a
-    committed eval is reproducible. ``definition`` carries the figure's
-    plain-language definition forward from its ``MetricSpec`` so the receipt is
-    self-describing without the spec on hand. ``kind`` carries the same forward
-    label distinguishing an activity count (``output``) from a change in condition
+    slice is detectable. ``column_names`` records the slice's columns (in query
+    order), so the receipt is self-describing about what was hashed and a renamed
+    column is visible rather than silent; those names are folded into the hash
+    payload, so two slices with identical values under different column names
+    hash differently. ``computed_at`` comes from an injected clock so a committed
+    eval is reproducible. ``unit`` is the metric's unit (``count``, ``percent``,
+    ``money``, ``duration``, or ``rate``), carried so a consumer can re-derive the
+    display. ``definition`` carries the figure's plain-language
+    definition forward from its ``MetricSpec`` so the receipt is self-describing
+    without the spec on hand. ``kind`` carries the same forward label
+    distinguishing an activity count (``output``) from a change in condition
     (``outcome``), so a reader of the receipt alone does not misread an output as
-    an outcome.
+    an outcome. ``indicator``, ``data_source``, and ``collection_frequency`` carry
+    the logic-model mapping forward the same way, so a receipt states which
+    theory-of-change indicator its number belongs to.
+    ``caveat`` carries the figure's optional qualifying note (e.g. a
+    data-quality limitation) forward the same way, so the limitation rides inside
+    the receipt chain rather than as loose prose.
     """
 
     metric_id: str
@@ -93,6 +138,11 @@ class Receipt:
     computed_at: str
     definition: str = ""
     kind: str = "output"
+    indicator: str = ""
+    data_source: str = ""
+    collection_frequency: str = ""
+    caveat: str = ""
+    column_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
