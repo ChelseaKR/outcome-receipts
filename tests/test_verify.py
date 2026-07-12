@@ -117,11 +117,13 @@ def _bundle_figures() -> list[Figure]:
     """
 
     from outcome_receipts.cli import _compute_all
+    from outcome_receipts.suppression import suppress_figures
 
     _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
         str(GRANT), reproducible=True
     )
-    return figures
+    suppressed, _result = suppress_figures(figures)
+    return suppressed
 
 
 def _export_grant_bundle(tmp_path: Path) -> Path:

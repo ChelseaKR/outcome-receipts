@@ -62,6 +62,12 @@ from outcome_receipts.report import (
     render_report,
 )
 from outcome_receipts.scaffold import scaffold_spec
+from outcome_receipts.suppression import (
+    filter_for_aggregate_only,
+    redact_comparison,
+    redact_reconciliation,
+    suppress_figures,
+)
 from outcome_receipts.trace import render_trace_html
 from outcome_receipts.verify import BundleResult, VerifyResult, verify_bundle, verify_manifest
 
@@ -429,6 +435,8 @@ def _write_template_exports(
     approver: str,
     approved_at: str,
     key: bytes | None,
+    *,
+    suppression_applied: bool = False,
 ) -> tuple[list[tuple[TemplateSpec, dict[str, str | None], LedgerEntry]], Path, bool]:
     base_out = Path(args.out)
     fan_out = bool(spec.report.templates)
@@ -440,6 +448,8 @@ def _write_template_exports(
             numbers_unbound=0,
             approved_by=approver,
             approved_at=approved_at,
+            suppression_applied=suppression_applied,
+            aggregate_only=True,
         )
         out_dir = base_out / template.template_id if fan_out else base_out
         outputs, entry, _ = _export_outputs(
@@ -462,16 +472,37 @@ def _write_template_exports(
     return written, ledger_path, fan_out
 
 
+def _redact_report_structures(
+    comparison: ComparisonResult | None,
+    reconciliation: ReconciliationResult | None,
+    figures: list[Figure],
+) -> tuple[ComparisonResult | None, ReconciliationResult | None]:
+    if comparison is not None:
+        comparison = redact_comparison(comparison, figures)
+    if reconciliation is not None:
+        reconciliation = redact_reconciliation(reconciliation, figures)
+    return comparison, reconciliation
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     spec, _rows, figures, comparison, reconciliation = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
     )
-    charts = render_charts(spec.report.charts, figures)
-    claims_result = ground(_claims_text(comparison, reconciliation, charts), figures)
+    # First gate: generated/deterministic text must bind to the real computed
+    # figures before privacy transforms can hide an invented number.
+    raw_charts = render_charts(spec.report.charts, figures)
+    raw_claims = ground(_claims_text(comparison, reconciliation, raw_charts), figures)
+    raw_drafts = _draft_templates(spec, figures)
+    raw_gate_pass = raw_claims.ok and all(result.ok for _t, _n, result in raw_drafts)
 
-    drafts = _draft_templates(spec, figures)
-    combined_result = ground(" ".join(narrative for _t, narrative, _r in drafts), figures)
-    gate_pass = claims_result.ok and all(result.ok for _t, _n, result in drafts)
+    suppressed_figures, suppression = suppress_figures(figures)
+    publishable = filter_for_aggregate_only(suppressed_figures)
+    comparison, reconciliation = _redact_report_structures(comparison, reconciliation, publishable)
+    charts = render_charts(spec.report.charts, publishable)
+    claims_result = ground(_claims_text(comparison, reconciliation, charts), publishable)
+    drafts = _draft_templates(spec, publishable)
+    combined_result = ground(" ".join(narrative for _t, narrative, _r in drafts), publishable)
+    gate_pass = raw_gate_pass and claims_result.ok and all(result.ok for _t, _n, result in drafts)
     template_payload = {
         template.template_id: _grounding_payload(result) for template, _n, result in drafts
     }
@@ -489,13 +520,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     )
 
     if not args.json:
-        _print_template_summary(figures, claims_result, drafts)
+        _print_template_summary(publishable, claims_result, drafts)
+        n_hidden = len(suppression.suppressed) + len(suppression.complementary_suppressed)
+        print(f"suppression policy: applied (threshold {suppression.threshold}; hidden {n_hidden})")
 
     if not gate_pass:
         if args.json:
             payload = _run_payload(
                 gate_pass=False,
-                figures=figures,
+                figures=publishable,
                 narrative_result=combined_result,
                 claims_result=claims_result,
                 outputs=failed_outputs,
@@ -505,7 +538,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             payload["templates"] = template_payload
             _emit_json(payload)
             return EXIT_GATE_FAIL
-        _print_gate_failure(claims_result, drafts)
+        if not raw_gate_pass:
+            _print_gate_failure(raw_claims, raw_drafts)
+        else:
+            _print_gate_failure(claims_result, drafts)
         return EXIT_GATE_FAIL
 
     approver = _approver(spec.report.title, combined_result, claims_result, args)
@@ -513,7 +549,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if args.json:
             payload = _run_payload(
                 gate_pass=True,
-                figures=figures,
+                figures=publishable,
                 narrative_result=combined_result,
                 claims_result=claims_result,
                 outputs=failed_outputs,
@@ -530,7 +566,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     written, ledger_path, fan_out = _write_template_exports(
         args,
         spec,
-        figures,
+        publishable,
         comparison,
         reconciliation,
         charts,
@@ -539,8 +575,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         approver,
         approved_at,
         key,
+        suppression_applied=True,
     )
-
     if args.json:
         flat_outputs: object = (
             written[0][1]
@@ -553,7 +589,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         ]
         payload = _run_payload(
             gate_pass=True,
-            figures=figures,
+            figures=publishable,
             narrative_result=combined_result,
             claims_result=claims_result,
             outputs=flat_outputs,
@@ -654,10 +690,12 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
     )
+    # Apply suppression to re-derived figures so they match the exported manifest.
+    suppressed_figures, _suppression_result = suppress_figures(figures)
     if args.bundle is not None:
-        return _verify_bundle(args, figures)
+        return _verify_bundle(args, suppressed_figures)
     manifest = json.loads(Path(args.receipts).read_text(encoding="utf-8"))
-    result = verify_manifest(figures, manifest)
+    result = verify_manifest(suppressed_figures, manifest)
 
     if args.json:
         _emit_json(_verify_payload(result))

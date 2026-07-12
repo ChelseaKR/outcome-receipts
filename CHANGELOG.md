@@ -177,6 +177,62 @@ retitled with the real release date when `v0.1.0` is tagged and
   and the engine's deterministic spec-driven SQL composition ignores `S608` in
   `engine.py` and `comparison.py`.
 
+### Fixed
+- **Small-cell suppression did not suppress.** Code review of the v0.2
+  suppression work (`9deb8cf`) found the drafted narrative, the rendered charts,
+  and the comparison table were all built from the pre-suppression figures, so a
+  below-threshold count could appear in plain English (and in a chart or the
+  comparison table) directly above a receipts section marking the same metric
+  `[SUPPRESSED]`. A suppressed `Figure` also kept its original, unredacted
+  `Receipt`, so `receipt.row_count` and `receipt.value` — what `report.py` and
+  `trace.py` actually render — carried the raw count regardless. Fixed by
+  reordering the pipeline (`compute → suppress → draft → ground → export`;
+  suppression is now the first transform, not the last) and by redacting every
+  raw-count-bearing field of a suppressed figure's receipt, not just its own
+  `value`/`display`. See `docs/decisions/0004-suppression-runs-before-drafting.md`.
+- **Complementary suppression matched metric names, not arithmetic.** A category
+  like `clients_black` could be suppressed while `clients_served` and
+  `clients_white` passed through unredacted even though the suppressed value was
+  trivially recoverable as `clients_served - clients_white`, because neither
+  name matched the `"total"/"all"/"sum"/"aggregate"` keyword heuristic.
+  Complementary suppression is now a real arithmetic disclosure check, scoped to
+  a figure's crosstab group so it does not fire on coincidental numeric
+  collisions between unrelated metrics.
+- **`SuppressionResult.ok` compared two counts, not the privacy invariant.** It
+  now checks that no figure recorded as unsuppressed had an original value
+  below threshold.
+- New tests in `tests/test_suppression.py` run the full `receipts run` pipeline
+  and string-search the actual rendered `report.md`, `receipts.json`, and
+  `trace.html` for the raw suppressed values, rather than asserting only on the
+  in-memory `Figure`.
+- **The disclosure search stopped at four terms.** A total decomposed into five
+  or more categories evaded complementary suppression: the only combination
+  recovering the suppressed fifth category (`total - a - b - c - d`) has five
+  terms, one past the cap, so it was never tried. The search now covers
+  combinations of every size up to the full figure group, as a pruned
+  depth-first search, with no term bound. Demonstrated by adversarial
+  re-verification with a 162 = 52 + 30 + 61 + 17 + 2 breakdown; the suppressed
+  2 was exactly recoverable.
+- **A headline and its own period figures were never checked against each
+  other.** The complementary check grouped `exits_permanent__q1/__q2/__delta`
+  by base metric id while the whole-period headline `exits_permanent` sat in a
+  separate report-level group, so `headline(68) - q2(63)` printed the
+  suppressed `q1(5)` into the same report.md (reproduced through the real CLI
+  with the shipped grant-report structure). The disclosure scope is now the
+  whole report, split only by unit, because the spec's flat metric list admits
+  accounting identities across any finer grouping. A suppressed period figure
+  now also takes its delta figure down with it, since a visible delta beside a
+  visible headline pins the hidden period at `(headline - delta) / 2`. See
+  `docs/decisions/0005-disclosure-scope-and-exhaustive-recovery-check.md`.
+- **Percents could triangulate suppressed counts.** The complementary check
+  restricted itself to count figures, and a percent with a visible denominator
+  uniquely determines a suppressed numerator via rounding (`exits` = 14 visible
+  and `pct_permanent` = 71% force the suppressed numerator to 10). The metric
+  data model cannot express which counts feed a percent (`value_sql` is opaque
+  SQL), so the conservative rule ships: when any count figure in the report is
+  suppressed, every percent figure is suppressed with it, documented as such in
+  the module docstring.
+
 ## [0.1.0] — scope completed 2026-06-27, not yet tagged/released
 
 ### Added

@@ -29,12 +29,19 @@ class Provenance:
     and any chart or comparison claims) bound to a receipt. ``numbers_unbound`` is
     how many did not; an export only happens when it is zero, but the field is kept
     so the record states the gate result rather than implying it.
+
+    ``suppression_applied`` is True when small-cell suppression has been run on
+    the figures (CMS policy: values < 11 suppressed, true zeros preserved, with
+    complementary suppression). ``aggregate_only`` is True when no row-level data
+    was emitted in the export; the report contains only counts and aggregates.
     """
 
     numbers_bound: int
     numbers_unbound: int = 0
     approved_by: str | None = None
     approved_at: str | None = None
+    suppression_applied: bool = False
+    aggregate_only: bool = True
 
     @property
     def gate_pass(self) -> bool:
@@ -81,6 +88,8 @@ def provenance_record(prov: Provenance) -> dict[str, object]:
         # State approval status explicitly, always: ``None`` when no human signed
         # off, so the manifest never leaves the reader to infer it (fail-closed).
         "approved_by": prov.approved_by,
+        "suppression_applied": prov.suppression_applied,
+        "aggregate_only": prov.aggregate_only,
     }
     if prov.approved_by is not None:
         record["approved_at"] = prov.approved_at

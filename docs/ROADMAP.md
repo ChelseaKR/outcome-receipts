@@ -12,15 +12,14 @@ mapping over messy real exports) come after the trust machinery has proven out.
 
 ## Architecture
 
-A deterministic state machine: compute figures with receipts, draft a narrative,
-run the grounding gate, suppress small cells, let a human approve, export.
+A deterministic state machine: compute figures with receipts, draft and ground
+against the raw receipted values, suppress every publishable surface, ground the
+redacted result again, let a human approve, export.
 
 ```
-compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
-(SQL,        (fill      (every     (small-cell   (human      (report +
- receipt)     template)  number     redaction)    sign-off)   manifest)
-              binds to a
-              receipt)
+compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> export
+(SQL +     (figures   (raw       (privacy     (publishable      (human     (bundle +
+ receipt)   only)      gate)       gate)         gate)            sign-off)  manifest)
 ```
 
 ## v0.1.0 — Receipts, no LLM (scope complete on `main`; not yet tagged/released)
@@ -42,12 +41,19 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
   blocks the whole run/export, extending the "fail closed everywhere" invariant to
   the data the figures rest on.
 
-## v0.2.0 — Small-cell suppression
+## v0.2.0 — Small-cell suppression (completed)
 
-* The privacy invariant: aggregate counts below a threshold suppressed, with
+* ✅ The privacy invariant: aggregate counts below a threshold suppressed, with
   complementary suppression and true zeros preserved, modeled on the U.S. CMS
-  Cell Size Suppression Policy. Sourced from primary guidance, expressed as tests.
-* Aggregate-only export mode for figures shared externally.
+  Cell Size Suppression Policy. CMS—not HUD—supplies the numeric default; HUD's
+  HMIS publication guide leaves the numeric rule to the applicable local policy.
+  Implementation: threshold = 11 (CMS policy: suppress 1–10), complementary
+  suppression applied to totals, true zeros (0) preserved. Tested with
+  comprehensive cases covering threshold behavior, complementary suppression, and
+  aggregate-only export. Merge-blocking: `tests/test_suppression.py`.
+* ✅ Aggregate-only export mode for figures shared externally. Provenance
+  attestation includes `aggregate_only: true`; the artifact boundary accepts
+  only scalar `Figure` objects and never receives the source client rows.
 
 ## v0.3.0 — The drafting seam
 
