@@ -12,15 +12,10 @@ outcome-receipts is pre-1.0, so only the latest minor on the latest major receiv
 fixes. A fix ships forward in a new patch release rather than a re-publish of an existing
 version.
 
-**No version has been tagged or released yet** (verified 2026-07-05: `git tag` and
-`gh release list` are both empty). The table below states the policy that will apply once
-`v0.1.0` is tagged and published; until then there is no released line to report a
-vulnerability against a specific version of.
-
-| Version | Supported | Notes                                                        |
-|---------|-----------|---------------------------------------------------------------|
-| 0.1.x   | Will be, once released | Intended current release line once `v0.1.0` ships. |
-| < 0.1.0 | No        | Pre-release / unreleased.                                      |
+| Version | Supported | Notes                                      |
+|---------|-----------|--------------------------------------------|
+| 0.1.x   | Yes       | Current pre-1.0 security-support line.     |
+| < 0.1.0 | No        | Pre-release snapshots are not supported.  |
 
 When a `0.2.0` ships, `0.1.x` security support ends and this table is updated in the same
 release.
@@ -61,8 +56,8 @@ In scope: the `outcome_receipts` package and CLI, the eval harness, the report/b
 workflows, and the dependency supply chain. Because the value of the tool is that a number
 cannot reach an export unless it traces to a receipt, an **integrity bypass is in scope**: a
 demonstrated way to export a number that binds to no receipt (defeating the fail-closed
-grounding gate), or, once small-cell suppression lands in v0.2, a way to recover a suppressed
-cell, is a security report, not a normal issue.
+grounding gate), or a way to recover a suppressed cell, is a security report,
+not a normal issue.
 
 Out of scope: the seeded synthetic example data contains no secrets or PII by construction.
 The *correctness* of a computed figure, a metric definition, or a report template is an eval,

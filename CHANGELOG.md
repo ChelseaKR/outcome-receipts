@@ -4,14 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 for [Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 1.0.
 
-**No version of this project has been tagged or released yet** (`git tag` and
-`gh release list` are both empty as of 2026-07-05). The `[0.1.0]` section below
-groups the changes that make up the intended first release and is dated by
-when that scope was completed on `main`, not by a release date. It will be
-retitled with the real release date when `v0.1.0` is tagged and
-`release.yml` publishes it (see `docs/ROADMAP.md`).
+Version `0.1.0` is the first beta release. It includes the deterministic core
+and the privacy, verification, mapping, localization, optional drafting, and
+release-hardening work completed before the first public tag.
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-07-11
 
 ### Added
 - **Repository discovery and practitioner-feedback kit.** Added a five-minute
@@ -241,9 +240,7 @@ retitled with the real release date when `v0.1.0` is tagged and
   suppressed, every percent figure is suppressed with it, documented as such in
   the module docstring.
 
-## [0.1.0] — scope completed 2026-06-27, not yet tagged/released
-
-### Added
+### Initial core
 - The deterministic core, with no language model in any path:
   - **Metric engine** (`engine.py`): loads service data into in-memory SQLite and
     runs each metric as a SQL query; the value comes from the query.
@@ -261,8 +258,3 @@ retitled with the real release date when `v0.1.0` is tagged and
 - `receipts run`, `receipts audit`, and `receipts eval` commands.
 - A seeded synthetic housing-program fixture (`examples/housing-demo/`), zero real
   personal data.
-
-### Not yet
-- The small-cell suppression / aggregate export (v0.2), the optional Claude
-  drafting seam guarded by the same gate (v0.3), and the metric-mapping agent over
-  schema-variant exports (v0.4). See `docs/ROADMAP.md`.

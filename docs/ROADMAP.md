@@ -22,7 +22,7 @@ compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> expor
  receipt)   only)      gate)       gate)         gate)            sign-off)  manifest)
 ```
 
-## v0.1.0 — Receipts, no LLM (scope complete on `main`; not yet tagged/released)
+## v0.1.0 — Receipts, no LLM (released 2026-07-11)
 
 * Service-data CSV in, a TOML metric spec, the deterministic SQLite engine,
   receipts, the deterministic template drafter, and the grounding gate.

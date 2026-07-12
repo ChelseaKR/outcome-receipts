@@ -28,7 +28,7 @@ inputs:
       ChelseaKR/outcome-receipts. Pin to a released tag or a commit SHA for
       reproducible, supply-chain-hardened runs.
     required: false
-    default: "main"
+    default: "v0.1.0"
 
 runs:
   using: composite

@@ -14,13 +14,13 @@ a narrative around the receipted figures and runs fail-closed grounding gates
 before and after suppression. Export is refused if any displayed number does not
 trace to a receipt.
 
-> **Status: Beta, unreleased.** The default path is deterministic, offline, and
-> tested end to end. Current `main` also includes the completed privacy,
+> **Status: Beta.** The first tagged release is `v0.1.0`. The default path is
+> deterministic, offline, and tested end to end. The release includes the completed privacy,
 > verification, mapping, localization, multi-template, reconciliation, and
 > optional Bedrock-drafting roadmap work. Bedrock is off by default and requires
 > two explicit opt-ins. A committed eval ([eval/report.md](eval/report.md)) scores
-> the grounding gate. No version has been tagged or published yet; see
-> [CHANGELOG.md](CHANGELOG.md) and [SECURITY.md](SECURITY.md#supported-versions).
+> the grounding gate. See [CHANGELOG.md](CHANGELOG.md) and
+> [SECURITY.md](SECURITY.md#supported-versions).
 >
 > *Last verified: 2026-07-11 · Recheck: quarterly*
 
@@ -362,7 +362,7 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Accessibility | Applies to the chart output and the trace view — every chart ships an SVG with `role="img"`, `<title>`, and `<desc>` paired with an equivalent data table, and the trace-view HTML is semantic and high-contrast (one `<h1>`, `lang` set, table headers with `scope`, a `<caption>`); `ci.yml`'s `accessibility` job runs pa11y (WCAG2AA) against the built trace view; the CLI core stays headless |
 | Internationalization | Applies — public report and trace output have EN/ES parity; operational CLI messages remain English. See [docs/I18N.md](docs/I18N.md). |
 | Observability | N/A — library/CLI, no long-running service |
-| Release & Versioning | Applies — tag-triggered release with SBOM + Sigstore attestation; PyPI Trusted Publishing; first tag pending (no version has shipped yet, see CHANGELOG.md) |
+| Release & Versioning | Applies — signed tag-triggered release with SBOM + Sigstore attestation and PyPI Trusted Publishing; see CHANGELOG.md |
 
 ## For Claude Code
 
