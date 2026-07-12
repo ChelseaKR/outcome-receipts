@@ -19,6 +19,7 @@ This index is the handoff point for the documentation sweep last reviewed on 202
 - [Security](../SECURITY.md)
 - [Contributing](../CONTRIBUTING.md)
 - [I18N](I18N.md)
+- [Metric Mapping](metric-mapping.md)
 - [Research Roadmap](RESEARCH-ROADMAP.md)
 - [Threat Model](THREAT-MODEL.md)
 - [User Research](USER-RESEARCH.md)

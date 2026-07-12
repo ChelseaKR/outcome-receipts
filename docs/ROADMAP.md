@@ -65,10 +65,12 @@ compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> expor
 
 ## v0.4.0 — The metric-mapping agent
 
-* Map a funder template's required metrics to deterministic queries over a
+* ✅ Map a funder template's required metrics to deterministic queries over a
   schema-variant export (HMIS CSV and common funder shapes), with a review queue
-  for low-confidence mappings. This is the hard, unserved part; it lands after the
-  trust machinery is proven.
+  for mappings. `receipts map` recognizes canonical fields and documented HMIS
+  aliases, emits candidate `MetricSpec` queries, blocks missing/ambiguous fields,
+  and marks every candidate `pending`/`review_required`; it never executes or
+  approves a guess. See [metric-mapping.md](metric-mapping.md).
 
 ## v0.5.0 — Provenance manifest and verify
 

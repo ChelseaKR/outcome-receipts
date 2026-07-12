@@ -186,6 +186,7 @@ suppressed. The JSON is purely presentational; it never changes the exit code.
 ```sh
 receipts run --config examples/housing-demo/report.toml --out out --reproducible --approved-by CI --json
 receipts verify --config examples/grant-report/report.toml --receipts out/grant/receipts.json --json
+receipts map --data examples/housing-demo/services.csv --requirements examples/mapping/requirements.json --out mapping-review.json --json
 ```
 
 The `run` object reports the gate result, the figure and narrative tallies, any
@@ -193,8 +194,9 @@ unbound numbers, the paths it wrote, the export-ledger entry it appended, and th
 recorded approval. Under `--json` there is no interactive sign-off prompt, so
 `run` needs `--approved-by`; without it the export aborts with exit code 3 and a
 `null` approval in the payload. The `audit`, `verify`, `verify-ledger`, and
-`eval` objects report their own pass or fail and the details behind it; the
-`init` object carries the scaffolded spec and where it was written. The `--json`
+`eval` objects report their own pass or fail and the details behind it; `map`
+reports pending or blocked candidates without executing them; the `init` object
+carries the scaffolded spec and where it was written. The `--json`
 flag is accepted before or after the subcommand, so `receipts --json run ...`
 and `receipts run ... --json` are equivalent.
 
@@ -204,7 +206,7 @@ and JSON forms.
 | Code | Meaning |
 | ---- | ------- |
 | 0 | Success. The command ran and the grounding gate, where one applies, passed. |
-| 1 | A verification or eval check failed closed: `audit` found an unbound number, `verify` found receipt or artifact drift, `verify-ledger` found a broken hash chain, or the `eval` gate did not pass. |
+| 1 | A check failed closed: `map` found a missing/ambiguous mapping, `audit` found an unbound number, `verify` found drift, `verify-ledger` found a broken chain, or `eval` did not pass. |
 | 2 | The grounding gate refused to export. `run` found an unbound number and wrote nothing. |
 | 3 | The export was not approved. The grounding gate passed but no named human signed off (no `--approved-by`, and no interactive sign-off), so `run` wrote nothing. |
 
