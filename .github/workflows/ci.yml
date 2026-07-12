@@ -141,3 +141,4 @@ jobs:
         with:
           config: examples/housing-demo/report.toml
           receipts: examples/housing-demo/receipts.json
+          version: ${{ github.event.pull_request.head.sha || github.sha }}
