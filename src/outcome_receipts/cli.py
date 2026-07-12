@@ -259,7 +259,9 @@ def _export_outputs(
         chart_dir=_CHART_DIR,
         provenance=provenance,
     )
-    trace_text = render_trace_html(spec.report.title, figures, provenance=provenance)
+    trace_text = render_trace_html(
+        spec.report.title, figures, provenance=provenance, comparison=comparison
+    )
 
     digests = {
         "report.md": _sha256(report_text),
