@@ -10,6 +10,12 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Fixed
+- The release workflow now uses the maintained `actions/attest` v4 SBOM path,
+  which accepts the generated CycloneDX 1.6 document. The first `v0.1.0`
+  attempt stopped before release publication when the older wrapper rejected
+  that valid document as an unsupported format.
+
 ## [0.1.0] - 2026-07-11
 
 ### Added
