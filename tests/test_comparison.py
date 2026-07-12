@@ -135,6 +135,25 @@ def test_every_comparison_figure_grounds_to_itself() -> None:
     assert grounded.total >= 6  # prior, current, delta for each of two metrics
 
 
+def test_money_delta_keeps_its_currency_display() -> None:
+    # A money metric's change must render as currency, not a bare number, and still
+    # bind to itself in the grounding gate.
+    funds = MetricSpec(
+        metric_id="funds",
+        description="aid disbursed in the quarter",
+        value_sql="SELECT COUNT(*) * 100.0 FROM data WHERE {period}",
+        slice_sql="SELECT * FROM data WHERE {period}",
+        unit="money",
+        decimals=2,
+    )
+    result = compute_comparison(ROWS, _spec(funds), clock=FixedClock())
+    [row] = result.rows
+    # Q1 has 3 rows ($300.00), Q2 has 2 ($200.00): the magnitude of the change is $100.00.
+    assert row.delta.display == "$100.00"
+    grounded = ground(row.delta.display, result.figures)
+    assert grounded.ok
+
+
 def test_metric_without_placeholder_is_rejected() -> None:
     bad = MetricSpec(
         metric_id="bad",

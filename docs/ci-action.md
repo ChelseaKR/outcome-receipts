@@ -29,11 +29,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@<full-commit-sha> # v4
         with:
           persist-credentials: false
       - name: Verify receipts
-        uses: ChelseaKR/outcome-receipts@v1
+        uses: ChelseaKR/outcome-receipts@<full-commit-sha>
         with:
           config: reports/housing/report.toml
           receipts: reports/housing/receipts.json

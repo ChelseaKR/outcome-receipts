@@ -28,7 +28,7 @@ from collections.abc import Sequence
 from outcome_receipts.models import Figure, GroundingResult, NumericSpan
 
 # A number as it appears in prose, tolerant of locale formatting, in three forms
-# tried in order:
+# tried in order, each with an optional leading currency symbol:
 #   1. NBSP-grouped thousands: 1-3 leading digits then one or more groups of
 #      exactly 3 digits separated by NBSP (U+00A0) or narrow NBSP (U+202F), with
 #      an optional '.'/',' decimal tail and optional '%'. These are the space
@@ -41,19 +41,28 @@ from outcome_receipts.models import Figure, GroundingResult, NumericSpan
 #   2. Dot/comma-grouped or decimal: a digit run carrying '.'/',' as thousands
 #      and/or decimal ("1,234", "1.234", "12,345.67", "3.5", "3,5").
 #   3. A lone digit, with optional '%'.
+# The ``$`` is captured so a money display (``$1,234.50``) is one span that
+# normalizes to its figure. A trailing unit word (the ``days`` in a duration
+# display) is not captured here on purpose: capturing an arbitrary following word
+# would swallow the next prose word after any bare number and change what an
+# unbound span reports; the suffix is instead stripped from the figure display in
+# ``_normalize``, so a ``30 days`` display still binds to the ``30`` a reader sees.
 # Either '.' or ',' may be the decimal; _normalize resolves which. Years and list
 # markers are numbers as well; the gate treats every numeric span the same way,
 # so a number that is not a figure (a stray "2024") is unbound and must be removed
 # or made a figure. That strictness is the point.
 _NUMBER = re.compile(
-    r"\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?%?"  # 1: NBSP-grouped thousands
-    r"|\d[\d.,]*\d%?"  # 2: dot/comma-grouped or decimal
-    r"|\d%?"  # 3: lone digit
+    r"\$?\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?%?"  # 1: NBSP-grouped thousands
+    r"|\$?\d[\d.,]*\d%?"  # 2: dot/comma-grouped or decimal
+    r"|\$?\d%?"  # 3: lone digit
 )
 
 # Separators that only ever group thousands, never mark a decimal: they are
 # stripped outright during canonicalization.
 _GROUP_SPACES = ("\u00a0", "\u202f", " ")
+
+# A trailing unit word on a figure display, e.g. the "days" in "30 days".
+_UNIT_SUFFIX = re.compile(r"\s*[A-Za-z]+$")
 
 
 def _single_separator_is_thousands(body: str, sep: str) -> bool:
@@ -75,15 +84,19 @@ def _single_separator_is_thousands(body: str, sep: str) -> bool:
 
 
 def _normalize(token: str) -> str:
-    """Canonicalize a numeric token so locale formatting does not defeat the gate.
+    """Canonicalize a numeric token so locale formatting and unit decoration don't
+    defeat the gate.
 
     Both a figure's display and a prose span are passed through this function, so
     the goal is that any two spellings of the same value transform to the same
-    string. A trailing '%' is preserved (kept part of the compared form, matching
-    the gate's existing semantics). Space-style thousands separators are removed;
-    then '.'/',' are resolved to a single '.' decimal point using the rule above.
+    string. A trailing unit word (the ``days`` of a duration display) and a
+    leading ``$`` (money) are stripped first. A trailing '%' is preserved (kept
+    part of the compared form, matching the gate's existing semantics).
+    Space-style thousands separators are removed; then '.'/',' are resolved to a
+    single '.' decimal point using the rule above.
     """
 
+    token = _UNIT_SUFFIX.sub("", token.strip()).replace("$", "")
     percent = "%" if token.endswith("%") else ""
     body = token[:-1] if percent else token
     for space in _GROUP_SPACES:

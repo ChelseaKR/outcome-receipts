@@ -4,8 +4,9 @@ The receipts manifest proves every figure, but it is JSON, so the grant manager 
 program officer who actually receives the report cannot read it. This renders the
 same receipts as one self-contained HTML page a non-engineer opens in a browser:
 a summary table of every figure with its value and plain-language definition, then
-a detail block per figure carrying the receipt that backs it (the query, the row
-count, the slice hash, the timestamp). No SQL and no Python are needed to read it.
+a detail block per figure carrying the receipt that backs it (any recorded
+logic-model mapping, the query, the row count, the slice hash, the timestamp). No
+SQL and no Python are needed to read it.
 
 The page is a single file with inline styling and no script, so it travels beside
 the report and opens offline, keeping the project's zero-dependency posture. It is
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from outcome_receipts.comparison import ComparisonResult, ComparisonRow
 from outcome_receipts.models import Figure
 from outcome_receipts.provenance import Provenance
 
@@ -63,6 +65,7 @@ code, .hash {
   word-break: break-all;
 }
 .muted { color: #4a5568; }
+.change { font-weight: bold; margin: 0.5rem 0; }
 """.strip()
 
 
@@ -87,6 +90,7 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
         '<th scope="col">Figure</th>'
         '<th scope="col">Value</th>'
         '<th scope="col">What it counts</th>'
+        '<th scope="col">Caveat</th>'
         '<th scope="col">Rows</th>'
         "</tr>",
         "</thead>",
@@ -95,11 +99,13 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
     for figure in figures:
         receipt = figure.receipt
         definition = receipt.definition or "(no definition recorded)"
+        caveat = receipt.caveat or "(none)"
         lines.append(
             "<tr>"
             f'<td><a href="#{_anchor(figure.metric_id)}">{_esc(figure.metric_id)}</a></td>'
             f'<td class="value">{_esc(figure.display)}</td>'
             f"<td>{_esc(definition)}</td>"
+            f"<td>{_esc(caveat)}</td>"
             f"<td>{receipt.row_count}</td>"
             "</tr>"
         )
@@ -107,27 +113,74 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
     return lines
 
 
-def _figure_detail(figure: Figure) -> list[str]:
+def _change_label(row: ComparisonRow, figure: Figure) -> str:
+    """A plain-language direction+magnitude label for a delta figure.
+
+    Direction is ``row.direction`` and the magnitude is ``figure.display`` (the
+    delta figure's already-formatted magnitude); neither is recomputed here, so no
+    new number is introduced. "No change" carries no magnitude.
+    """
+
+    if row.direction == "no change":
+        return "No change"
+    word = "Increase" if row.direction == "increase" else "Decrease"
+    return f"{word} of {_esc(figure.display)}"
+
+
+def _figure_detail(figure: Figure, row: ComparisonRow | None = None) -> list[str]:
     receipt = figure.receipt
     definition = receipt.definition or "(no definition recorded)"
-    return [
+    lines = [
         f'<section class="figure" id="{_anchor(figure.metric_id)}" '
         f'aria-labelledby="{_anchor(figure.metric_id)}-h">',
         f'<h2 id="{_anchor(figure.metric_id)}-h">'
         f'{_esc(figure.metric_id)}: <span class="value">{_esc(figure.display)}</span></h2>',
         f"<p>{_esc(definition)}</p>",
-        "<dl>",
-        f"<dt>Query</dt><dd><code>{_esc(receipt.value_sql)}</code></dd>",
-        f"<dt>Rows in slice</dt><dd>{receipt.row_count}</dd>",
-        f'<dt>Slice hash</dt><dd class="hash">{_esc(receipt.slice_hash)}</dd>',
-        f"<dt>Computed at</dt><dd>{_esc(receipt.computed_at)}</dd>",
-        "</dl>",
-        "</section>",
     ]
+    if row is not None:
+        lines.append(f'<p class="change">{_change_label(row, figure)}</p>')
+    if receipt.caveat:
+        lines.append(f'<p class="caveat">Caveat: {_esc(receipt.caveat)}</p>')
+    lines += [
+        "<dl>",
+    ]
+    # The logic-model mapping ties the figure to a theory-of-change row. Each field
+    # is optional, so a mapping term shows only when it was recorded; a figure with
+    # no mapping renders exactly as before.
+    for label, value in (
+        ("Indicator", receipt.indicator),
+        ("Data source", receipt.data_source),
+        ("Collection frequency", receipt.collection_frequency),
+    ):
+        if value:
+            lines.append(f"<dt>{label}</dt><dd>{_esc(value)}</dd>")
+    lines.extend(
+        [
+            f"<dt>Query</dt><dd><code>{_esc(receipt.value_sql)}</code></dd>",
+            f"<dt>Rows in slice</dt><dd>{receipt.row_count}</dd>",
+            f'<dt>Slice hash</dt><dd class="hash">{_esc(receipt.slice_hash)}</dd>',
+            f"<dt>Computed at</dt><dd>{_esc(receipt.computed_at)}</dd>",
+        ]
+    )
+    if row is not None:
+        lines.append(
+            "<dt>Compared periods</dt>"
+            "<dd>"
+            f'<a href="#{_anchor(row.prior.metric_id)}">{_esc(row.prior.metric_id)}</a>'
+            " and "
+            f'<a href="#{_anchor(row.current.metric_id)}">{_esc(row.current.metric_id)}</a>'
+            "</dd>"
+        )
+    lines.extend(["</dl>", "</section>"])
+    return lines
 
 
 def render_trace_html(
-    title: str, figures: Sequence[Figure], *, provenance: Provenance | None = None
+    title: str,
+    figures: Sequence[Figure],
+    *,
+    provenance: Provenance | None = None,
+    comparison: ComparisonResult | None = None,
 ) -> str:
     """Render the receipts as a single accessible HTML page.
 
@@ -135,8 +188,16 @@ def render_trace_html(
     so a reader moving between the two documents sees the same order. When a
     ``provenance`` is given, the no-model and gate-passed attestation heads the
     page, the same statement the report carries.
+
+    When a ``comparison`` is given, each delta figure's detail block gains a
+    plain-language direction+magnitude label and cross-links to the two period
+    figures it compares. The direction and magnitude come from the comparison's
+    own rows, never recomputed, so no second path to a number is introduced.
     """
 
+    delta_rows: dict[str, ComparisonRow] = (
+        {row.delta.metric_id: row for row in comparison.rows} if comparison is not None else {}
+    )
     ordered = sorted(figures, key=lambda f: f.metric_id)
     head = [
         "<!doctype html>",
@@ -166,6 +227,6 @@ def render_trace_html(
     body = _summary_table(ordered)
     body.append("<h2>Figure details</h2>")
     for figure in ordered:
-        body.extend(_figure_detail(figure))
+        body.extend(_figure_detail(figure, delta_rows.get(figure.metric_id)))
     tail = ["</main>", "</body>", "</html>"]
     return "\n".join([*head, *body, *tail]) + "\n"
