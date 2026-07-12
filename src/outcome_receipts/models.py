@@ -15,6 +15,23 @@ from dataclasses import dataclass, field
 # visible rather than silently indistinguishable.
 EMPTY_SLICE_HASH = "0" * 64
 
+# The schema version of the receipts manifest. Bumped when the shape of
+# receipts.json or the meaning of a receipt field changes in a way that a
+# consumer or the re-derivation check must know about. ``verify`` names a
+# version mismatch before it tries to re-derive fields, so a manifest written
+# under an older schema fails with a clear reason rather than as opaque drift.
+SCHEMA_VERSION = "1.0"
+
+# The hash descriptor. It rides in the manifest so a consumer knows exactly how
+# every ``slice_hash`` was produced without reading the engine. ``canonicalization``
+# names the rule set that turns a slice into the hashed bytes (see the ADR); it is
+# bumped whenever those rules change, because a changed canonicalization changes
+# every hash. ``v1`` folds the sorted column names into the payload, so a slice of
+# identical values under renamed columns hashes differently.
+HASH_ALGORITHM = "blake2b"
+HASH_DIGEST_SIZE = 32
+HASH_CANONICALIZATION = "v1"
+
 
 @dataclass(frozen=True)
 class MetricSpec:
@@ -80,11 +97,15 @@ class Receipt:
 
     ``slice_hash`` is a BLAKE2b hash of the canonicalized rows the figure was
     computed over, so the same data reproduces the same receipt and a changed
-    slice is detectable. ``computed_at`` comes from an injected clock so a
-    committed eval is reproducible. ``definition`` carries the figure's
-    plain-language definition forward from its ``MetricSpec`` so the receipt is
-    self-describing without the spec on hand. ``kind`` carries the same forward
-    label distinguishing an activity count (``output``) from a change in condition
+    slice is detectable. ``column_names`` records the slice's columns (in query
+    order), so the receipt is self-describing about what was hashed and a renamed
+    column is visible rather than silent; those names are folded into the hash
+    payload, so two slices with identical values under different column names
+    hash differently. ``computed_at`` comes from an injected clock so a committed
+    eval is reproducible. ``definition`` carries the figure's plain-language
+    definition forward from its ``MetricSpec`` so the receipt is self-describing
+    without the spec on hand. ``kind`` carries the same forward label
+    distinguishing an activity count (``output``) from a change in condition
     (``outcome``), so a reader of the receipt alone does not misread an output as
     an outcome. ``caveat`` carries the figure's optional qualifying note (e.g. a
     data-quality limitation) forward the same way, so the limitation rides inside
@@ -101,6 +122,7 @@ class Receipt:
     definition: str = ""
     kind: str = "output"
     caveat: str = ""
+    column_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

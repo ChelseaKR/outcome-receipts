@@ -14,6 +14,48 @@ retitled with the real release date when `v0.1.0` is tagged and
 ## [Unreleased]
 
 ### Added
+- **Human approval sign-off gate before export (R8).** `receipts run` now
+  records a named human approver after the grounding gate passes and before
+  any file is written. `--approved-by NAME` records the approver
+  non-interactively (for CI); an interactive run prompts for a typed name;
+  a non-interactive run with no approver aborts fail-closed with the new
+  exit code 3 (`EXIT_APPROVAL_FAIL`) and writes nothing. The approver and
+  approval time are recorded in the report's provenance statement and in the
+  manifest (`provenance.approved_by`, `provenance.approved_at`; `approved_by`
+  is stated explicitly as `null` when nothing was approved). `run --json`
+  carries the approval in the payload and never prompts. New merge-blocking
+  `tests/test_approval.py`.
+- **Machine-readable CLI output and an explicit exit-code contract (FIX-09).**
+  Every command (`init`, `run`, `audit`, `verify`, `verify-ledger`, `eval`)
+  accepts `--json`, before or after the subcommand, and then emits one JSON
+  object on stdout instead of the human-readable lines. Exit codes are
+  single-sourced module constants documented in the README: 0 success, 1 a
+  failed audit/verify/verify-ledger/eval check, 2 the grounding gate refused
+  to export. The JSON is presentational only; it never changes the exit code
+  or what is written to disk. New `tests/test_cli.py` pins the JSON shapes
+  and the code table.
+- **Release integrity hardening (2026-07-09).**
+  - `release.yml`'s `pypi-publish` job now publishes the exact `dist/` bytes the
+    `release` job built and Sigstore-attested (artifact hand-off plus a
+    `sha256sum -c` re-check) instead of rebuilding — the published files are
+    provably the attested files (BUG-2).
+  - `release.yml`'s `verify` job fails closed unless the release tag is an
+    annotated tag that carries a signature and points at the verified commit
+    (REL-08 / BUG-3).
+  - `__version__` is single-sourced from package metadata
+    (`importlib.metadata.version`), so pyproject.toml is the only place the
+    version is written; new `tests/test_version.py` pins `__version__`,
+    `receipts --version`, and the installed metadata together (REL-02 / BUG-4).
+  - `docs/rulesets/main.json`: the exported branch ruleset of record for `main`
+    (require PR; required checks `verify`/`security`/`accessibility`; dismiss
+    stale reviews; no force-push; linear history; signed commits; no bypass
+    actors), ready for the owner to apply (CICD-12).
+  - `ci.yml` hygiene: `setup-uv` aligned to the same v6 SHA as `release.yml`
+    with `version: "0.11.19"` pinned everywhere, dependency cache keyed on
+    `uv.lock`, and the pa11y step reads `$GITHUB_WORKSPACE` from the
+    environment instead of interpolating `${{ github.workspace }}` into the
+    shell body (BUG-7).
+
 - **Standards-conformance remediation (2026-07-05).** Closes the P0/P1 gaps found
   by the 2026-07-05 audit against the portfolio `STANDARDS/`:
   - `release.yml` gains a `verify` job (`make install && make verify` at the
@@ -39,6 +81,15 @@ retitled with the real release date when `v0.1.0` is tagged and
   - CONTRIBUTING.md, SECURITY.md, README.md, and CITATION.cff corrected to stop
     claiming branch protection and a released `v0.1.0` that don't exist yet
     (see the 2026-07-05 remediation log for the evidence).
+
+### Added
+- **SAST (2026-07-10, SEC-07).** `ci.yml`'s `security` job gains a Semgrep step
+  (`p/default` + `p/python`, pinned scanner version, `--severity ERROR --error`)
+  that blocks the build on any ERROR-severity finding. The two findings it
+  surfaced on first run (`sqlalchemy-execute-raw-query` on the same
+  already-triaged `load_table` identifiers the `S608` waiver below covers) are
+  suppressed with inline `# nosemgrep:` comments tracked in the new
+  `.semgrep-waivers.yml` ledger, per SEC-10 waiver hygiene.
 
 ### Fixed
 - Two `S608` ruff findings in `comparison.py` and `engine.py` triaged as false
@@ -101,6 +152,14 @@ retitled with the real release date when `v0.1.0` is tagged and
   statement.
 - The Accessibility standard now applies to the chart output (SVG plus a paired
   data table) and the trace-view HTML rather than being N/A.
+- **Tooling enforces the declared code-quality bar.** `ruff` now runs CLAUDE.md's
+  full select set (`E,W,F,I,UP,B,SIM,S,C90,RUF`) with `max-complexity = 10`, so
+  security (`S`), complexity (`C90`), and Ruff-specific (`RUF`) rules are
+  merge-blocking. `pytest` runs under `pytest-cov` with a `--cov-fail-under=90`
+  branch-coverage gate (currently 93%), wired into the pytest addopts so
+  `make verify` and CI enforce the same bar. Tests ignore `S101` (assert use),
+  and the engine's deterministic spec-driven SQL composition ignores `S608` in
+  `engine.py` and `comparison.py`.
 
 ## [0.1.0] — scope completed 2026-06-27, not yet tagged/released
 
