@@ -67,24 +67,27 @@ total minus categories, headline minus a period, one period plus a visible
 delta, a percent times its visible denominator -- landing exactly on a
 suppressed cell.
 
-Sourced from:
-  CMS Cell Size Suppression Policy, ResDAC
-  https://resdac.org/articles/cms-cell-size-suppression-policy
-  HHS Guidance Portal
-  https://www.hhs.gov/guidance/document/cms-cell-suppression-policy
+Policy basis:
+  CMS primary data documentation states that values 1--10, derivable cells, and
+  revealing percentages/formulas may not be displayed:
+  https://data.cms.gov/sites/default/files/2023-11/51397ef0-8f37-40f6-985f-4a46c61882cb/Data_Dictionary-MSSP-Performance_Year_Financial_and_Quality_Results__2013-2020.pdf
+  HUD's HMIS publication guidance requires anonymous aggregate public data and
+  avoidance of small-sample inference, but does not prescribe a numeric floor:
+  https://files.hudexchange.info/resources/documents/HMISImplementationGuide.pdf
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
-from outcome_receipts.models import EMPTY_SLICE_HASH, Figure, Receipt
+from outcome_receipts.models import EMPTY_SLICE_HASH, Figure
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from outcome_receipts.comparison import ComparisonResult
+    from outcome_receipts.comparison import ComparisonResult, ComparisonRow, ReconciliationResult
 
 # The CMS Cell Size Suppression Policy threshold: counts below this value
 # (i.e., 1-10) are suppressed.
@@ -173,16 +176,12 @@ def _redact(figure: Figure) -> Figure:
     are not data; they describe the query and are kept for audit purposes.
     """
 
-    receipt = figure.receipt
-    redacted_receipt = Receipt(
-        metric_id=receipt.metric_id,
-        value_sql=receipt.value_sql,
+    redacted_receipt = replace(
+        figure.receipt,
         row_count=0,
         slice_hash=EMPTY_SLICE_HASH,
         value=0.0,
-        unit=receipt.unit,
-        computed_at=receipt.computed_at,
-        definition=receipt.definition,
+        column_names=(),
     )
     return Figure(
         metric_id=figure.metric_id,
@@ -276,6 +275,61 @@ def _sibling_delta_id(metric_id: str) -> str | None:
     return metric_id.rsplit("__", 1)[0] + _DELTA_SUFFIX
 
 
+def _suppress_sibling_deltas(
+    values_by_id: dict[str, float],
+    hidden: Callable[[str], bool],
+    complementary: set[str],
+) -> bool:
+    changed = False
+    for metric_id in sorted(values_by_id):
+        delta_id = _sibling_delta_id(metric_id)
+        if delta_id is None or not hidden(metric_id):
+            continue
+        if delta_id in values_by_id and not hidden(delta_id):
+            complementary.add(delta_id)
+            changed = True
+    return changed
+
+
+def _suppress_dependent_rates(
+    values_by_id: dict[str, float],
+    units_by_id: dict[str, str],
+    hidden: Callable[[str], bool],
+    hidden_ids: set[str],
+    complementary: set[str],
+) -> bool:
+    if not any(units_by_id[mid] == "count" for mid in hidden_ids):
+        return False
+    victims = {
+        metric_id
+        for metric_id in values_by_id
+        if units_by_id[metric_id] in {"percent", "rate"} and not hidden(metric_id)
+    }
+    complementary.update(victims)
+    return bool(victims)
+
+
+def _recovery_victim(
+    metric_id: str,
+    values_by_id: dict[str, float],
+    units_by_id: dict[str, str],
+    hidden: Callable[[str], bool],
+) -> str | None:
+    if metric_id.endswith(_DELTA_SUFFIX) or metric_id not in values_by_id:
+        return None
+    candidates = [
+        (other_id, value)
+        for other_id, value in values_by_id.items()
+        if other_id != metric_id
+        and not hidden(other_id)
+        and units_by_id[other_id] == units_by_id[metric_id]
+    ]
+    combo = _disclosing_combination(values_by_id[metric_id], candidates)
+    if combo is None:
+        return None
+    return min(combo, key=lambda mid: (abs(values_by_id[mid]), mid))
+
+
 def _complementary_suppress(figures: list[Figure], suppressed_ids: set[str]) -> set[str]:
     """Disclosure-based complementary suppression: real arithmetic, not names.
 
@@ -321,42 +375,20 @@ def _complementary_suppress(figures: list[Figure], suppressed_ids: set[str]) -> 
     while changed:
         changed = False
 
-        # Rule 1: a suppressed period figure takes its delta with it.
-        for metric_id in sorted(values_by_id):
-            delta_id = _sibling_delta_id(metric_id)
-            if delta_id is None or not hidden(metric_id):
-                continue
-            if delta_id in values_by_id and not hidden(delta_id):
-                complementary.add(delta_id)
-                changed = True
-
-        # Rule 2: any suppressed count suppresses every percent/ratio figure.
-        if any(units_by_id[mid] == "count" for mid in suppressed_ids | complementary):
-            for metric_id in sorted(values_by_id):
-                if units_by_id[metric_id] != "count" and not hidden(metric_id):
-                    complementary.add(metric_id)
-                    changed = True
+        changed |= _suppress_sibling_deltas(values_by_id, hidden, complementary)
+        changed |= _suppress_dependent_rates(
+            values_by_id,
+            units_by_id,
+            hidden,
+            suppressed_ids | complementary,
+            complementary,
+        )
 
         # Rule 3: the exact-recovery search over same-unit visible figures.
         for metric_id in sorted(suppressed_ids):
-            if metric_id.endswith(_DELTA_SUFFIX) or metric_id not in values_by_id:
+            victim = _recovery_victim(metric_id, values_by_id, units_by_id, hidden)
+            if victim is None:
                 continue
-            target = values_by_id[metric_id]
-            unit = units_by_id[metric_id]
-            candidates = [
-                (other_id, value)
-                for other_id, value in values_by_id.items()
-                if other_id != metric_id
-                and not hidden(other_id)
-                and units_by_id[other_id] == unit
-            ]
-            combo = _disclosing_combination(target, candidates)
-            if combo is None:
-                continue
-            # The minimum additional redaction that breaks this recovery: the
-            # smallest-valued figure in the disclosing combination. Ties broken
-            # by metric_id so the choice is deterministic.
-            victim = min(combo, key=lambda mid: (abs(values_by_id[mid]), mid))
             complementary.add(victim)
             changed = True
 
@@ -399,7 +431,7 @@ def suppress_figures(
     # First pass: identify figures that must be suppressed (magnitude in
     # [1, threshold)). True zeros (value = 0) are not suppressed.
     for figure in figures:
-        if _is_below_threshold(figure.value, threshold):
+        if figure.receipt.unit == "count" and _is_below_threshold(figure.value, threshold):
             suppressed_ids.add(figure.metric_id)
         else:
             unsuppressed_ids.add(figure.metric_id)
@@ -460,34 +492,44 @@ def redact_comparison(
         )
         for row in comparison.rows
     )
-    redacted_figures = tuple(
-        by_id.get(figure.metric_id, figure) for figure in comparison.figures
-    )
+    redacted_figures = tuple(by_id.get(figure.metric_id, figure) for figure in comparison.figures)
     return replace(comparison, rows=rows, figures=redacted_figures)
+
+
+def redact_reconciliation(
+    reconciliation: ReconciliationResult, suppressed_figures: Sequence[Figure]
+) -> ReconciliationResult:
+    """Rebuild reconciliation rows from the publishable figure set."""
+
+    by_id = {figure.metric_id: figure for figure in suppressed_figures}
+
+    def redact_row(row: ComparisonRow) -> ComparisonRow:
+        return replace(
+            row,
+            prior=by_id.get(row.prior.metric_id, row.prior),
+            current=by_id.get(row.current.metric_id, row.current),
+            delta=by_id.get(row.delta.metric_id, row.delta),
+        )
+
+    rows = tuple(
+        replace(
+            row,
+            outcome=redact_row(row.outcome),
+            financial=redact_row(row.financial),
+        )
+        for row in reconciliation.rows
+    )
+    figures = tuple(by_id.get(figure.metric_id, figure) for figure in reconciliation.figures)
+    return replace(reconciliation, rows=rows, figures=figures)
 
 
 def filter_for_aggregate_only(figures: list[Figure]) -> list[Figure]:
     """Filter a figure set to aggregate-only (never emit row-level data).
 
-    The export mode is "aggregate-only": the figures are counts, rates, and
-    aggregates; never individual client records. This function is a safety check
-    that no client-level fields (client IDs, names, etc.) have leaked into the
-    figure display or receipt.
-
-    For now, this is a placeholder: the engine is already designed to emit only
-    aggregates, so this returns the figures unchanged. When the metric-mapping
-    agent is added in v0.4, this will validate that mapped metrics did not
-    inadvertently include row-level output.
+    The export boundary accepts only ``Figure`` values: scalar aggregates plus
+    their receipts. Raw input rows are held inside the compute path and are not
+    representable in report, manifest, trace, chart, or bundle renderers. Metric
+    names are deliberately not inspected; a scalar called ``client_id_count`` is
+    still aggregate data, while name heuristics cannot prove privacy.
     """
-    # Validate that no figure display or metric_id looks like a PII field.
-    # Common PII patterns in outcomes data: client_id, name, ssn, dob, etc.
-    pii_patterns = {"_id", "name", "ssn", "dob", "email", "phone", "address"}
-    for figure in figures:
-        metric_lower = figure.metric_id.lower()
-        if any(pattern in metric_lower for pattern in pii_patterns):
-            raise ValueError(
-                f"aggregate-only export: metric {figure.metric_id!r} looks like "
-                "row-level data (contains PII pattern). Aggregate-only exports "
-                "must emit only counts, rates, and aggregates, never client records."
-            )
     return figures

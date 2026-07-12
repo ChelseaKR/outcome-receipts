@@ -21,8 +21,6 @@ import json
 from itertools import product
 from pathlib import Path
 
-import pytest
-
 from outcome_receipts.cli import main
 from outcome_receipts.clock import FixedClock
 from outcome_receipts.config import load_spec
@@ -145,14 +143,26 @@ class TestSuppressionThreshold:
         assert set(result.unsuppressed) == {"count_zero", "count_zero_households"}
         assert all(f.display != "[SUPPRESSED]" for f in redacted)
 
+    def test_small_non_count_values_are_not_primary_suppressed(self) -> None:
+        """Cell-size policy applies to people/count cells, not money or duration."""
+
+        figures = [
+            _make_figure("grant_spend", 5, display="$5.00", unit="money"),
+            _make_figure("median_stay", 7, display="7 days", unit="duration"),
+        ]
+        redacted, result = suppress_figures(figures)
+
+        assert result.suppressed == ()
+        assert redacted == figures
+
     def test_mixed_threshold_behavior(self) -> None:
         """A realistic figure set with mixed values around the threshold."""
         figures = [
-            _make_figure("served", 100),        # Above threshold, unsuppressed
+            _make_figure("served", 100),  # Above threshold, unsuppressed
             _make_figure("exited_housing", 8),  # Below threshold, suppressed
-            _make_figure("no_service", 0),      # True zero, unsuppressed
-            _make_figure("pending", 11),        # At threshold, unsuppressed
-            _make_figure("referral", 1),        # Below threshold, suppressed
+            _make_figure("no_service", 0),  # True zero, unsuppressed
+            _make_figure("pending", 11),  # At threshold, unsuppressed
+            _make_figure("referral", 1),  # Below threshold, suppressed
         ]
         redacted, result = suppress_figures(figures)
 
@@ -177,13 +187,11 @@ class TestComplementarySuppression:
         the least additional redaction that still breaks the recovery.
         """
         figures = [
-            _make_figure("total_exits", 25),           # Total = suppressed + unsuppressed
-            _make_figure("exits_to_housing", 8),       # Suppressed (below threshold)
-            _make_figure("exits_other", 17),           # 25 - 8 = 17: recovers the suppressed cell
+            _make_figure("total_exits", 25),  # Total = suppressed + unsuppressed
+            _make_figure("exits_to_housing", 8),  # Suppressed (below threshold)
+            _make_figure("exits_other", 17),  # 25 - 8 = 17: recovers the suppressed cell
         ]
-        redacted, result = suppress_figures(
-            figures, complementary_rule=True
-        )
+        _redacted, result = suppress_figures(figures, complementary_rule=True)
 
         assert "exits_to_housing" in result.suppressed
         assert "exits_other" in result.complementary_suppressed
@@ -198,9 +206,7 @@ class TestComplementarySuppression:
             _make_figure("exits_to_housing", 8),
             _make_figure("exits_other", 17),
         ]
-        redacted, result = suppress_figures(
-            figures, complementary_rule=False
-        )
+        _redacted, result = suppress_figures(figures, complementary_rule=False)
 
         # Only primary suppression, no complementary.
         assert "exits_to_housing" in result.suppressed
@@ -214,9 +220,7 @@ class TestComplementarySuppression:
             _make_figure("category_b", 2500),
             _make_figure("small_group", 5),  # Below threshold
         ]
-        redacted, result = suppress_figures(
-            figures, complementary_rule=True
-        )
+        _redacted, result = suppress_figures(figures, complementary_rule=True)
 
         # small_group is suppressed, but high-count figures are not affected.
         assert "small_group" in result.suppressed
@@ -238,7 +242,7 @@ class TestSuppressionRedaction:
         figures = [
             _make_figure("count_5", 5, display="5"),
         ]
-        redacted, result = suppress_figures(figures)
+        redacted, _result = suppress_figures(figures)
 
         assert redacted[0].display == "[SUPPRESSED]"
         assert redacted[0].metric_id == "count_5"
@@ -249,7 +253,7 @@ class TestSuppressionRedaction:
             _make_figure("count_100", 100, display="100"),
             _make_figure("percent_rate", 0.75, display="75.0%"),
         ]
-        redacted, result = suppress_figures(figures)
+        redacted, _result = suppress_figures(figures)
 
         assert redacted[0].display == "100"
         assert redacted[1].display == "75.0%"
@@ -266,7 +270,7 @@ class TestSuppressionRedaction:
         figures = [
             _make_figure("count_8", 8),
         ]
-        redacted, result = suppress_figures(figures)
+        redacted, _result = suppress_figures(figures)
 
         assert redacted[0].value == 0.0
         assert redacted[0].receipt.value == 0.0
@@ -288,21 +292,19 @@ class TestAggregateOnlyAssertion:
         result = filter_for_aggregate_only(figures)
         assert len(result) == len(figures)
 
-    def test_filter_rejects_pii_patterns(self) -> None:
-        """Figures that look like row-level data (PII fields) must be rejected."""
+    def test_scalar_id_count_is_still_aggregate(self) -> None:
+        """A metric name cannot turn a scalar Figure into a row-level export."""
         figures = [
-            _make_figure("client_id", 12345),  # Looks like PII
+            _make_figure("client_id_count", 12345),
         ]
-        with pytest.raises(ValueError, match="row-level data"):
-            filter_for_aggregate_only(figures)
+        assert filter_for_aggregate_only(figures) == figures
 
-    def test_filter_rejects_name_field(self) -> None:
-        """Name fields are PII and must be rejected."""
+    def test_scalar_name_count_is_still_aggregate(self) -> None:
+        """Aggregate-only is structural, not a substring denylist."""
         figures = [
-            _make_figure("client_name", 42),
+            _make_figure("clients_with_recorded_name", 42),
         ]
-        with pytest.raises(ValueError, match="row-level data"):
-            filter_for_aggregate_only(figures)
+        assert filter_for_aggregate_only(figures) == figures
 
 
 class TestSuppressionResult:
@@ -393,10 +395,10 @@ class TestRealWorldScenario:
         """
         figures = [
             _make_figure("total_served", 150),
-            _make_figure("exited_to_ph", 45),            # Above threshold
-            _make_figure("exited_to_th", 95),            # Above threshold
-            _make_figure("exited_to_sh", 7),             # Below threshold, suppressed
-            _make_figure("still_housed", 3),             # Below threshold, suppressed
+            _make_figure("exited_to_ph", 45),  # Above threshold
+            _make_figure("exited_to_th", 95),  # Above threshold
+            _make_figure("exited_to_sh", 7),  # Below threshold, suppressed
+            _make_figure("still_housed", 3),  # Below threshold, suppressed
         ]
         redacted, result = suppress_figures(figures, complementary_rule=True)
 
@@ -430,10 +432,10 @@ class TestRealWorldScenario:
         which suppressed whatever happened to be named "total".)
         """
         figures = [
-            _make_figure("total_served", 150),           # 45 + 98 + 7
+            _make_figure("total_served", 150),  # 45 + 98 + 7
             _make_figure("exited_to_ph", 45),
             _make_figure("exited_to_th", 98),
-            _make_figure("exited_to_sh", 7),              # Below threshold, suppressed
+            _make_figure("exited_to_sh", 7),  # Below threshold, suppressed
         ]
         redacted, result = suppress_figures(figures, complementary_rule=True)
 
@@ -491,7 +493,7 @@ class TestArithmeticDisclosureNotNameMatching:
             _make_figure("total_donations_thousands", 220),  # Unrelated metric
             _make_figure("clients_black", 8),  # Below threshold, unrelated to the above
         ]
-        redacted, result = suppress_figures(figures, complementary_rule=True)
+        _redacted, result = suppress_figures(figures, complementary_rule=True)
 
         assert "clients_black" in result.suppressed
         assert result.complementary_suppressed == ()
@@ -526,7 +528,18 @@ class TestSuppressionArtifactIntegration:
         assert raw_by_id["exits"].value == 10.0
         assert raw_by_id["exits_permanent"].value == 6.0
 
-        code = main(["run", "--config", str(config), "--out", str(out), "--reproducible"])
+        code = main(
+            [
+                "run",
+                "--config",
+                str(config),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+            ]
+        )
         assert code == 0
 
         report_md = (out / "report.md").read_text(encoding="utf-8")
@@ -659,16 +672,13 @@ class TestCrossScopeRecoveryThroughRealCli:
     Reproduced through the real CLI with the shipped grant-report structure.
     """
 
-    def test_headline_and_period_cannot_recover_a_suppressed_quarter(
-        self, tmp_path: Path
-    ) -> None:
+    def test_headline_and_period_cannot_recover_a_suppressed_quarter(self, tmp_path: Path) -> None:
         # Data shaped like examples/grant-report: every enrollment exits to
         # permanent housing; 5 enrolled in Q1 and 63 in Q2, so the headline is
         # 68, the Q1 figure is 5 (suppressed), and Q2 is 63.
         rows = ["client_id,program,enrolled_date,exit_date,exit_destination"]
         rows.extend(
-            f"C{i:03d},housing,2025-02-{(i % 28) + 1:02d},2025-03-15,permanent"
-            for i in range(5)
+            f"C{i:03d},housing,2025-02-{(i % 28) + 1:02d},2025-03-15,permanent" for i in range(5)
         )
         rows.extend(
             f"C{i:03d},housing,2025-05-{(i % 28) + 1:02d},2025-06-15,permanent"
@@ -679,7 +689,18 @@ class TestCrossScopeRecoveryThroughRealCli:
         config.write_text(_HEADLINE_PLUS_COMPARISON_TOML, encoding="utf-8")
 
         out = tmp_path / "out"
-        code = main(["run", "--config", str(config), "--out", str(out), "--reproducible"])
+        code = main(
+            [
+                "run",
+                "--config",
+                str(config),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+            ]
+        )
         assert code == 0
 
         manifest = json.loads((out / "receipts.json").read_text(encoding="utf-8"))
@@ -754,7 +775,18 @@ class TestPercentTriangulation:
         examples = Path(__file__).resolve().parents[1] / "examples"
         config = examples / "housing-demo" / "report.toml"
         out = tmp_path / "out"
-        code = main(["run", "--config", str(config), "--out", str(out), "--reproducible"])
+        code = main(
+            [
+                "run",
+                "--config",
+                str(config),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+            ]
+        )
         assert code == 0
 
         manifest = json.loads((out / "receipts.json").read_text(encoding="utf-8"))

@@ -71,13 +71,14 @@ speaks only to nonprofit practitioners.
   value matches. Unbound or mismatched numbers are stripped and surfaced for
   review. A report cannot be exported while any numeric span is unbound.
 * **Small-cell suppression is a privacy invariant, not a setting.** Aggregate
-  outcome counts below the suppression threshold (default n < 11, the common
-  HUD/HMIS floor — confirm the exact rule from primary HUD guidance before
-  hard-coding it) are suppressed in every export, and complementary suppression
-  is applied so a suppressed cell cannot be recovered by subtraction. This will
-  be a merge-blocking test (`tests/test_suppression.py`, planned for v0.2 — not
-  yet present in the tree). Do not invent the threshold or the complementary
-  rule; cite the source.
+  outcome counts below the suppression threshold (default n < 11, modeled on
+  the CMS cell-size policy) are suppressed in every export, and complementary
+  suppression is applied so a suppressed cell cannot be recovered by subtraction. This will
+  be a merge-blocking test (`tests/test_suppression.py`). HUD's HMIS public-data
+  guidance requires anonymous aggregate publication and avoidance of small-sample
+  inference but does not set a numeric floor; deployments must confirm their
+  governing local policy. Do not invent the threshold or complementary rule;
+  cite the source.
 * **Aggregate-only by default.** A report is aggregate statistics, not a client
   roster. The export path emits counts, rates, and the narrative; it never emits
   client-level rows. Emitting a client identifier in a report is a defect.

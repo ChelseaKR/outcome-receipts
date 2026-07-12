@@ -43,7 +43,7 @@ def test_run_json_parses_and_reports_a_passing_gate(
     assert payload["command"] == "run"
     assert payload["gate_pass"] is True
     assert payload["figures"] == 4
-    assert payload["narrative"] == {"total": 4, "bound": 4, "unbound": 0}
+    assert payload["narrative"] == {"total": 1, "bound": 1, "unbound": 0}
     assert payload["claims"] == {"total": 0, "bound": 0, "unbound": 0}
     assert payload["unbound"] == []
     assert payload["outputs"]["report"] == str(out / "report.md")

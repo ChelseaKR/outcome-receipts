@@ -1,9 +1,15 @@
-# 0004 — Suppression runs before drafting, not after
+# 0004 — Ground before and after the suppression boundary
 
 Status: accepted; the complementary-scope refinement ("grouped by crosstab",
 `_group_key`) is superseded by 0005, which found that the per-group scope
 severed real accounting identities and widened the disclosure scope to the
 whole report.
+
+Amended 2026-07-11: the original decision correctly required every publishable
+surface to be built from redacted figures, but suppression before the only
+grounding pass could hide a number invented by a future model drafter. The
+pipeline now grounds once against raw receipts, suppresses, rebuilds every
+publishable surface, and grounds again before approval.
 
 ## Context
 
@@ -39,17 +45,14 @@ if the narrative was already drafted from the raw value before suppression ran.
 
 ## Decisions
 
-### Suppression is the first transform after compute, not the last before export
+### Suppression is the publishable-data boundary, between two grounding gates
 
-New order: `compute → receipt → suppress → draft → ground → human-approve →
-export`. `_cmd_run` calls `suppress_figures` immediately after computing the
-figure set (including any comparison figures), before `draft` or
-`render_charts` run. The grounding gate then runs against the *suppressed*
-figures, so a `[SUPPRESSED]` placeholder — not the number it replaced — is what
-the gate is checking narrative and chart numbers against. This removes the
-dependency on a human-approval step that does not exist: there is no window in
-which a raw sub-threshold value is ever handed to the drafter or the chart
-renderer.
+New order: `compute → receipt → draft → ground → suppress → re-draft →
+re-ground → human-approve → export`. The first gate proves that drafting did not
+invent a number. Suppression then redacts the full figure set and rebuilds the
+comparison, reconciliation, charts, and templates. The second gate proves the
+publishable result contains only numbers backed by redacted receipts. Raw
+drafts and charts are validation intermediates and are never written.
 
 ### A suppressed figure's receipt is redacted, not reused
 
@@ -106,9 +109,9 @@ that could not detect a single leaked cell with nothing to compare it against.
 ## Consequences
 
 - The privacy invariant — a sub-threshold count never appears in an exported
-  artifact — no longer depends on an unbuilt human-approval step. It is
-  enforced by construction: the drafter, the chart renderer, the comparison
-  table, and the grounding gate only ever see the suppressed figure set.
+  artifact — is enforced by construction: raw surfaces exist only in memory for
+  the first gate, while every renderer and gate in the export path receives the
+  rebuilt suppressed figure set.
 - `tests/test_suppression.py` gained an end-to-end integration test that runs
   `receipts run` on `examples/housing-demo` and string-searches the actual
   rendered `report.md`, `receipts.json`, and `trace.html` for the raw
