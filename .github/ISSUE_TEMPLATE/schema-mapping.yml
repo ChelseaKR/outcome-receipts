@@ -1,0 +1,41 @@
+name: Schema-mapping question
+description: Describe a metric definition and anonymized column inventory that are difficult to map.
+title: "mapping: "
+labels: ["metric-mapping"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Mapping uncertainty must route to a human. Share definitions and anonymized column names only. Do not attach rows, values, identifiers, credentials, or a real service export.
+  - type: textarea
+    id: requirement
+    attributes:
+      label: Required metric
+      description: Paste or paraphrase the funder's definition, including reporting window and deduplication rule if known.
+    validations:
+      required: true
+  - type: textarea
+    id: columns
+    attributes:
+      label: Anonymized column inventory
+      description: List column names and coarse types. Rename any column whose name contains sensitive organizational information.
+      placeholder: |
+        enrollment_id: text
+        destination_code: text
+        exit_date: date
+    validations:
+      required: true
+  - type: textarea
+    id: uncertainty
+    attributes:
+      label: Mapping uncertainty
+      description: Explain which inclusion, exclusion, window, or deduplication decision is unresolved.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I included no rows, values, identifiers, credentials, or real service export.
+          required: true

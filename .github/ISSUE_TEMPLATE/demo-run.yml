@@ -1,0 +1,59 @@
+name: Demo run report
+description: Tell us whether the five-minute synthetic demo completed or where it stopped.
+title: "demo: "
+labels: ["demo-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing the synthetic demo. Do not attach client-level data, identifiers, credentials, or a real service export.
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options:
+        - Run and verification both passed
+        - Run passed but verification did not
+        - Run did not complete
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Paste `receipts --version` or `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Linux
+        - Windows with WSL
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: stopped
+    attributes:
+      label: What happened?
+      description: Name the command or page where you stopped. Redact local paths and sensitive information.
+    validations:
+      required: true
+  - type: checkboxes
+    id: inspected
+    attributes:
+      label: Trust-chain checks
+      options:
+        - label: I opened the generated report.
+        - label: I located a figure definition in the trace view.
+        - label: I ran receipt verification.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: This report contains no client data, identifiers, credentials, or real service export.
+          required: true

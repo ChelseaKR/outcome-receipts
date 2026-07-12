@@ -1,5 +1,11 @@
 # outcome-receipts
 
+[![CI](https://github.com/ChelseaKR/outcome-receipts/actions/workflows/ci.yml/badge.svg)](https://github.com/ChelseaKR/outcome-receipts/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB.svg)](https://www.python.org/downloads/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-4c1.svg)](LICENSE)
+
+![Outcome Receipts: deterministic SQL to receipt to grounding gate to verified report](docs/assets/social-preview.png)
+
 Draft funder outcome reports where **every number is a receipt**. The tool reads
 a nonprofit's own service data, computes each required figure with a deterministic
 query, and attaches to that figure a receipt: the exact query, the count of rows
@@ -17,6 +23,10 @@ trace to a receipt.
 > [CHANGELOG.md](CHANGELOG.md) and [SECURITY.md](SECURITY.md#supported-versions).
 >
 > *Last verified: 2026-07-11 · Recheck: quarterly*
+
+**Start here:** [run the five-minute synthetic demo](docs/TRY_THE_DEMO.md),
+[inspect the current evaluation](eval/report.md), or
+[bring an anonymized schema-mapping question](https://github.com/ChelseaKR/outcome-receipts/issues/new?template=schema-mapping.yml).
 
 ## The problem
 
@@ -367,3 +377,11 @@ backlog.
 ## License
 
 Apache-2.0.
+
+## Project discussion
+
+Use [GitHub Discussions](https://github.com/ChelseaKR/outcome-receipts/discussions)
+for setup and design questions. Use the structured issue forms to
+[report a demo run](https://github.com/ChelseaKR/outcome-receipts/issues/new?template=demo-run.yml)
+or [describe a mapping question](https://github.com/ChelseaKR/outcome-receipts/issues/new?template=schema-mapping.yml).
+Never post client-level rows, identifiers, credentials, or real service exports.
