@@ -1,7 +1,7 @@
 {
   "artifacts": {
-    "report.md": "6cfaf29ccd2119b5c5f8aae8ba08487e9ddfab35f1bcaa270c828cff5843f48b",
-    "trace.html": "b0ec9e6dac622055c8f379d3fadcd649517baaffa63533638cbf4f6a7f5f4a5e"
+    "report.md": "754bf57c0fbe20f9f8bc74f0f82a14b77739fe90107b863524df0a66e58624bd",
+    "trace.html": "a638481e81d83e794c66a0767d21142b13cad71253fb43c761e808e13eb84b88"
   },
   "hash": {
     "algorithm": "blake2b",
@@ -9,13 +9,15 @@
     "digest_size": 32
   },
   "provenance": {
+    "aggregate_only": true,
     "approved_at": "1970-01-01T00:00:00+00:00",
     "approved_by": "CI",
     "grounding_gate": "pass",
     "model_wrote_numbers": false,
-    "numbers_bound": 4,
+    "numbers_bound": 1,
     "numbers_from": "deterministic_sql",
-    "numbers_unbound": 0
+    "numbers_unbound": 0,
+    "suppression_applied": true
   },
   "receipts": [
     {
@@ -40,70 +42,52 @@
     {
       "caveat": "",
       "collection_frequency": "",
-      "column_names": [
-        "client_id",
-        "program",
-        "enrolled_date",
-        "exit_date",
-        "exit_destination"
-      ],
+      "column_names": [],
       "computed_at": "1970-01-01T00:00:00+00:00",
       "data_source": "",
       "definition": "Enrollments with a recorded exit date. The unit is the enrollment, so a client who exited two enrollments counts twice. A blank exit date is treated as still enrolled, not as an exit.",
-      "display": "10",
+      "display": "[SUPPRESSED]",
       "indicator": "",
       "kind": "output",
       "metric_id": "exits",
-      "row_count": 10,
-      "slice_hash": "d01b64a63e59bba9e3a9522a595438037f9e5a2e5b1cdc289a4f32c3498a506b",
+      "row_count": 0,
+      "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
       "unit": "count",
-      "value": 10.0,
+      "value": 0.0,
       "value_sql": "SELECT COUNT(*) FROM data WHERE exit_date != ''"
     },
     {
       "caveat": "",
       "collection_frequency": "",
-      "column_names": [
-        "client_id",
-        "program",
-        "enrolled_date",
-        "exit_date",
-        "exit_destination"
-      ],
+      "column_names": [],
       "computed_at": "1970-01-01T00:00:00+00:00",
       "data_source": "",
       "definition": "Exits whose exit_destination is 'permanent'. Destination categories are taken as recorded; an unrecorded destination is not counted as permanent.",
-      "display": "6",
+      "display": "[SUPPRESSED]",
       "indicator": "",
       "kind": "output",
       "metric_id": "exits_permanent",
-      "row_count": 6,
-      "slice_hash": "62ead5a6a8c2c14dbfc28f9106f889416a3142dd1cb06aa7b676a230d17882e4",
+      "row_count": 0,
+      "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
       "unit": "count",
-      "value": 6.0,
+      "value": 0.0,
       "value_sql": "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
     },
     {
       "caveat": "",
       "collection_frequency": "",
-      "column_names": [
-        "client_id",
-        "program",
-        "enrolled_date",
-        "exit_date",
-        "exit_destination"
-      ],
+      "column_names": [],
       "computed_at": "1970-01-01T00:00:00+00:00",
       "data_source": "",
       "definition": "Permanent-housing exits divided by all exits in the period, as a whole-number percent. The denominator is exits, not all enrolled clients, so a client still enrolled is not in it.",
-      "display": "60%",
+      "display": "[SUPPRESSED]",
       "indicator": "",
       "kind": "outcome",
       "metric_id": "pct_permanent",
-      "row_count": 10,
-      "slice_hash": "d01b64a63e59bba9e3a9522a595438037f9e5a2e5b1cdc289a4f32c3498a506b",
+      "row_count": 0,
+      "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
       "unit": "percent",
-      "value": 60.0,
+      "value": 0.0,
       "value_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != ''"
     }
   ],
