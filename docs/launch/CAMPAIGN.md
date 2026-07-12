@@ -43,7 +43,7 @@ technical material before broad reach.
 
 | Week | Content or action | Channel | Dependency | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Publish the beta release and five-minute demo | GitHub | Signed release tag and PyPI publisher | Prepared |
+| 1 | Publish the beta release and five-minute demo | GitHub | Signed release tag and PyPI publisher | Published |
 | 1 | Add social preview, Discussions, and structured issue forms | GitHub | Merge discovery assets | Prepared |
 | 2 | Send 10 direct practitioner invitations | Email or direct message | Beta release URL | Ready to send |
 | 2 | Publish the canonical explainer | Owned profile or blog | Beta release URL | Drafted |
