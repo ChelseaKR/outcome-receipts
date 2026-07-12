@@ -11,7 +11,7 @@ import json
 from collections.abc import Mapping, Sequence
 
 from outcome_receipts.charts import Chart
-from outcome_receipts.comparison import ComparisonResult
+from outcome_receipts.comparison import ComparisonResult, ReconciliationResult
 from outcome_receipts.diff import FigureDelta, ManifestDiff
 from outcome_receipts.evaluate import EvalReport
 from outcome_receipts.models import (
@@ -50,6 +50,47 @@ def render_comparison_table(result: ComparisonResult) -> str:
             f"{row.delta.display} | {row.direction} |"
         )
     lines.append("")
+    lines.append("Change for a rate metric is in percentage points.")
+    return "\n".join(lines)
+
+
+def render_reconciliation_table(result: ReconciliationResult) -> str:
+    """Render the board reconciliation as Markdown: outcomes beside financial lines.
+
+    Each row is a small table pairing the receipted outcome figure with its
+    financial line, and each shows the cross-period change as a magnitude plus a
+    direction word, the same display convention as the comparison table. Every
+    number is a figure display, so the section asserts nothing that is not a
+    receipt, and the change is itself one query, not arithmetic over the page.
+    """
+
+    lines = [
+        "## Board reconciliation",
+        "",
+        f"Pairing each receipted outcome figure with its financial line, "
+        f"{result.prior_label} to {result.current_label}. Every value is a figure "
+        "with a receipt; each change is computed by a single query, not arithmetic "
+        "over the page.",
+        "",
+    ]
+    for row in result.rows:
+        outcome = row.outcome
+        financial = row.financial
+        lines.extend(
+            [
+                f"### {row.label}",
+                "",
+                f"| Line | {result.prior_label} | {result.current_label} | Change | Direction |",
+                "|------|------|------|--------|-----------|",
+                f"| {outcome.description or outcome.base_metric_id} (outcome) | "
+                f"{outcome.prior.display} | {outcome.current.display} | "
+                f"{outcome.delta.display} | {outcome.direction} |",
+                f"| {financial.description or financial.base_metric_id} (financial) | "
+                f"{financial.prior.display} | {financial.current.display} | "
+                f"{financial.delta.display} | {financial.direction} |",
+                "",
+            ]
+        )
     lines.append("Change for a rate metric is in percentage points.")
     return "\n".join(lines)
 
@@ -138,17 +179,41 @@ def render_charts_section(charts: Sequence[Chart], *, chart_dir: str) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _receipt_lines(figure: Figure) -> list[str]:
+    receipt = figure.receipt
+    lines = [f"- **{figure.metric_id}** = {figure.display}", f"  - kind: {receipt.kind}"]
+    optional = (
+        ("definition", receipt.definition),
+        ("indicator", receipt.indicator),
+        ("data source", receipt.data_source),
+        ("collection frequency", receipt.collection_frequency),
+        ("caveat", receipt.caveat),
+    )
+    lines.extend(f"  - {label}: {value}" for label, value in optional if value)
+    lines.extend(
+        [
+            f"  - query: `{receipt.value_sql}`",
+            f"  - rows in slice: {receipt.row_count}",
+            f"  - slice hash: `{receipt.slice_hash}`",
+            f"  - computed at: {receipt.computed_at}",
+        ]
+    )
+    return lines
+
+
 def render_report(
     title: str,
     narrative: str,
     figures: Sequence[Figure],
     *,
     comparison: ComparisonResult | None = None,
+    reconciliation: ReconciliationResult | None = None,
     charts: Sequence[Chart] = (),
     chart_dir: str = "charts",
     provenance: Provenance | None = None,
 ) -> str:
-    """Render the narrative, optional comparison and charts, provenance, receipts.
+    """Render the narrative, optional comparison, reconciliation, and charts, then
+    provenance and receipts.
 
     When ``provenance`` is given, a standard provenance block is embedded before
     the receipts, stating that no number was written by a model and that the gate
@@ -159,29 +224,15 @@ def render_report(
     lines = [f"# {title}", "", narrative.strip()]
     if comparison is not None:
         lines.extend(["", render_comparison_table(comparison)])
+    if reconciliation is not None:
+        lines.extend(["", render_reconciliation_table(reconciliation)])
     if charts:
         lines.extend(["", render_charts_section(charts, chart_dir=chart_dir)])
     if provenance is not None:
         lines.extend(["", provenance_markdown(provenance)])
     lines.extend(["", "## Receipts", ""])
     for figure in sorted(figures, key=lambda f: f.metric_id):
-        receipt = figure.receipt
-        lines.append(f"- **{figure.metric_id}** = {figure.display}")
-        lines.append(f"  - kind: {receipt.kind}")
-        if receipt.definition:
-            lines.append(f"  - definition: {receipt.definition}")
-        if receipt.indicator:
-            lines.append(f"  - indicator: {receipt.indicator}")
-        if receipt.data_source:
-            lines.append(f"  - data source: {receipt.data_source}")
-        if receipt.collection_frequency:
-            lines.append(f"  - collection frequency: {receipt.collection_frequency}")
-        if receipt.caveat:
-            lines.append(f"  - caveat: {receipt.caveat}")
-        lines.append(f"  - query: `{receipt.value_sql}`")
-        lines.append(f"  - rows in slice: {receipt.row_count}")
-        lines.append(f"  - slice hash: `{receipt.slice_hash}`")
-        lines.append(f"  - computed at: {receipt.computed_at}")
+        lines.extend(_receipt_lines(figure))
     return "\n".join(lines) + "\n"
 
 

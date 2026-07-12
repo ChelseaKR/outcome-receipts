@@ -3,8 +3,9 @@
 A report is configured by a TOML file: the data source, the report title and
 template, the metric definitions, and four optional sections. ``[[charts]]`` draws
 a chart from named figures, ``[comparison]`` compares a set of metrics across two
-periods, ``[[data_checks]]`` declares data-quality preconditions asserted before
-any figure is computed, and ``[[report.templates]]`` names several funder formats
+periods, ``[reconciliation]`` pairs each outcome figure with a financial line over
+the same two periods, and ``[[data_checks]]`` declares data-quality preconditions
+asserted before any figure is computed, and ``[[report.templates]]`` names several funder formats
 that render the same shared figures. Every number a chart or comparison renders is
 still a figure with a receipt; nothing here introduces an ungrounded path to a
 number. A metric may also carry optional logic-model mapping keys (``indicator``,
@@ -25,6 +26,8 @@ from outcome_receipts.models import (
     DataCheck,
     MetricSpec,
     PeriodSpec,
+    ReconciliationRow,
+    ReconciliationSpec,
     ReportSpec,
     TemplateSpec,
 )
@@ -153,20 +156,15 @@ def _parse_templates(raw: object, *, default_title: str) -> tuple[TemplateSpec, 
     return tuple(templates)
 
 
-def _parse_comparison(raw: object) -> ComparisonSpec | None:
-    if not raw:
-        return None
-    if not isinstance(raw, dict):
-        raise ValueError("[comparison] must be a table")
-    if "current" not in raw or "prior" not in raw:
-        raise ValueError("[comparison] must set 'current' and 'prior'")
-    periods_raw = raw.get("periods", [])
-    if not isinstance(periods_raw, list) or not periods_raw:
-        raise ValueError("[comparison] must define [[comparison.periods]]")
+def _parse_periods(raw: object, *, section: str) -> tuple[PeriodSpec, ...]:
+    """Parse the ``[[<section>.periods]]`` array of tables shared by both sections."""
+
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"[{section}] must define [[{section}.periods]]")
     periods: list[PeriodSpec] = []
-    for entry in periods_raw:
+    for entry in raw:
         if "id" not in entry or "predicate" not in entry:
-            raise ValueError("each [[comparison.periods]] entry must set 'id' and 'predicate'")
+            raise ValueError(f"each [[{section}.periods]] entry must set 'id' and 'predicate'")
         period_id = str(entry["id"])
         periods.append(
             PeriodSpec(
@@ -175,17 +173,80 @@ def _parse_comparison(raw: object) -> ComparisonSpec | None:
                 predicate=str(entry["predicate"]),
             )
         )
-    metric_section = raw.get("metrics", {})
-    if not metric_section:
-        raise ValueError("[comparison] must define at least one [comparison.metrics.<id>]")
-    metrics = tuple(_parse_metric(metric_id, body) for metric_id, body in metric_section.items())
+    return tuple(periods)
+
+
+def _resolve_period_refs(
+    raw: dict[str, Any], periods: tuple[PeriodSpec, ...], *, section: str
+) -> tuple[str, str]:
+    """Validate that the table's ``current``/``prior`` name defined periods."""
+
+    if "current" not in raw or "prior" not in raw:
+        raise ValueError(f"[{section}] must set 'current' and 'prior'")
     current = str(raw["current"])
     prior = str(raw["prior"])
     known = {period.period_id for period in periods}
     for name in (current, prior):
         if name not in known:
-            raise ValueError(f"[comparison] references unknown period {name!r}")
-    return ComparisonSpec(current=current, prior=prior, periods=tuple(periods), metrics=metrics)
+            raise ValueError(f"[{section}] references unknown period {name!r}")
+    return current, prior
+
+
+def _parse_comparison(raw: object) -> ComparisonSpec | None:
+    if not raw:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("[comparison] must be a table")
+    periods = _parse_periods(raw.get("periods"), section="comparison")
+    current, prior = _resolve_period_refs(raw, periods, section="comparison")
+    metric_section = raw.get("metrics", {})
+    if not metric_section:
+        raise ValueError("[comparison] must define at least one [comparison.metrics.<id>]")
+    metrics = tuple(_parse_metric(metric_id, body) for metric_id, body in metric_section.items())
+    return ComparisonSpec(current=current, prior=prior, periods=periods, metrics=metrics)
+
+
+def _slug(text: str) -> str:
+    """A stable metric-id-safe token derived from a row label."""
+
+    token = "".join(ch if ch.isalnum() else "_" for ch in text.lower()).strip("_")
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token or "row"
+
+
+def _parse_reconciliation(raw: object) -> ReconciliationSpec | None:
+    if not raw:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("[reconciliation] must be a table")
+    periods = _parse_periods(raw.get("periods"), section="reconciliation")
+    current, prior = _resolve_period_refs(raw, periods, section="reconciliation")
+    rows_raw = raw.get("rows", [])
+    if not isinstance(rows_raw, list) or not rows_raw:
+        raise ValueError("[reconciliation] must define at least one [[reconciliation.rows]]")
+    rows: list[ReconciliationRow] = []
+    for entry in rows_raw:
+        if "label" not in entry:
+            raise ValueError("each [[reconciliation.rows]] entry must set 'label'")
+        label = str(entry["label"])
+        row_id = str(entry.get("id", _slug(label)))
+        if "outcome" not in entry:
+            raise ValueError(
+                f"reconciliation row {label!r} must set an [reconciliation.rows.outcome] metric"
+            )
+        if "financial" not in entry:
+            raise ValueError(
+                f"reconciliation row {label!r} must set an [reconciliation.rows.financial] metric"
+            )
+        rows.append(
+            ReconciliationRow(
+                label=label,
+                outcome=_parse_metric(f"{row_id}_outcome", entry["outcome"]),
+                financial=_parse_metric(f"{row_id}_financial", entry["financial"]),
+            )
+        )
+    return ReconciliationSpec(current=current, prior=prior, periods=periods, rows=tuple(rows))
 
 
 def load_spec(path: str | Path) -> Spec:
@@ -212,6 +273,7 @@ def load_spec(path: str | Path) -> Spec:
     charts = _parse_charts(data.get("charts"))
     comparison = _parse_comparison(data.get("comparison"))
     data_checks = _parse_data_checks(data.get("data_checks"))
+    reconciliation = _parse_reconciliation(data.get("reconciliation"))
 
     report = ReportSpec(
         title=title,
@@ -220,6 +282,7 @@ def load_spec(path: str | Path) -> Spec:
         charts=charts,
         comparison=comparison,
         data_checks=data_checks,
+        reconciliation=reconciliation,
         templates=templates,
     )
     return Spec(data_path=_resolve(base, str(data_section["path"])), report=report)

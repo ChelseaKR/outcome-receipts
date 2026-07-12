@@ -118,7 +118,9 @@ def _bundle_figures() -> list[Figure]:
 
     from outcome_receipts.cli import _compute_all
 
-    _spec, _rows, figures, _comparison = _compute_all(str(GRANT), reproducible=True)
+    _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+        str(GRANT), reproducible=True
+    )
     return figures
 
 

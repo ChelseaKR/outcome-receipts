@@ -18,12 +18,19 @@ word, not a number.
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from outcome_receipts.clock import Clock, SystemClock
 from outcome_receipts.engine import _format, compute_figure, load_table
-from outcome_receipts.models import ComparisonSpec, Figure, MetricSpec, PeriodSpec
+from outcome_receipts.models import (
+    ComparisonSpec,
+    Figure,
+    MetricSpec,
+    PeriodSpec,
+    ReconciliationSpec,
+)
 
 _PLACEHOLDER = "{period}"
 
@@ -132,6 +139,42 @@ def _direction(value: float) -> str:
     return "no change"
 
 
+def _compare_metric(
+    conn: sqlite3.Connection,
+    spec: MetricSpec,
+    current: PeriodSpec,
+    prior: PeriodSpec,
+    clock: Clock,
+) -> tuple[ComparisonRow, list[Figure]]:
+    """Compute one metric's prior, current, and delta figures over the two periods.
+
+    Shared by ``compute_comparison`` and ``compute_reconciliation`` so both build
+    their rows the same way: two period figures from the metric's query with the
+    period predicate substituted, and a delta whose value comes from a single
+    subtracting query (never Python arithmetic over the two). Returns the row and
+    the flat list of figures it produced, so the caller can add them to the report
+    figure set the grounding gate and the receipts manifest draw from.
+    """
+
+    _require_placeholder(spec)
+    prior_fig = compute_figure(conn, _for_period(spec, prior), clock=clock)
+    current_fig = compute_figure(conn, _for_period(spec, current), clock=clock)
+    raw_delta = compute_figure(conn, _delta_spec(spec, current, prior), clock=clock)
+    delta_fig = replace(
+        raw_delta,
+        display=_magnitude_display(raw_delta.value, spec.unit, spec.decimals),
+    )
+    row = ComparisonRow(
+        base_metric_id=spec.metric_id,
+        description=spec.description,
+        prior=prior_fig,
+        current=current_fig,
+        delta=delta_fig,
+        direction=_direction(raw_delta.value),
+    )
+    return row, [prior_fig, current_fig, delta_fig]
+
+
 def compute_comparison(
     rows: Sequence[dict[str, str]],
     comparison: ComparisonSpec,
@@ -154,26 +197,86 @@ def compute_comparison(
         result_rows: list[ComparisonRow] = []
         figures: list[Figure] = []
         for spec in comparison.metrics:
-            _require_placeholder(spec)
-            prior_fig = compute_figure(conn, _for_period(spec, prior), clock=clock)
-            current_fig = compute_figure(conn, _for_period(spec, current), clock=clock)
-            raw_delta = compute_figure(conn, _delta_spec(spec, current, prior), clock=clock)
-            delta_fig = replace(
-                raw_delta,
-                display=_magnitude_display(raw_delta.value, spec.unit, spec.decimals),
+            row, row_figures = _compare_metric(conn, spec, current, prior, clock)
+            result_rows.append(row)
+            figures.extend(row_figures)
+        return ComparisonResult(
+            current_label=current.label,
+            prior_label=prior.label,
+            rows=tuple(result_rows),
+            figures=tuple(figures),
+        )
+    finally:
+        conn.close()
+
+
+@dataclass(frozen=True)
+class ReconciledRow:
+    """One reconciliation line: an outcome comparison beside its financial comparison.
+
+    ``outcome`` and ``financial`` are each an ordinary :class:`ComparisonRow`, so a
+    line already carries both figures' prior, current, delta, and direction, every
+    one a Figure with a receipt. ``label`` names the pairing.
+    """
+
+    label: str
+    outcome: ComparisonRow
+    financial: ComparisonRow
+
+
+@dataclass(frozen=True)
+class ReconciliationResult:
+    """The computed reconciliation: its rows and the flat list of figures it produced.
+
+    ``figures`` is every outcome and financial period and delta figure, so callers
+    add them to the report figure set the grounding gate and the receipts manifest
+    draw from, exactly as with a comparison.
+    """
+
+    current_label: str
+    prior_label: str
+    rows: tuple[ReconciledRow, ...]
+    figures: tuple[Figure, ...]
+
+
+def compute_reconciliation(
+    rows: Sequence[dict[str, str]],
+    reconciliation: ReconciliationSpec,
+    *,
+    clock: Clock | None = None,
+    table: str = "data",
+) -> ReconciliationResult:
+    """Compute every outcome and financial figure for a board reconciliation.
+
+    Each row's outcome and financial metric is compared across the two periods by
+    the same ``_compare_metric`` path the comparison uses, so every figure (both
+    period values and each delta) carries a receipt and no displayed number is
+    Python arithmetic over the page. A cost-per-outcome ratio is intentionally not
+    computed: it would divide one metric's scalar by another's, and while the value
+    is a single query, its receipt slice cannot be a well-formed union of the two
+    metrics' differently shaped row sets, so pairing the grounded figures side by
+    side preserves the "no ungrounded number" invariant without it.
+    """
+
+    clock = clock or SystemClock()
+    current = reconciliation.period(reconciliation.current)
+    prior = reconciliation.period(reconciliation.prior)
+
+    conn = load_table(rows, table=table)
+    try:
+        result_rows: list[ReconciledRow] = []
+        figures: list[Figure] = []
+        for row in reconciliation.rows:
+            outcome_row, outcome_figures = _compare_metric(conn, row.outcome, current, prior, clock)
+            financial_row, financial_figures = _compare_metric(
+                conn, row.financial, current, prior, clock
             )
             result_rows.append(
-                ComparisonRow(
-                    base_metric_id=spec.metric_id,
-                    description=spec.description,
-                    prior=prior_fig,
-                    current=current_fig,
-                    delta=delta_fig,
-                    direction=_direction(raw_delta.value),
-                )
+                ReconciledRow(label=row.label, outcome=outcome_row, financial=financial_row)
             )
-            figures.extend((prior_fig, current_fig, delta_fig))
-        return ComparisonResult(
+            figures.extend(outcome_figures)
+            figures.extend(financial_figures)
+        return ReconciliationResult(
             current_label=current.label,
             prior_label=prior.label,
             rows=tuple(result_rows),
