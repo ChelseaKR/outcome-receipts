@@ -1,0 +1,23 @@
+{
+  "requirements": [
+    {
+      "aggregation": "count_distinct",
+      "definition": "Distinct participants in the reporting export.",
+      "description": "Unduplicated clients served",
+      "field": "client_id",
+      "metric_id": "clients_served"
+    },
+    {
+      "aggregation": "count_rows",
+      "definition": "Enrollments whose recorded exit destination is permanent.",
+      "description": "Exits to permanent housing",
+      "filters": [
+        {
+          "equals": "permanent",
+          "field": "exit_destination"
+        }
+      ],
+      "metric_id": "permanent_exits"
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 """Command-line interface.
 
 Commands:
+  map     map logical funder requirements to schema-variant CSV columns and emit
+          a fail-closed human review queue (never executes a candidate)
   init    inspect an export and scaffold a starter TOML metric spec (empty stubs
           that fail loudly until a human fills in the SQL and definitions)
   run     compute figures, draft the narrative, run the grounding gate, and write
@@ -53,6 +55,7 @@ from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import EvalReport, evaluate
 from outcome_receipts.grounding import ground
 from outcome_receipts.ledger import LedgerEntry, append_export, verify_chain
+from outcome_receipts.mapping import build_mapping_queue
 from outcome_receipts.models import Figure, GroundingResult, NumericSpan, TemplateSpec
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
@@ -84,9 +87,9 @@ EXIT_OK = 0
 """Success: the command ran and the grounding gate (where one applies) passed."""
 
 EXIT_VERIFY_FAIL = 1
-"""An audit, verify, verify-ledger, or eval check failed: a number is unbound, a
-receipt or artifact drifted, the export ledger's hash chain is broken, or the
-eval gate did not pass."""
+"""A map, audit, verify, verify-ledger, or eval check failed: a mapping is blocked,
+a number is unbound, a receipt or artifact drifted, the export ledger's hash chain
+is broken, or the eval gate did not pass."""
 
 EXIT_GATE_FAIL = 2
 """The grounding gate refused to export: ``run`` found an unbound number and wrote
@@ -913,6 +916,23 @@ def _cmd_init(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _cmd_map(args: argparse.Namespace) -> int:
+    queue = build_mapping_queue(Path(args.data), Path(args.requirements))
+    payload = {"command": "map", "out": args.out, **queue.payload()}
+    if args.out:
+        Path(args.out).write_text(json.dumps(queue.payload(), indent=2, sort_keys=True) + "\n")
+    if args.json:
+        _emit_json(payload)
+    else:
+        print(f"mapping candidates: {len(queue.candidates)}")
+        for candidate in queue.candidates:
+            print(f"  [{candidate.status}] {candidate.metric_id}: {candidate.confidence:.2f}")
+        if args.out:
+            print(f"review queue: {args.out}")
+        print("no mapping is approved or executed; a human must review every candidate")
+    return EXIT_OK if queue.ok else EXIT_VERIFY_FAIL
+
+
 def build_parser() -> argparse.ArgumentParser:
     # ``--json`` is understood both before the subcommand (on the top parser) and
     # after it (via this shared parent), so `receipts --json run …` and
@@ -1053,6 +1073,18 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--title", help="report title to write into the scaffold")
     init_parser.add_argument("--out", help="write the spec here instead of stdout")
     init_parser.set_defaults(func=_cmd_init)
+
+    map_parser = sub.add_parser(
+        "map",
+        help="map funder metric requirements to source columns for human review",
+        parents=[json_parent],
+    )
+    map_parser.add_argument("--data", required=True, help="path to the schema-variant CSV")
+    map_parser.add_argument(
+        "--requirements", required=True, help="path to the funder requirements JSON"
+    )
+    map_parser.add_argument("--out", help="write the review queue JSON here")
+    map_parser.set_defaults(func=_cmd_map)
 
     return parser
 
