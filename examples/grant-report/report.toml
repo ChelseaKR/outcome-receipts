@@ -18,8 +18,8 @@ moved into permanent housing and {exits_temporary} into temporary housing, with 
 period was {pct_permanent}.
 
 The charts below break down exits by destination and compare permanent-housing \
-exits across the two quarters. The period comparison table reports the change in \
-each headline outcome from the first quarter to the second.
+exits across both quarters. The period comparison table reports the change in \
+each headline outcome from the prior quarter to the current quarter.
 """
 
 [metrics.clients_served]

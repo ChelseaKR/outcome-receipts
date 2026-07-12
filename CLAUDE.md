@@ -284,9 +284,9 @@ manager can act on. Write like a careful engineer, not a launch tweet.
 2. The exact small-cell suppression threshold and complementary-suppression
    rule, from primary HUD HMIS reporting guidance, expressed as tests. Do not
    hard-code n < 11 without confirming it against the source for the report type.
-3. How a numeric span is parsed from narrative for the grounding gate
-   (percentages, ranges, money, written-out numbers) and how strict the
-   value-match is (exact, rounded, tolerance), recorded in an ADR.
+3. **Resolved by ADR 0007:** numeric matching is exact after presentational
+   normalization, range endpoints bind independently, signs are preserved, and
+   written-out English/Spanish numerals are detected but always fail unbound.
 4. The report-spec and metric-spec shape, and how far to map toward HMIS CSV and
    common funder templates without overreaching into being a reporting product.
 5. Whether the figure-approval and mapping-review surface is a CLI flow or a

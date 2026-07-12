@@ -56,7 +56,8 @@ The grounding gate must bind these displays to the number a reader sees:
   stray `30 people` still reports `30` as its span.
 
 Match stays **exact** on the normalized number: no rounding or tolerance is
-introduced here. Tolerance, ranges, and written-out numbers remain open under R7.
+introduced here. ADR 0007 later closes R7 for ranges, signs, written-out
+numbers, and tolerance.
 
 ### A unit-typed delta keeps its unit
 
@@ -73,6 +74,5 @@ column). The receipt still carries the signed value.
   captures a bare number as exactly that token.
 - The `display` of a figure remains one canonical string per unit, so `receipts verify`
   re-derivation and the receipts manifest are unaffected in shape.
-- Open question #3 / R7 is partially settled: money and unit-suffixed numbers now have a
-  recorded span rule and an exact match; ranges, written-out numbers, and tolerance are
-  still open.
+- Open question #3 / R7 was partially settled here and is fully resolved by ADR
+  0007.
