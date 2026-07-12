@@ -71,6 +71,7 @@ def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
         indicator=str(body.get("indicator", "")),
         data_source=str(body.get("data_source", "")),
         collection_frequency=str(body.get("collection_frequency", "")),
+        caveat=str(body.get("caveat", "")),
     )
 
 

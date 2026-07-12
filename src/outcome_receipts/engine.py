@@ -12,14 +12,17 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 from outcome_receipts.clock import Clock, SystemClock
 from outcome_receipts.models import (
     EMPTY_SLICE_HASH,
+    HASH_DIGEST_SIZE,
     DataCheck,
     Figure,
     MetricSpec,
@@ -41,56 +44,160 @@ class DataCheckError(Exception):
     """
 
 
+class LoaderError(Exception):
+    """Raised when input data is malformed and must fail closed.
+
+    The message always names the offending scope — the file, a column, or a data
+    row — and the rule that was violated, so a messy real export produces a clear,
+    actionable error instead of a silently wrong table or an opaque failure far
+    downstream. Every loader guard raises this rather than swallowing bad input.
+    """
+
+
+class LoadedTable(NamedTuple):
+    """The validated result of reading a data file.
+
+    ``rows`` are the stripped row dicts (what the rest of the engine consumes).
+    ``columns`` is the header in file order. ``row_count`` is the number of data
+    rows, and ``digest`` is a BLAKE2b-256 hex digest of the raw file bytes, so the
+    exact input can be recorded and re-identified: the same bytes always produce
+    the same digest.
+    """
+
+    rows: list[dict[str, str]]
+    columns: list[str]
+    row_count: int
+    digest: str
+
+
+def _quote_ident(name: str) -> str:
+    """Quote a SQL identifier, escaping embedded double-quotes by doubling them.
+
+    A header like ``client "id"`` or one containing a quote must not be able to
+    break out of its quoting and change or inject DDL. Doubling the embedded quote
+    is the SQL-standard escape and preserves the real column name, so genuine HMIS
+    headers (which do contain punctuation) load intact rather than being rejected.
+    """
+
+    return '"' + name.replace('"', '""') + '"'
+
+
 def load_table(rows: Sequence[dict[str, str]], *, table: str = "data") -> sqlite3.Connection:
     """Load a list of row dicts into an in-memory SQLite table.
 
     All columns are stored as text, which keeps loading deterministic and lets the
-    metric SQL cast where it needs a number. The column set is the union of keys
-    in the first row; rows are expected to share a schema (CSV guarantees this).
+    metric SQL cast where it needs a number. The column set is the keys of the
+    first row; rows are expected to share a schema (CSV guarantees this).
+
+    Fails closed on an empty ``rows``: an empty table would surface only as an
+    opaque error deep in a metric query, so it is rejected here with a clear
+    ``LoaderError`` instead of silently creating a placeholder table.
     """
 
-    # S608 (SQL-injection lint) is a false positive on `table` and `columns`
-    # below: `table` defaults to the "data" constant everywhere it is called
-    # (grep confirms no caller passes a dynamic value), and `columns` are CSV
-    # header names read as identifiers, not values. Neither is user-supplied
-    # in the request-body sense the rule guards against.
-    conn = sqlite3.connect(":memory:")
+    # S608 (ruff) / python.sqlalchemy.security.sqlalchemy-execute-raw-query
+    # (semgrep — see .semgrep-waivers.yml) are both false positives on `table`
+    # and `columns` below: `table` defaults to the "data" constant everywhere
+    # it is called (grep confirms no caller passes a dynamic value), and
+    # `columns` are CSV header names read as identifiers, not values; both pass
+    # through _quote_ident, which doubles any embedded double-quote. Neither is
+    # user-supplied in the request-body sense either rule guards against.
     if not rows:
-        conn.execute(f'CREATE TABLE "{table}" (_empty TEXT)')
-        return conn
+        raise LoaderError("cannot load table: no data rows (an empty dataset is rejected)")
+    conn = sqlite3.connect(":memory:")
     columns = list(rows[0].keys())
-    quoted = ", ".join(f'"{c}" TEXT' for c in columns)
-    conn.execute(f'CREATE TABLE "{table}" ({quoted})')
+    quoted = ", ".join(f"{_quote_ident(c)} TEXT" for c in columns)
+    # nosemgrep: sqlalchemy-execute-raw-query
+    conn.execute(f"CREATE TABLE {_quote_ident(table)} ({quoted})")
     placeholders = ", ".join("?" for _ in columns)
     conn.executemany(
-        f'INSERT INTO "{table}" VALUES ({placeholders})',  # noqa: S608
+        f"INSERT INTO {_quote_ident(table)} VALUES ({placeholders})",  # noqa: S608
         [tuple(row.get(c, "") for c in columns) for row in rows],
     )
     conn.commit()
     return conn
 
 
+def read_csv_meta(path: Path) -> LoadedTable:
+    """Read and validate a CSV, failing closed on malformed input.
+
+    Every check names its scope so the caller can fix the file: an empty or
+    header-only file names the file; a duplicate or blank header names the column;
+    a row whose field count does not match the header names the row number. On
+    success the raw bytes are digested (BLAKE2b-256) so the exact input can be
+    recorded and reproduced.
+    """
+
+    raw = path.read_bytes()
+    digest = hashlib.blake2b(raw, digest_size=32).hexdigest()
+
+    reader = csv.reader(io.StringIO(raw.decode("utf-8-sig")))
+    try:
+        header = next(reader)
+    except StopIteration:
+        raise LoaderError(f"{path}: file is empty; a header row is required") from None
+    if not header:
+        raise LoaderError(f"{path}: no header row; a header row is required")
+
+    seen: set[str] = set()
+    columns: list[str] = []
+    for index, name in enumerate(header, start=1):
+        column = name.strip()
+        if not column:
+            raise LoaderError(f"{path}: column {index} has an empty or whitespace-only header")
+        if column in seen:
+            raise LoaderError(f"{path}: duplicate header column {column!r}")
+        seen.add(column)
+        columns.append(column)
+
+    rows: list[dict[str, str]] = []
+    for line_number, record in enumerate(reader, start=2):
+        if len(record) != len(columns):
+            raise LoaderError(
+                f"{path}: row {line_number} has {len(record)} fields, expected {len(columns)}"
+            )
+        rows.append({col: (val or "").strip() for col, val in zip(columns, record, strict=True)})
+
+    if not rows:
+        raise LoaderError(f"{path}: file has a header but no data rows")
+
+    return LoadedTable(rows=rows, columns=columns, row_count=len(rows), digest=digest)
+
+
 def read_csv(path: Path) -> list[dict[str, str]]:
-    """Read a CSV into a list of row dicts, values stripped."""
+    """Read a CSV into a list of validated row dicts, values stripped.
 
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
-        return [{k: (v or "").strip() for k, v in row.items()} for row in reader]
+    A thin wrapper over :func:`read_csv_meta` for callers that only need the rows;
+    the same fail-closed validation applies. Use :func:`read_csv_meta` when the
+    file digest or row/column counts are needed (for provenance at load time).
+    """
+
+    return read_csv_meta(path).rows
 
 
-def _slice_hash(slice_rows: list[tuple[object, ...]]) -> str:
-    """BLAKE2b-256 over the canonical JSON of the slice rows.
+def _slice_hash(column_names: Sequence[str], slice_rows: list[tuple[object, ...]]) -> str:
+    """BLAKE2b-256 over the canonical JSON of the slice's columns and rows.
 
     Rows are sorted so the hash does not depend on query row order, and each value
-    is stringified so the hash is stable regardless of SQLite's column typing.
+    is stringified so the hash is stable regardless of SQLite's column typing. The
+    sorted column names are folded into the payload (canonicalization ``v1``), so a
+    slice whose values are unchanged but whose columns were renamed hashes
+    differently — under the earlier rules a rename was invisible.
+
+    A slice with zero rows still returns ``EMPTY_SLICE_HASH`` regardless of its
+    columns, preserving the invariant that an empty slice is a single visible
+    sentinel rather than a family of column-dependent hashes. See ADR 0005.
     """
 
     if not slice_rows:
         return EMPTY_SLICE_HASH
-    canonical = [[str(value) for value in row] for row in slice_rows]
-    canonical.sort()
-    payload = json.dumps(canonical, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.blake2b(payload.encode("utf-8"), digest_size=32).hexdigest()
+    canonical_rows = [[str(value) for value in row] for row in slice_rows]
+    canonical_rows.sort()
+    payload = json.dumps(
+        {"columns": sorted(column_names), "rows": canonical_rows},
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.blake2b(payload.encode("utf-8"), digest_size=HASH_DIGEST_SIZE).hexdigest()
 
 
 def _format(value: float, unit: str, decimals: int) -> str:
@@ -153,13 +260,15 @@ def compute_figure(
     raw_value = value_rows[0][0]
     value = float(raw_value) if raw_value is not None else 0.0
 
-    slice_rows = _execute(conn, spec.slice_sql, spec).fetchall()
+    slice_cursor = _execute(conn, spec.slice_sql, spec)
+    slice_rows = slice_cursor.fetchall()
+    columns = tuple(d[0] for d in slice_cursor.description or ())
 
     receipt = Receipt(
         metric_id=spec.metric_id,
         value_sql=spec.value_sql,
         row_count=len(slice_rows),
-        slice_hash=_slice_hash(slice_rows),
+        slice_hash=_slice_hash(columns, slice_rows),
         value=value,
         unit=spec.unit,
         computed_at=clock.now_iso(),
@@ -168,6 +277,8 @@ def compute_figure(
         indicator=spec.indicator,
         data_source=spec.data_source,
         collection_frequency=spec.collection_frequency,
+        caveat=spec.caveat,
+        column_names=columns,
     )
     return Figure(
         metric_id=spec.metric_id,

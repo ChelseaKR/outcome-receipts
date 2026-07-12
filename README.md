@@ -60,7 +60,7 @@ make install
 Run the bundled demo:
 
 ```sh
-receipts run --config examples/housing-demo/report.toml --out out
+receipts run --config examples/housing-demo/report.toml --out out --approved-by "A. Reviewer"
 ```
 
 ```text
@@ -69,15 +69,27 @@ numbers in narrative: 4 (bound 4, unbound 0)
 chart and comparison numbers: 0 (bound 0, unbound 0)
 
 grounding gate: PASS
+  approved: A. Reviewer
   report:   out/report.md
   receipts: out/receipts.json
   trace:    out/trace.html
+  ledger:   export-ledger.jsonl (entry 0, hash 5b1c…)
 ```
 
 It writes `out/report.md` (the narrative, a provenance statement, and a receipts
 manifest), `out/receipts.json` (the machine-readable receipts and provenance
 record), and `out/trace.html` (a funder-facing view of the receipts, described
-below). Check a narrative against the receipts at any time:
+below).
+
+An export also needs a named human sign-off. `--approved-by NAME` records the
+approver non-interactively; without it, an interactive run prompts you to type
+your name after the grounding gate passes, and a non-interactive run aborts with
+exit code 3 and writes nothing. The approver and the approval time are recorded
+in the provenance statement of the report and in the receipts manifest
+(`provenance.approved_by`, `provenance.approved_at`; `approved_by` is `null`
+when nothing was approved, which no export should ever carry).
+
+Check a narrative against the receipts at any time:
 
 ```sh
 receipts audit --config examples/housing-demo/report.toml --narrative some-draft.md
@@ -159,6 +171,37 @@ checks each value, slice hash, row count, and query against the manifest. A
 mismatch is drift (the data changed, the spec changed, or the manifest was edited);
 verify reports each drifted receipt and exits non-zero, so a silent divergence
 cannot pass.
+
+### CLI output and exit codes
+
+Every command prints human-readable lines by default. Pass `--json` to any command
+to get a single machine-readable JSON object on stdout instead, with the prose
+suppressed. The JSON is purely presentational; it never changes the exit code.
+
+```sh
+receipts run --config examples/housing-demo/report.toml --out out --reproducible --approved-by CI --json
+receipts verify --config examples/grant-report/report.toml --receipts out/grant/receipts.json --json
+```
+
+The `run` object reports the gate result, the figure and narrative tallies, any
+unbound numbers, the paths it wrote, the export-ledger entry it appended, and the
+recorded approval. Under `--json` there is no interactive sign-off prompt, so
+`run` needs `--approved-by`; without it the export aborts with exit code 3 and a
+`null` approval in the payload. The `audit`, `verify`, `verify-ledger`, and
+`eval` objects report their own pass or fail and the details behind it; the
+`init` object carries the scaffolded spec and where it was written. The `--json`
+flag is accepted before or after the subcommand, so `receipts --json run ...`
+and `receipts run ... --json` are equivalent.
+
+The exit code is the contract a script should read. It is stable across the human
+and JSON forms.
+
+| Code | Meaning |
+| ---- | ------- |
+| 0 | Success. The command ran and the grounding gate, where one applies, passed. |
+| 1 | A verification or eval check failed closed: `audit` found an unbound number, `verify` found receipt or artifact drift, `verify-ledger` found a broken hash chain, or the `eval` gate did not pass. |
+| 2 | The grounding gate refused to export. `run` found an unbound number and wrote nothing. |
+| 3 | The export was not approved. The grounding gate passed but no named human signed off (no `--approved-by`, and no interactive sign-off), so `run` wrote nothing. |
 
 ## What it does not do
 
