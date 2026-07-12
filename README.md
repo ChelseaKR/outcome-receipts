@@ -172,6 +172,11 @@ mismatch is drift (the data changed, the spec changed, or the manifest was edite
 verify reports each drifted receipt and exits non-zero, so a silent divergence
 cannot pass.
 
+The same check is packaged as a reusable composite GitHub Action so a downstream
+repo can gate CI on receipt drift with a commit-pinned action ref. See
+[docs/ci-action.md](docs/ci-action.md) for the workflow snippet and supply-chain
+pinning guidance.
+
 ### CLI output and exit codes
 
 Every command prints human-readable lines by default. Pass `--json` to any command

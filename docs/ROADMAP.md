@@ -74,6 +74,9 @@ compute  ->  draft  ->  ground  ->  suppress  ->  approve  ->  export
   to the prior by hash so tampering is detectable. `receipts verify-ledger`
   re-hashes the chain and fails closed on any break. The record of what was
   reported to whom is itself receipted. See ADR 0004.
+* **Shipped:** `receipts verify` is packaged as a reusable composite GitHub Action
+  (`action.yml`), so a downstream repo can gate CI on receipt drift with
+  `uses: ChelseaKR/outcome-receipts@v1`. See [ci-action.md](ci-action.md).
 
 ## v1.0.0 — Stability commitments
 

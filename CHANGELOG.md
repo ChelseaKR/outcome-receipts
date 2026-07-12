@@ -98,6 +98,12 @@ retitled with the real release date when `v0.1.0` is tagged and
   with justification; `S101` (assert) is ignored under `tests/*` only, since
   pytest's own idiom relies on it.
 
+- **Reusable CI action** (`action.yml`). The `receipts verify` gate is packaged as
+  a composite GitHub Action, so a downstream repo can gate CI on receipt drift with
+  a commit-pinned `uses: ChelseaKR/outcome-receipts@<sha>` and the two inputs `config` and `receipts`
+  (mirroring the CLI flags). The CLI already exits non-zero on drift, so the action
+  fails closed. It is dogfooded in CI against `examples/housing-demo/receipts.json`,
+  and usage plus supply-chain pinning guidance live in `docs/ci-action.md`.
 - **Receipts diff between reporting cycles** (`diff.py`, `receipts diff`). Change
   accounting between two receipted runs: `receipts diff PRIOR.json CURRENT.json`
   compares two receipts manifests and reports which figures moved, were added, or
