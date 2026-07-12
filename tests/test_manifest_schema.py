@@ -62,6 +62,13 @@ def test_published_schema_declares_caveat() -> None:
     assert receipt_properties["caveat"]["type"] == "string"
 
 
+def test_published_schema_declares_logic_model_fields() -> None:
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    receipt_properties = schema["properties"]["receipts"]["items"]["properties"]
+    for field in ("indicator", "data_source", "collection_frequency"):
+        assert receipt_properties[field]["type"] == "string"
+
+
 # --- A tiny stdlib structural validator for a subset of JSON Schema. ---
 # We validate the emitted manifest against the published schema using only the
 # standard library, so the zero runtime-dependency posture holds (ADR 0005).

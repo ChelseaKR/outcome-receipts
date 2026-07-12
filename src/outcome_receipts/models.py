@@ -55,6 +55,12 @@ class MetricSpec:
     rate). It rides in the receipt so a reader does not misread a busy output as
     the outcome it is meant to produce.
 
+    ``indicator``, ``data_source``, and ``collection_frequency`` are the optional
+    logic-model mapping. They tie the figure to a row in a theory of change: the
+    named indicator it measures, the system the data comes from, and how often that
+    data is collected. Each defaults to empty, which means the figure is not mapped;
+    when set they ride into the receipt so the mapping travels with the number.
+
     ``caveat`` is an optional qualifying note (e.g. a data-quality limitation)
     that travels with the receipt, so a limitation on the figure rides inside the
     receipt chain and renders next to the figure instead of living as loose prose.
@@ -68,6 +74,9 @@ class MetricSpec:
     decimals: int = 0
     definition: str = ""
     kind: str = "output"
+    indicator: str = ""
+    data_source: str = ""
+    collection_frequency: str = ""
     caveat: str = ""
 
 
@@ -107,7 +116,10 @@ class Receipt:
     without the spec on hand. ``kind`` carries the same forward label
     distinguishing an activity count (``output``) from a change in condition
     (``outcome``), so a reader of the receipt alone does not misread an output as
-    an outcome. ``caveat`` carries the figure's optional qualifying note (e.g. a
+    an outcome. ``indicator``, ``data_source``, and ``collection_frequency`` carry
+    the logic-model mapping forward the same way, so a receipt states which
+    theory-of-change indicator its number belongs to.
+    ``caveat`` carries the figure's optional qualifying note (e.g. a
     data-quality limitation) forward the same way, so the limitation rides inside
     the receipt chain rather than as loose prose.
     """
@@ -121,6 +133,9 @@ class Receipt:
     computed_at: str
     definition: str = ""
     kind: str = "output"
+    indicator: str = ""
+    data_source: str = ""
+    collection_frequency: str = ""
     caveat: str = ""
     column_names: tuple[str, ...] = ()
 
