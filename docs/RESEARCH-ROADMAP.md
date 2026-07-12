@@ -23,6 +23,10 @@
 >
 > **Assembled: 2026-06-30.** Personas are synthetic (see the warning in
 > [`docs/USER-RESEARCH.md`](USER-RESEARCH.md)).
+>
+> **Delivery audit: 2026-07-11.** Every remediation R1–R11 and expansion E1–E11
+> below is implemented. The sequencing and first-sprint sections are retained as
+> the decision record that produced the work, not as an open backlog.
 
 ## Research basis (evidence behind the priorities)
 
@@ -48,8 +52,8 @@ S afternoon · M day or two · L week or more.
 | --- | --- | --- | --- | --- | --- |
 | R1 | **Funder-facing "trace this number" view** — render `receipts.json` as static HTML or a printable report appendix: each figure with its plain-language definition, row count, slice hash, timestamp, clickable from the narrative. No SQL, no Python to read it. | P1,P3,P7,P8,P10 | P0 | M | The proof exists but is illegible to non-engineers (theme 1). EV7: record-cited reporting is the bar. **[NET-NEW]** (the manifest exists at v0.1; a human view does not) ✅ Implemented, committed 5d7cd57..42c33b5 |
 | R2 | **`definition` field on a `MetricSpec`** that rides in the receipt and renders in plain language (what window, who counts, dedup rule). Document common definitional traps. | P2,P6,P8 | P0 | S | Directly closes the bias-audit TODO in [`RESPONSIBLE-TECH-AUDITS.md`](RESPONSIBLE-TECH-AUDITS.md) (dedup windows, exit categories). EV4. **[NET-NEW]** ✅ Implemented, committed 5d7cd57..42c33b5 |
-| R3 | **Small-cell suppression as a merge-blocking, sourced invariant** — cells of 1–10 suppressed, complementary suppression, true zeros preserved, modeled on the CMS policy; assert "suppression applied" in the manifest. | P9,P11 | P0 | M | **[corroborates ROADMAP v0.2]**. EV6 fixes the exact threshold and complementary rule from primary guidance. Already `test_suppression.py` in the plan. |
-| R4 | **Machine-readable aggregate-only assertion** in the manifest (no client-level field shipped; export mode = aggregate). | P9,P11 | P1 | S | **[corroborates ROADMAP v0.2]** (aggregate-only export). EV6. Makes the DPIA posture checkable, not just stated. |
+| R3 | **Small-cell suppression as a merge-blocking, sourced invariant** — cells of 1–10 suppressed, complementary suppression, true zeros preserved, modeled on the CMS policy; assert "suppression applied" in the manifest. | P9,P11 | P0 | M | **[corroborates ROADMAP v0.2]** ✅ Implemented with primary, complementary, delta, and percentage disclosure controls plus artifact-level leak tests. |
+| R4 | **Machine-readable aggregate-only assertion** in the manifest (no client-level field shipped; export mode = aggregate). | P9,P11 | P1 | S | **[corroborates ROADMAP v0.2]** ✅ Implemented as a structural scalar-figure export boundary with manifest provenance. |
 | R5 | **Auto-embedded provenance statement in every export** — a short, standard block: numbers from deterministic queries, gate passed at 100%, no figure originated in a model; gate result and counts printed. | P1,P3,P7 | P1 | S | EV1: the product is the answer to AI-skepticism; print it. Pairs with the existing PASS summary. **[NET-NEW]** ✅ Implemented, committed 5d7cd57..42c33b5 |
 | R6 | **`receipts verify`** — re-run each receipt's query against the cited data slice and assert the value still matches; exit non-zero on drift. | P7,P10 | P1 | M | **[corroborates ROADMAP v0.5]** (provenance manifest + verify). EV5: re-derivation is the property auditors most want. ✅ Implemented, committed 5d7cd57..42c33b5 |
 | R7 | **Numeric-span match precision in the gate** — settle exact vs rounded vs tolerance match for percentages, ranges, money, written-out numbers; record in an ADR. | P2,P10,E1 | P1 | S | [`CLAUDE.md`](../CLAUDE.md) open question #3. **[NET-NEW]** ✅ Implemented: exact normalized equality with no tolerance; money and locale decorations canonicalized; range endpoints checked independently; signed values preserve their sign; written-out English/Spanish numerals are detected and always fail unbound. See [ADR 0007](decisions/0007-numeric-span-match-policy.md). |

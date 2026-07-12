@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last verified: 2026-07-05 · Recheck: quarterly*
+*Last verified: 2026-07-11 · Recheck: quarterly*
 
 Planned direction for outcome-receipts. Dates are intentions, not promises;
 items move earlier when users ask for them. Feedback is welcome as GitHub issues.
@@ -77,9 +77,9 @@ compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> expor
   and marks every candidate `pending`/`review_required`; it never executes or
   approves a guess. See [metric-mapping.md](metric-mapping.md).
 
-## v0.5.0 — Provenance manifest and verify
+## v0.5.0 — Provenance manifest and verify (completed)
 
-* Each exported report carries a manifest of its receipts and slice hashes;
+* ✅ Each exported report carries a manifest of its receipts and slice hashes;
   `receipts verify` re-checks that the figures still compute from the cited data.
 * **EXP-11 — Hash-chained export ledger (shipped).** `run` appends every
   successful export to an append-only, hash-chained ledger (report title, a
@@ -87,11 +87,11 @@ compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> expor
   to the prior by hash so tampering is detectable. `receipts verify-ledger`
   re-hashes the chain and fails closed on any break. The record of what was
   reported to whom is itself receipted. See ADR 0004.
-* **Shipped:** `receipts verify` is packaged as a reusable composite GitHub Action
+* ✅ **Shipped:** `receipts verify` is packaged as a reusable composite GitHub Action
   (`action.yml`), so a downstream repo can gate CI on receipt drift with
   `uses: ChelseaKR/outcome-receipts@v1`. See [ci-action.md](ci-action.md).
 
-## v1.0.0 — Stability commitments
+## v1.0.0 — Future stability gates (not open implementation backlog)
 
 Gated on the pipeline proving out against more than one real organization and on
 a stable spec and report schema for two consecutive releases. Adds a second
@@ -122,7 +122,7 @@ and semantic-versioning guarantees on the spec and the receipts manifest schema.
 | Test coverage (logic) | per CODE-QUALITY-STANDARD | AUTO |
 | Hallucinated-number rate | reported with Wilson CIs | REVIEW |
 | Small-cell suppression invariants | from primary CMS guidance, as tests | AUTO (v0.2) |
-| LLM judge calibration (Cohen's kappa) | fail-closed on drift | AUTO (v0.3) |
+| LLM judge calibration (Cohen's kappa) | fail-closed on drift | N/A — no judge ships; mandatory if one is added |
 | Supply chain | SBOM, signed releases, SHA-pinned actions | AUTO — landed in `release.yml` and `ci.yml`'s `security` job (pip-audit, osv-scanner, gitleaks, zizmor) |
 | Accessibility (trace.html) | zero pa11y WCAG2AA errors | AUTO — `ci.yml`'s `accessibility` job |
 | Gate invariants (property + mutation) | Hypothesis properties; 0 surviving mutants in the grounding gate | AUTO |
