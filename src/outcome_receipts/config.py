@@ -1,15 +1,15 @@
 """Report-spec loading.
 
 A report is configured by a TOML file: the data source, the report title and
-template, the metric definitions, and three optional sections. A metric may also
-carry optional logic-model mapping keys (``indicator``, ``data_source``,
-``collection_frequency``) that tie its figure to a theory-of-change row.
-``[[charts]]`` draws a chart from named figures, ``[comparison]`` compares a set
-of metrics across two periods, and ``[[data_checks]]`` declares data-quality
-preconditions asserted before any figure is computed. Every number a chart or
-comparison renders is still a figure with a receipt; nothing here introduces an
-ungrounded path to a number. File paths resolve relative to the spec's own
-directory so a spec and its data move together.
+template, the metric definitions, and four optional sections. ``[[charts]]`` draws
+a chart from named figures, ``[comparison]`` compares a set of metrics across two
+periods, ``[[data_checks]]`` declares data-quality preconditions asserted before
+any figure is computed, and ``[[report.templates]]`` names several funder formats
+that render the same shared figures. Every number a chart or comparison renders is
+still a figure with a receipt; nothing here introduces an ungrounded path to a
+number. A metric may also carry optional logic-model mapping keys (``indicator``,
+``data_source``, ``collection_frequency``). File paths resolve relative to the
+spec's own directory so a spec and its data move together.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from outcome_receipts.models import (
     MetricSpec,
     PeriodSpec,
     ReportSpec,
+    TemplateSpec,
 )
 
 _VALID_UNITS = frozenset({"count", "percent", "money", "duration", "rate"})
@@ -126,6 +127,32 @@ def _parse_data_checks(raw: object) -> tuple[DataCheck, ...]:
     return tuple(checks)
 
 
+def _parse_templates(raw: object, *, default_title: str) -> tuple[TemplateSpec, ...]:
+    """Parse the optional ``[[report.templates]]`` array of funder formats.
+
+    Each entry names one funder template over the shared metrics. ``id`` and
+    ``template`` are required; ``title`` defaults to the report title, so a terse
+    and a fuller format can render the same figures without repeating the heading.
+    """
+
+    if not raw:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError("[[report.templates]] must be an array of tables")
+    templates: list[TemplateSpec] = []
+    for entry in raw:
+        if "id" not in entry or "template" not in entry:
+            raise ValueError("each [[report.templates]] entry must set 'id' and 'template'")
+        templates.append(
+            TemplateSpec(
+                template_id=str(entry["id"]),
+                title=str(entry.get("title", default_title)),
+                template=str(entry["template"]),
+            )
+        )
+    return tuple(templates)
+
+
 def _parse_comparison(raw: object) -> ComparisonSpec | None:
     if not raw:
         return None
@@ -171,10 +198,13 @@ def load_spec(path: str | Path) -> Spec:
     report_section = data.get("report", {})
     metric_section = data.get("metrics", {})
 
+    title = str(report_section.get("title", "Outcome report"))
+    templates = _parse_templates(report_section.get("templates"), default_title=title)
+
     if "path" not in data_section:
         raise ValueError("spec [data] must set 'path'")
-    if "template" not in report_section:
-        raise ValueError("spec [report] must set 'template'")
+    if "template" not in report_section and not templates:
+        raise ValueError("spec [report] must set 'template' or define [[report.templates]]")
     if not metric_section:
         raise ValueError("spec must define at least one [metrics.<id>]")
 
@@ -184,11 +214,12 @@ def load_spec(path: str | Path) -> Spec:
     data_checks = _parse_data_checks(data.get("data_checks"))
 
     report = ReportSpec(
-        title=str(report_section.get("title", "Outcome report")),
-        template=str(report_section["template"]),
+        title=title,
+        template=str(report_section.get("template", "")),
         metrics=metrics,
         charts=charts,
         comparison=comparison,
         data_checks=data_checks,
+        templates=templates,
     )
     return Spec(data_path=_resolve(base, str(data_section["path"])), report=report)

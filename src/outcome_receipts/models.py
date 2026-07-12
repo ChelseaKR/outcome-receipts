@@ -223,6 +223,23 @@ class ChartSpec:
 
 
 @dataclass(frozen=True)
+class TemplateSpec:
+    """One named funder template format for a report.
+
+    ``template_id`` identifies the funder format and names the output subdirectory
+    the report renders into. ``title`` heads that funder's rendered report.
+    ``template`` is plain text with ``{metric_id}`` placeholders, filled with the
+    same shared, receipted figures. Several ``TemplateSpec``s over one metric set
+    let a single run render the same figures into more than one funder format, each
+    held to the same grounding gate.
+    """
+
+    template_id: str
+    title: str
+    template: str
+
+
+@dataclass(frozen=True)
 class ReportSpec:
     """A report template plus the metrics it needs.
 
@@ -232,6 +249,12 @@ class ReportSpec:
     figures too, held to the same grounding gate. ``data_checks`` are author-declared
     data-quality preconditions that assert before any figure is computed and fail
     closed, so a bad export is refused before a single number is produced.
+
+    ``templates`` optionally names several funder formats over the same metrics. It
+    is empty for a legacy single-template spec; when empty, the legacy
+    ``title``/``template`` pair is the sole default format (see
+    ``effective_templates``), so existing specs keep rendering into the flat output
+    directory unchanged.
     """
 
     title: str
@@ -240,6 +263,21 @@ class ReportSpec:
     charts: tuple[ChartSpec, ...] = field(default_factory=tuple)
     comparison: ComparisonSpec | None = None
     data_checks: tuple[DataCheck, ...] = field(default_factory=tuple)
+    templates: tuple[TemplateSpec, ...] = field(default_factory=tuple)
+
+    @property
+    def effective_templates(self) -> tuple[TemplateSpec, ...]:
+        """The funder formats to render, one per output.
+
+        When ``templates`` is set the run renders each named format. Otherwise the
+        legacy single template is synthesized into one ``TemplateSpec`` with id
+        ``"report"``, so callers iterate the same shape either way while the
+        legacy spec still describes exactly one report.
+        """
+
+        if self.templates:
+            return self.templates
+        return (TemplateSpec(template_id="report", title=self.title, template=self.template),)
 
 
 @dataclass(frozen=True)

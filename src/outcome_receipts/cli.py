@@ -43,12 +43,12 @@ from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import ComparisonResult, compute_comparison
 from outcome_receipts.config import Spec, load_spec
 from outcome_receipts.diff import diff_manifests
-from outcome_receipts.draft import draft
+from outcome_receipts.draft import draft, draft_template
 from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import EvalReport, evaluate
 from outcome_receipts.grounding import ground
 from outcome_receipts.ledger import LedgerEntry, append_export, verify_chain
-from outcome_receipts.models import Figure, GroundingResult, NumericSpan
+from outcome_receipts.models import Figure, GroundingResult, NumericSpan, TemplateSpec
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
     receipts_manifest,
@@ -246,8 +246,8 @@ def _run_payload(
     figures: Sequence[Figure],
     narrative_result: GroundingResult,
     claims_result: GroundingResult,
-    outputs: dict[str, str | None],
-    ledger: dict[str, object] | None,
+    outputs: object,
+    ledger: object,
     approval: dict[str, object] | None,
 ) -> dict[str, object]:
     """The machine-readable record of a ``run`` invocation."""
@@ -275,6 +275,10 @@ def _export_outputs(
     charts: Sequence[Chart],
     comparison: ComparisonResult | None,
     provenance: Provenance,
+    *,
+    out_dir: Path | None = None,
+    title: str | None = None,
+    ledger_path: Path | None = None,
 ) -> tuple[dict[str, str | None], LedgerEntry, Path]:
     """Write the report, trace, charts, and manifest, then append the export ledger.
 
@@ -285,8 +289,9 @@ def _export_outputs(
     report, then trace, then the manifest, then the ledger entry.
     """
 
+    export_title = title or spec.report.title
     report_text = render_report(
-        spec.report.title,
+        export_title,
         narrative,
         figures,
         comparison=comparison,
@@ -295,7 +300,7 @@ def _export_outputs(
         provenance=provenance,
     )
     trace_text = render_trace_html(
-        spec.report.title, figures, provenance=provenance, comparison=comparison
+        export_title, figures, provenance=provenance, comparison=comparison
     )
 
     digests = {
@@ -306,7 +311,7 @@ def _export_outputs(
         digests[f"{_CHART_DIR}/{chart.chart_id}.svg"] = _sha256(chart.svg)
     manifest_text = receipts_manifest(figures, provenance=provenance, artifacts=digests)
 
-    out_dir = Path(args.out)
+    out_dir = out_dir or Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "report.md"
     manifest_path = out_dir / "receipts.json"
@@ -327,10 +332,12 @@ def _export_outputs(
     trace_path.write_text(trace_text, encoding="utf-8")
     manifest_path.write_text(manifest_text, encoding="utf-8")
 
-    ledger_path = Path(args.ledger) if args.ledger else out_dir.parent / "export-ledger.jsonl"
+    ledger_path = ledger_path or (
+        Path(args.ledger) if args.ledger else out_dir.parent / "export-ledger.jsonl"
+    )
     entry = append_export(
         ledger_path,
-        report_title=spec.report.title,
+        report_title=export_title,
         manifest_json_or_hash=manifest_text,
         recipient=args.recipient,
         clock=_clock(reproducible=args.reproducible),
@@ -338,114 +345,207 @@ def _export_outputs(
     return outputs, entry, ledger_path
 
 
+def _draft_templates(
+    spec: Spec, figures: Sequence[Figure]
+) -> list[tuple[TemplateSpec, str, GroundingResult]]:
+    if not spec.report.templates:
+        template = spec.report.effective_templates[0]
+        narrative = draft(spec.report, figures)
+        return [(template, narrative, ground(narrative, figures))]
+    return [
+        (template, narrative, ground(narrative, figures))
+        for template in spec.report.effective_templates
+        for narrative in (draft_template(template.template, figures),)
+    ]
+
+
+def _print_template_summary(
+    figures: Sequence[Figure],
+    claims_result: GroundingResult,
+    drafts: Sequence[tuple[TemplateSpec, str, GroundingResult]],
+) -> None:
+    print(f"figures computed: {len(figures)}")
+    print(
+        f"chart and comparison numbers: {claims_result.total} "
+        f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})"
+    )
+    for template, _narrative, result in drafts:
+        print(
+            f"numbers in {template.template_id!r} narrative: {result.total} "
+            f"(bound {len(result.bound)}, unbound {len(result.unbound)})"
+        )
+
+
+def _print_gate_failure(
+    claims_result: GroundingResult,
+    drafts: Sequence[tuple[TemplateSpec, str, GroundingResult]],
+) -> None:
+    print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
+    for span in claims_result.unbound:
+        print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
+    for template, _narrative, result in drafts:
+        for span in result.unbound:
+            print(
+                f"  unverifiable number in {template.template_id!r}: {span.text!r}",
+                file=sys.stderr,
+            )
+
+
+def _write_template_exports(
+    args: argparse.Namespace,
+    spec: Spec,
+    figures: Sequence[Figure],
+    comparison: ComparisonResult | None,
+    charts: Sequence[Chart],
+    claims_result: GroundingResult,
+    drafts: Sequence[tuple[TemplateSpec, str, GroundingResult]],
+    approver: str,
+    approved_at: str,
+    key: bytes | None,
+) -> tuple[list[tuple[TemplateSpec, dict[str, str | None], LedgerEntry]], Path, bool]:
+    base_out = Path(args.out)
+    fan_out = bool(spec.report.templates)
+    ledger_path = Path(args.ledger) if args.ledger else base_out.parent / "export-ledger.jsonl"
+    written: list[tuple[TemplateSpec, dict[str, str | None], LedgerEntry]] = []
+    for template, narrative, result in drafts:
+        provenance = Provenance(
+            numbers_bound=len(result.bound) + len(claims_result.bound),
+            numbers_unbound=0,
+            approved_by=approver,
+            approved_at=approved_at,
+        )
+        out_dir = base_out / template.template_id if fan_out else base_out
+        outputs, entry, _ = _export_outputs(
+            args,
+            spec,
+            figures,
+            narrative,
+            charts,
+            comparison,
+            provenance,
+            out_dir=out_dir,
+            title=template.title,
+            ledger_path=ledger_path,
+        )
+        bundle_path = out_dir / _BUNDLE_NAME
+        bundle_path.write_text(bundle_manifest(_bundle_members(out_dir), key=key), encoding="utf-8")
+        outputs["bundle"] = str(bundle_path)
+        written.append((template, outputs, entry))
+    return written, ledger_path, fan_out
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     spec, _rows, figures, comparison = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
     )
-
-    narrative = draft(spec.report, figures)
     charts = render_charts(spec.report.charts, figures)
-
-    narrative_result = ground(narrative, figures)
     claims_result = ground(_claims_text(comparison, charts), figures)
-    gate_pass = narrative_result.ok and claims_result.ok
 
-    empty_outputs: dict[str, str | None] = {
+    drafts = _draft_templates(spec, figures)
+    combined_result = ground(" ".join(narrative for _t, narrative, _r in drafts), figures)
+    gate_pass = claims_result.ok and all(result.ok for _t, _n, result in drafts)
+    template_payload = {
+        template.template_id: _grounding_payload(result) for template, _n, result in drafts
+    }
+    empty_outputs = {
         "report": None,
         "receipts": None,
         "trace": None,
         "charts": None,
         "bundle": None,
     }
-
-    def _fail_payload() -> dict[str, object]:
-        return _run_payload(
-            gate_pass=gate_pass,
-            figures=figures,
-            narrative_result=narrative_result,
-            claims_result=claims_result,
-            outputs=empty_outputs,
-            ledger=None,
-            approval=None,
-        )
+    failed_outputs: object = (
+        empty_outputs
+        if not spec.report.templates
+        else {t.template_id: empty_outputs for t, _n, _r in drafts}
+    )
 
     if not args.json:
-        print(f"figures computed: {len(figures)}")
-        print(
-            f"numbers in narrative: {narrative_result.total} "
-            f"(bound {len(narrative_result.bound)}, unbound {len(narrative_result.unbound)})"
-        )
-        print(
-            f"chart and comparison numbers: {claims_result.total} "
-            f"(bound {len(claims_result.bound)}, unbound {len(claims_result.unbound)})"
-        )
+        _print_template_summary(figures, claims_result, drafts)
 
     if not gate_pass:
         if args.json:
-            _emit_json(_fail_payload())
+            payload = _run_payload(
+                gate_pass=False,
+                figures=figures,
+                narrative_result=combined_result,
+                claims_result=claims_result,
+                outputs=failed_outputs,
+                ledger=None,
+                approval=None,
+            )
+            payload["templates"] = template_payload
+            _emit_json(payload)
             return EXIT_GATE_FAIL
-        print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
-        for span in (*narrative_result.unbound, *claims_result.unbound):
-            print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
+        _print_gate_failure(claims_result, drafts)
         return EXIT_GATE_FAIL
 
-    # Human sign-off gate. The grounding gate proves every number traces to a
-    # receipt; this gate records that a named person approved the export. It runs
-    # only after the grounding gate PASSes and before any file is written, so a
-    # missing sign-off aborts fail-closed with nothing on disk.
-    approver = _approver(spec.report.title, narrative_result, claims_result, args)
+    approver = _approver(spec.report.title, combined_result, claims_result, args)
     if approver is None:
         if args.json:
-            _emit_json(_fail_payload())
+            payload = _run_payload(
+                gate_pass=True,
+                figures=figures,
+                narrative_result=combined_result,
+                claims_result=claims_result,
+                outputs=failed_outputs,
+                ledger=None,
+                approval=None,
+            )
+            payload["templates"] = template_payload
+            _emit_json(payload)
         print("export aborted: no approver sign-off", file=sys.stderr)
         return EXIT_APPROVAL_FAIL
 
-    provenance = Provenance(
-        numbers_bound=len(narrative_result.bound) + len(claims_result.bound),
-        numbers_unbound=0,
-        approved_by=approver,
-        approved_at=_clock(reproducible=args.reproducible).now_iso(),
-    )
-    outputs, entry, ledger_path = _export_outputs(
-        args, spec, figures, narrative, charts, comparison, provenance
-    )
-
     key = _load_key(getattr(args, "sign_key_file", None))
-    out_dir = Path(args.out)
-    bundle_path = out_dir / _BUNDLE_NAME
-    bundle_path.write_text(bundle_manifest(_bundle_members(out_dir), key=key), encoding="utf-8")
-    outputs["bundle"] = str(bundle_path)
+    approved_at = _clock(reproducible=args.reproducible).now_iso()
+    written, ledger_path, fan_out = _write_template_exports(
+        args,
+        spec,
+        figures,
+        comparison,
+        charts,
+        claims_result,
+        drafts,
+        approver,
+        approved_at,
+        key,
+    )
 
     if args.json:
-        _emit_json(
-            _run_payload(
-                gate_pass=gate_pass,
-                figures=figures,
-                narrative_result=narrative_result,
-                claims_result=claims_result,
-                outputs=outputs,
-                ledger={
-                    "path": str(ledger_path),
-                    "index": entry.index,
-                    "entry_hash": entry.entry_hash,
-                },
-                approval={
-                    "approved_by": provenance.approved_by,
-                    "approved_at": provenance.approved_at,
-                },
-            )
+        flat_outputs: object = (
+            written[0][1]
+            if not fan_out
+            else {template.template_id: outputs for template, outputs, _entry in written}
         )
+        ledgers = [
+            {"path": str(ledger_path), "index": entry.index, "entry_hash": entry.entry_hash}
+            for _template, _outputs, entry in written
+        ]
+        payload = _run_payload(
+            gate_pass=True,
+            figures=figures,
+            narrative_result=combined_result,
+            claims_result=claims_result,
+            outputs=flat_outputs,
+            ledger=ledgers[0] if not fan_out else {"entries": ledgers},
+            approval={"approved_by": approver, "approved_at": approved_at},
+        )
+        payload["templates"] = template_payload
+        _emit_json(payload)
         return EXIT_OK
 
     print("\ngrounding gate: PASS")
     print(f"  approved: {approver}")
-    print(f"  report:   {outputs['report']}")
-    print(f"  receipts: {outputs['receipts']}")
-    print(f"  trace:    {outputs['trace']}")
-    if outputs["charts"] is not None:
-        print(f"  charts:   {outputs['charts']} ({len(charts)} SVG)")
-    print(f"  ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
-    print(f"  bundle:   {bundle_path} ({'signed' if key else 'digests-only'})")
+    for template, outputs, entry in written:
+        prefix = f"{template.template_id}: " if fan_out else ""
+        print(f"  {prefix}report:   {outputs['report']}")
+        print(f"  {prefix}receipts: {outputs['receipts']}")
+        print(f"  {prefix}trace:    {outputs['trace']}")
+        if outputs["charts"] is not None:
+            print(f"  {prefix}charts:   {outputs['charts']} ({len(charts)} SVG)")
+        print(f"  {prefix}bundle:   {outputs['bundle']} ({'signed' if key else 'digests-only'})")
+        print(f"  {prefix}ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
     return EXIT_OK
 
 
