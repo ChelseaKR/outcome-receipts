@@ -115,6 +115,8 @@ def test_run_writes_one_subdir_per_template_with_shared_figures(tmp_path: Path) 
             "--out",
             str(out),
             "--reproducible",
+            "--approved-by",
+            "CI",
         ]
     )
     assert code == 0
@@ -146,6 +148,8 @@ def test_legacy_single_template_writes_flat_layout(tmp_path: Path) -> None:
             "--out",
             str(out),
             "--reproducible",
+            "--approved-by",
+            "CI",
         ]
     )
     assert code == 0
@@ -171,7 +175,18 @@ def test_unbound_number_in_one_template_blocks_all_exports(tmp_path: Path) -> No
     # figure. The whole run must fail closed and write nothing for either format.
     spec = _multi_template_spec(tmp_path, "served 999 clients {clients}")
     out = tmp_path / "out"
-    code = main(["run", "--config", str(spec), "--out", str(out), "--reproducible"])
+    code = main(
+        [
+            "run",
+            "--config",
+            str(spec),
+            "--out",
+            str(out),
+            "--reproducible",
+            "--approved-by",
+            "CI",
+        ]
+    )
     assert code == 2
     assert not (out / "funder-a").exists()
     assert not (out / "funder-b").exists()
@@ -180,7 +195,18 @@ def test_unbound_number_in_one_template_blocks_all_exports(tmp_path: Path) -> No
 def test_both_templates_grounded_run_succeeds(tmp_path: Path) -> None:
     spec = _multi_template_spec(tmp_path, "we served {clients}")
     out = tmp_path / "out"
-    code = main(["run", "--config", str(spec), "--out", str(out), "--reproducible"])
+    code = main(
+        [
+            "run",
+            "--config",
+            str(spec),
+            "--out",
+            str(out),
+            "--reproducible",
+            "--approved-by",
+            "CI",
+        ]
+    )
     assert code == 0
     assert (out / "funder-a" / "receipts.json").exists()
     assert (out / "funder-b" / "receipts.json").exists()

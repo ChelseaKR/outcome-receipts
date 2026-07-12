@@ -7,8 +7,9 @@ periods, ``[[data_checks]]`` declares data-quality preconditions asserted before
 any figure is computed, and ``[[report.templates]]`` names several funder formats
 that render the same shared figures. Every number a chart or comparison renders is
 still a figure with a receipt; nothing here introduces an ungrounded path to a
-number. File paths resolve relative to the spec's own directory so a spec and its
-data move together.
+number. A metric may also carry optional logic-model mapping keys (``indicator``,
+``data_source``, ``collection_frequency``). File paths resolve relative to the
+spec's own directory so a spec and its data move together.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from outcome_receipts.models import (
     TemplateSpec,
 )
 
-_VALID_UNITS = frozenset({"count", "percent"})
+_VALID_UNITS = frozenset({"count", "percent", "money", "duration", "rate"})
 _VALID_KINDS = frozenset({"output", "outcome"})
 _VALID_CHART_KINDS = frozenset({"bar", "line"})
 
@@ -68,6 +69,10 @@ def _parse_metric(metric_id: str, body: dict[str, Any]) -> MetricSpec:
         decimals=int(body.get("decimals", 0)),
         definition=str(body.get("definition", "")),
         kind=kind,
+        indicator=str(body.get("indicator", "")),
+        data_source=str(body.get("data_source", "")),
+        collection_frequency=str(body.get("collection_frequency", "")),
+        caveat=str(body.get("caveat", "")),
     )
 
 
