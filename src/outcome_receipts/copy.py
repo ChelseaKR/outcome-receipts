@@ -39,15 +39,31 @@ class ReportCopy:
     header_outcome: str
     header_change: str
     header_direction: str
+    direction_increase: str
+    direction_decrease: str
+    direction_no_change: str
     rate_metric_note: str
+
+    # Reconciliation section.
+    reconciliation_heading: str
+    reconciliation_sentence_template: str
+    header_item: str
+    outcome_suffix: str
+    financial_suffix: str
 
     # Charts section.
     charts_heading: str
     chart_data_caption_template: str
+    chart_alt_template: str
 
     # Receipts section.
     receipts_heading: str
+    receipt_kind_label: str
     receipt_definition_label: str
+    receipt_indicator_label: str
+    receipt_data_source_label: str
+    receipt_collection_frequency_label: str
+    receipt_caveat_label: str
     receipt_query_label: str
     receipt_rows_label: str
     receipt_slice_hash_label: str
@@ -58,6 +74,8 @@ class ReportCopy:
     provenance_statement: str
     provenance_gate_pass_template: str
     provenance_gate_fail_template: str
+    provenance_approval_template: str
+    provenance_approval_when_template: str
 
 
 _EN = ReportCopy(
@@ -70,11 +88,28 @@ _EN = ReportCopy(
     header_outcome="Outcome",
     header_change="Change",
     header_direction="Direction",
+    direction_increase="increase",
+    direction_decrease="decrease",
+    direction_no_change="no change",
     rate_metric_note="Change for a rate metric is in percentage points.",
+    reconciliation_heading="## Board reconciliation",
+    reconciliation_sentence_template=(
+        "Pairing each receipted outcome figure with its financial line, "
+        "{prior} to {current}. Every value is a figure with a receipt."
+    ),
+    header_item="Item",
+    outcome_suffix="outcome",
+    financial_suffix="financial",
     charts_heading="## Charts",
     chart_data_caption_template="Data for the chart above ({title}):",
+    chart_alt_template="{title} (see data table below)",
     receipts_heading="## Receipts",
+    receipt_kind_label="kind",
     receipt_definition_label="definition",
+    receipt_indicator_label="indicator",
+    receipt_data_source_label="data source",
+    receipt_collection_frequency_label="collection frequency",
+    receipt_caveat_label="caveat",
     receipt_query_label="query",
     receipt_rows_label="rows in slice",
     receipt_slice_hash_label="slice hash",
@@ -96,6 +131,10 @@ _EN = ReportCopy(
         "The grounding gate left {unbound} number(s) unbound, so "
         "this report is not cleared for export."
     ),
+    provenance_approval_template=(
+        "This report was reviewed and approved for export by {approver}{when}."
+    ),
+    provenance_approval_when_template=" on {timestamp}",
 )
 
 _ES = ReportCopy(
@@ -108,11 +147,28 @@ _ES = ReportCopy(
     header_outcome="Resultado",
     header_change="Cambio",
     header_direction="Dirección",
+    direction_increase="aumento",
+    direction_decrease="disminución",
+    direction_no_change="sin cambio",
     rate_metric_note=("El cambio de una métrica de tasa se expresa en puntos porcentuales."),
+    reconciliation_heading="## Conciliación de la junta directiva",
+    reconciliation_sentence_template=(
+        "Se empareja cada resultado con recibo con su partida financiera, "
+        "de {prior} a {current}. Cada valor es un dato con recibo."
+    ),
+    header_item="Elemento",
+    outcome_suffix="resultado",
+    financial_suffix="financiero",
     charts_heading="## Gráficos",
     chart_data_caption_template="Datos del gráfico anterior ({title}):",
+    chart_alt_template="{title} (véase la tabla de datos a continuación)",
     receipts_heading="## Recibos",
+    receipt_kind_label="tipo",
     receipt_definition_label="definición",
+    receipt_indicator_label="indicador",
+    receipt_data_source_label="fuente de datos",
+    receipt_collection_frequency_label="frecuencia de recopilación",
+    receipt_caveat_label="salvedad",
     receipt_query_label="consulta",
     receipt_rows_label="filas en el segmento",
     receipt_slice_hash_label="hash del segmento",
@@ -135,6 +191,10 @@ _ES = ReportCopy(
         "La verificación de fundamentación dejó {unbound} número(s) sin vincular, "
         "por lo que este informe no está autorizado para exportación."
     ),
+    provenance_approval_template=(
+        "Este informe fue revisado y aprobado para su exportación por {approver}{when}."
+    ),
+    provenance_approval_when_template=" el {timestamp}",
 )
 
 STRINGS: dict[Locale, ReportCopy] = {"en": _EN, "es": _ES}

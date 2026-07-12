@@ -114,7 +114,12 @@ def _full_report(locale: str) -> str:
     )
     spec = ChartSpec(chart_id="c", title="Outcomes", kind="bar", metric_ids=("a",))
     chart = render_chart(spec, [_figure("a", 5.0, "5")])
-    provenance = Provenance(numbers_bound=8, numbers_unbound=0)
+    provenance = Provenance(
+        numbers_bound=8,
+        numbers_unbound=0,
+        approved_by="Ana",
+        approved_at="2026-07-02T00:00:00Z",
+    )
     return render_report(
         "Program report",
         "We served 137 clients; 62.0% exited to housing.",
@@ -151,6 +156,10 @@ def test_spanish_translates_prose_and_labels() -> None:
     assert "  - filas en el segmento: 137" in report
     assert "  - hash del segmento: `sha256:9f8c1e`" in report
     assert "  - calculado en: 2026-07-02T00:00:00Z" in report
+    assert "  - tipo: output" in report
+    assert "| Clients enrolled | 12 | 14 | 2 | aumento |" in report
+    assert "Outcomes (véase la tabla de datos a continuación)" in report
+    assert "aprobado para su exportación por Ana el 2026-07-02T00:00:00Z" in report
     # English headings must be gone in the Spanish render.
     assert "## Period comparison" not in report
     assert "## Receipts" not in report

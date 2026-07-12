@@ -1,8 +1,10 @@
 # A board report for the same housing program. It is shorter and higher-level
 # than the grant report: a brief summary, a trend chart of clients served across
-# the two quarters, and a comparison table of the headline outcomes. Every number
-# is a figure with a receipt, and the chart and the comparison are held to the
-# same grounding gate as the narrative.
+# the two quarters, a comparison table of the headline outcomes, and a board
+# reconciliation that places each outcome figure next to the program spend it took,
+# with the period-over-period change. Every number is a figure with a receipt, and
+# the chart, the comparison, and the reconciliation are held to the same grounding
+# gate as the narrative.
 #
 #   receipts run --config examples/board-report/report.toml --out out/board
 
@@ -15,7 +17,9 @@ template = """
 Summary for the board. The program served {clients_served} clients this period \
 and exited {pct_permanent} of them to permanent housing. The trend chart shows \
 clients served by quarter, and the comparison table reports how each headline \
-outcome moved from the first quarter to the second.
+outcome moved from the first quarter to the second. The board reconciliation then \
+sets each outcome figure beside the program spend it took, with the change across \
+the two quarters.
 """
 
 [metrics.clients_served]
@@ -75,3 +79,39 @@ unit = "percent"
 decimals = 0
 value_sql = "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != '' AND ({period})"
 slice_sql = "SELECT * FROM data WHERE exit_date != '' AND ({period})"
+
+# The board reconciliation pairs a receipted outcome figure with the financial line
+# it relates to, over the same two quarters, and reports the change in each. Both
+# numbers on a row, and each change, are figures with receipts: the change is one
+# subtracting query, not arithmetic over the page, exactly as in the comparison.
+
+[reconciliation]
+current = "q2"
+prior = "q1"
+
+[[reconciliation.periods]]
+id = "q1"
+label = "Q1 2025"
+predicate = "enrolled_date >= '2025-01-01' AND enrolled_date < '2025-04-01'"
+
+[[reconciliation.periods]]
+id = "q2"
+label = "Q2 2025"
+predicate = "enrolled_date >= '2025-04-01' AND enrolled_date < '2025-07-01'"
+
+[[reconciliation.rows]]
+label = "Permanent-housing exits vs. program spend"
+
+[reconciliation.rows.outcome]
+description = "Permanent-housing exits, by quarter of enrollment."
+definition = "Permanent-housing exits grouped by the quarter the client enrolled in. Destination is taken as recorded."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent' AND ({period})"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent' AND ({period})"
+
+[reconciliation.rows.financial]
+description = "Program spend in the quarter (USD)."
+definition = "Sum of recorded per-client program cost for clients whose enrollment date falls in the quarter, in whole dollars."
+unit = "count"
+value_sql = "SELECT CAST(COALESCE(SUM(CAST(cost AS REAL)), 0) AS INTEGER) FROM data WHERE ({period})"
+slice_sql = "SELECT * FROM data WHERE ({period})"

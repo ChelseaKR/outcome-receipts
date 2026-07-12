@@ -34,9 +34,20 @@ class _FigureFormatter(string.Formatter):
         raise KeyError(f"positional placeholders are not supported: {key!r}")
 
 
-def draft(spec: ReportSpec, figures: Sequence[Figure]) -> str:
-    """Render the report template with the figures' display strings."""
+def draft_template(template: str, figures: Sequence[Figure]) -> str:
+    """Render one template string with the figures' display strings.
+
+    The same shared figures can render into several funder templates, so the
+    per-template narrative is drafted here from the template text alone while the
+    figure set stays fixed across formats.
+    """
 
     displays = {figure.metric_id: figure.display for figure in figures}
     formatter = _FigureFormatter(displays)
-    return formatter.format(spec.template)
+    return formatter.format(template)
+
+
+def draft(spec: ReportSpec, figures: Sequence[Figure]) -> str:
+    """Render the report template with the figures' display strings."""
+
+    return draft_template(spec.template, figures)

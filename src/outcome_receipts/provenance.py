@@ -33,6 +33,8 @@ class Provenance:
 
     numbers_bound: int
     numbers_unbound: int = 0
+    approved_by: str | None = None
+    approved_at: str | None = None
 
     @property
     def gate_pass(self) -> bool:
@@ -48,24 +50,38 @@ def provenance_markdown(prov: Provenance, *, locale: Locale = "en") -> str:
         if prov.gate_pass
         else copy.provenance_gate_fail_template.format(unbound=prov.numbers_unbound)
     )
-    return "\n".join(
-        [
-            copy.provenance_heading,
-            "",
-            copy.provenance_statement,
-            "",
-            gate_line,
-        ]
-    )
+    lines = [
+        copy.provenance_heading,
+        "",
+        copy.provenance_statement,
+        "",
+        gate_line,
+    ]
+    if prov.approved_by is not None:
+        when = (
+            copy.provenance_approval_when_template.format(timestamp=prov.approved_at)
+            if prov.approved_at is not None
+            else ""
+        )
+        lines.extend(
+            ["", copy.provenance_approval_template.format(approver=prov.approved_by, when=when)]
+        )
+    return "\n".join(lines)
 
 
 def provenance_record(prov: Provenance) -> dict[str, object]:
     """Render the provenance attestation as a machine-readable manifest record."""
 
-    return {
+    record: dict[str, object] = {
         "numbers_from": "deterministic_sql",
         "model_wrote_numbers": False,
         "grounding_gate": "pass" if prov.gate_pass else "fail",
         "numbers_bound": prov.numbers_bound,
         "numbers_unbound": prov.numbers_unbound,
+        # State approval status explicitly, always: ``None`` when no human signed
+        # off, so the manifest never leaves the reader to infer it (fail-closed).
+        "approved_by": prov.approved_by,
     }
+    if prov.approved_by is not None:
+        record["approved_at"] = prov.approved_at
+    return record
