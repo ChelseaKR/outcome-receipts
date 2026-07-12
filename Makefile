@@ -1,4 +1,4 @@
-.PHONY: install verify lint type test eval run clean
+.PHONY: install verify lint type test mutation eval run clean
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
 # --frozen: install exactly what uv.lock records, never re-resolve; a lockfile
@@ -17,6 +17,12 @@ test:
 	.venv/bin/python -m pytest
 
 verify: lint type test
+
+# Mutation testing over the invariant core (grounding gate + engine). Slow, so it
+# is opt-in and not part of `verify`. A low surviving-mutant count is evidence the
+# gate tests — including the Hypothesis property tests — actually pin the behavior.
+mutation:
+	.venv/bin/mutmut run
 
 # Regenerate the committed eval report. Run after any change to the gate or specs.
 eval:
