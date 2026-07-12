@@ -13,10 +13,10 @@ that every number in it came from a receipt.
 Numbers are canonicalized before comparison so that locale formatting does not
 defeat the gate: a figure display and a prose span that denote the same value
 bind even when they use different thousands or decimal separators (US "1,234",
-European "1.234", or NBSP-grouped "1\u00a0234"). Written-out numerals ("twelve",
-"doce") are NOT yet canonicalized; they carry no digits, are never parsed as a
-numeric span, and therefore remain unbound (fail-closed) rather than binding by
-accident. Localized (E9) report output relies on this canonicalization so the
+European "1.234", or NBSP-grouped "1\u00a0234"). Written-out English and Spanish
+numerals ("twelve", "doce") are detected but never canonicalized or bound: they
+are always unbound so a model cannot evade the gate by spelling a number.
+Localized (E9) report output relies on this canonicalization so the
 same receipted figure binds in either language's number formatting.
 """
 
@@ -52,9 +52,21 @@ from outcome_receipts.models import Figure, GroundingResult, NumericSpan
 # so a number that is not a figure (a stray "2024") is unbound and must be removed
 # or made a figure. That strictness is the point.
 _NUMBER = re.compile(
-    r"\$?\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?%?"  # 1: NBSP-grouped thousands
-    r"|\$?\d[\d.,]*\d%?"  # 2: dot/comma-grouped or decimal
-    r"|\$?\d%?"  # 3: lone digit
+    r"(?<!\d)\$?[+-]?\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?%?"
+    r"|(?<!\d)\$?[+-]?\d[\d.,]*\d%?"
+    r"|(?<!\d)\$?[+-]?\d%?"
+)
+
+_NUMBER_WORD = re.compile(
+    r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|"
+    r"thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|"
+    r"billion|trillion|first|second|third|fourth|fifth|sixth|seventh|eighth|"
+    r"ninth|tenth|cero|un[oa]?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|"
+    r"once|doce|trece|catorce|quince|dieciséis|dieciseis|veinte|treinta|cuarenta|"
+    r"cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|mil|millón|millon|"
+    r"millones|primero|primera|segundo|segunda|tercero|tercera)\b",
+    re.IGNORECASE,
 )
 
 # Separators that only ever group thousands, never mark a decimal: they are
@@ -122,10 +134,12 @@ def _normalize(token: str) -> str:
 def find_numbers(text: str) -> list[NumericSpan]:
     """Return every numeric span in the text, in order."""
 
-    return [
+    spans = [
         NumericSpan(text=match.group(0), start=match.start(), end=match.end())
-        for match in _NUMBER.finditer(text)
+        for pattern in (_NUMBER, _NUMBER_WORD)
+        for match in pattern.finditer(text)
     ]
+    return sorted(spans, key=lambda span: span.start)
 
 
 def ground(text: str, figures: Sequence[Figure]) -> GroundingResult:
@@ -140,7 +154,9 @@ def ground(text: str, figures: Sequence[Figure]) -> GroundingResult:
     bound: list[NumericSpan] = []
     unbound: list[NumericSpan] = []
     for span in find_numbers(text):
-        if _normalize(span.text) in allowed:
+        if _NUMBER_WORD.fullmatch(span.text):
+            unbound.append(span)
+        elif _normalize(span.text) in allowed:
             bound.append(span)
         else:
             unbound.append(span)

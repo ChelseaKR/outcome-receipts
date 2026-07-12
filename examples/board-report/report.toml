@@ -17,9 +17,9 @@ template = """
 Summary for the board. The program served {clients_served} clients this period \
 and exited {pct_permanent} of them to permanent housing. The trend chart shows \
 clients served by quarter, and the comparison table reports how each headline \
-outcome moved from the first quarter to the second. The board reconciliation then \
+outcome moved from the prior quarter to the current quarter. The board reconciliation then \
 sets each outcome figure beside the program spend it took, with the change across \
-the two quarters.
+both quarters.
 """
 
 [metrics.clients_served]

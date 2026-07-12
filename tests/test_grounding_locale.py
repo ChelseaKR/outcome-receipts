@@ -111,11 +111,38 @@ def test_different_value_stays_unbound() -> None:
     assert [span.text for span in result.unbound] == ["1,235"]
 
 
-def test_written_out_numeral_is_not_a_span_and_never_binds() -> None:
-    # A written-out numeral carries no digits, so it is never parsed as a numeric
-    # span and therefore never binds; the gate stays fail-closed on it.
+def test_written_out_english_numeral_is_detected_and_unbound() -> None:
     figures = [_figure("12", value=12.0)]
     result = ground("We served twelve families.", figures)
-    assert result.total == 0
+    assert result.total == 1
     assert not result.bound
-    assert not result.unbound
+    assert [span.text for span in result.unbound] == ["twelve"]
+    assert not result.ok
+
+
+def test_written_out_spanish_numeral_is_detected_and_unbound() -> None:
+    figures = [_figure("12", value=12.0)]
+    result = ground("Atendimos a doce familias.", figures)
+    assert [span.text for span in result.unbound] == ["doce"]
+    assert not result.ok
+
+
+def test_range_endpoints_bind_independently() -> None:
+    figures = [_figure("12", value=12.0), _figure("15", value=15.0, metric_id="end")]
+    assert ground("We served 12\u201315 families.", figures).ok
+    assert ground("We served 12-15 families.", figures).ok
+
+    result = ground("We served 12\u201316 families.", figures)
+    assert [span.text for span in result.unbound] == ["16"]
+
+
+def test_match_is_exact_with_no_rounding_tolerance() -> None:
+    figures = [_figure("71%", value=71.0)]
+    result = ground("The rate was 70.6%.", figures)
+    assert [span.text for span in result.unbound] == ["70.6%"]
+
+
+def test_signed_number_does_not_bind_unsigned_figure() -> None:
+    figures = [_figure("5", value=5.0)]
+    result = ground("The change was -5.", figures)
+    assert [span.text for span in result.unbound] == ["-5"]
