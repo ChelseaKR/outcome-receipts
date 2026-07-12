@@ -117,6 +117,8 @@ def test_cli_run_appends_and_grows_the_ledger(tmp_path: Path) -> None:
                 str(ledger),
                 "--recipient",
                 "County Housing Authority",
+                "--approved-by",
+                "Dana Reviewer",
             ]
         )
         assert code == 0
@@ -140,6 +142,8 @@ def test_cli_verify_ledger_passes_then_fails_on_tamper(tmp_path: Path) -> None:
                 "--reproducible",
                 "--ledger",
                 str(ledger),
+                "--approved-by",
+                "Dana Reviewer",
             ]
         )
         == 0

@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from outcome_receipts.bundle import bundle_manifest, verify_bundle
 from outcome_receipts.cli import main
 
@@ -118,14 +120,42 @@ def test_tampered_bundle_digest_fails() -> None:
 
 def test_cli_run_writes_a_verifiable_bundle(tmp_path: Path) -> None:
     out = tmp_path / "grant"
-    assert main(["run", "--config", str(GRANT), "--out", str(out), "--reproducible"]) == 0
+    assert (
+        main(
+            [
+                "run",
+                "--config",
+                str(GRANT),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+            ]
+        )
+        == 0
+    )
     assert (out / "bundle.json").exists()
     assert main(["verify-bundle", "--dir", str(out)]) == 0
 
 
 def test_cli_verify_bundle_fails_when_a_file_is_edited(tmp_path: Path) -> None:
     out = tmp_path / "grant"
-    assert main(["run", "--config", str(GRANT), "--out", str(out), "--reproducible"]) == 0
+    assert (
+        main(
+            [
+                "run",
+                "--config",
+                str(GRANT),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+            ]
+        )
+        == 0
+    )
     report = out / "report.md"
     report.write_text(report.read_text(encoding="utf-8") + "\ntampered\n", encoding="utf-8")
     assert main(["verify-bundle", "--dir", str(out)]) == 1
@@ -144,6 +174,8 @@ def test_cli_run_and_verify_bundle_with_a_signing_key(tmp_path: Path) -> None:
                 "--out",
                 str(out),
                 "--reproducible",
+                "--approved-by",
+                "CI",
                 "--sign-key-file",
                 str(key_file),
             ]
@@ -153,3 +185,52 @@ def test_cli_run_and_verify_bundle_with_a_signing_key(tmp_path: Path) -> None:
     manifest = json.loads((out / "bundle.json").read_text(encoding="utf-8"))
     assert "signature" in manifest
     assert main(["verify-bundle", "--dir", str(out), "--sign-key-file", str(key_file)]) == 0
+
+
+def test_json_run_still_writes_and_reports_the_bundle(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "grant"
+    assert (
+        main(
+            [
+                "run",
+                "--config",
+                str(GRANT),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["outputs"]["bundle"] == str(out / "bundle.json")
+    assert (out / "bundle.json").is_file()
+
+
+def test_nested_bundle_json_is_not_exempt_from_extra_member_check(tmp_path: Path) -> None:
+    out = tmp_path / "grant"
+    assert (
+        main(
+            [
+                "run",
+                "--config",
+                str(GRANT),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+            ]
+        )
+        == 0
+    )
+    nested = out / "charts" / "bundle.json"
+    nested.parent.mkdir(exist_ok=True)
+    nested.write_text("{}\n", encoding="utf-8")
+    assert main(["verify-bundle", "--dir", str(out)]) == 1

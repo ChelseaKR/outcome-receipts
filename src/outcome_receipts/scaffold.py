@@ -14,27 +14,25 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from outcome_receipts.engine import read_csv
-
 
 def _columns(csv_path: Path) -> list[str]:
     """The CSV's column names in file order.
 
-    Derived from the first data row's keys, which is the same column set the
-    engine loads into SQLite. When the file has a header but no data rows, fall
-    back to ``csv.DictReader.fieldnames`` so an empty export still scaffolds.
-    Raises ``ValueError`` if the file has no header row at all, so a headerless
-    file fails clearly here rather than producing a spec with no columns.
+    Reads only the header row: a scaffold needs the column inventory, not the
+    data, so a header-only export is a legitimate ``receipts init`` input even
+    though the engine loader (``read_csv``) rightly fails closed on it — the
+    two paths serve different moments (authoring a spec vs. computing figures).
+    Names are stripped the same way the loader strips them, so a column listed
+    in the scaffold inventory is the name the engine will load. Raises
+    ``ValueError`` if the file has no header row at all, so a headerless file
+    fails clearly here rather than producing a spec with no columns.
     """
 
-    rows = read_csv(csv_path)
-    if rows:
-        return list(rows[0].keys())
     with csv_path.open(newline="", encoding="utf-8-sig") as handle:
-        fieldnames = csv.DictReader(handle).fieldnames
-    if not fieldnames:
+        header = next(csv.reader(handle), None)
+    if not header or not any(name.strip() for name in header):
         raise ValueError(f"{csv_path} has no header row; cannot derive a column inventory")
-    return list(fieldnames)
+    return [name.strip() for name in header]
 
 
 def _toml_basic_string(value: str) -> str:
