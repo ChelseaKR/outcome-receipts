@@ -1,0 +1,100 @@
+{"display": "100", "id": "en-grounded-00", "language": "en", "narrative": "We served 100 people.", "should_pass": true}
+{"display": "100", "id": "en-injected-00", "language": "en", "narrative": "We served 100 people and invented 900.", "should_pass": false}
+{"display": "101", "id": "en-grounded-01", "language": "en", "narrative": "We served 101 people.", "should_pass": true}
+{"display": "101", "id": "en-injected-01", "language": "en", "narrative": "We served 101 people and invented 901.", "should_pass": false}
+{"display": "102", "id": "en-grounded-02", "language": "en", "narrative": "We served 102 people.", "should_pass": true}
+{"display": "102", "id": "en-injected-02", "language": "en", "narrative": "We served 102 people and invented 902.", "should_pass": false}
+{"display": "103", "id": "en-grounded-03", "language": "en", "narrative": "We served 103 people.", "should_pass": true}
+{"display": "103", "id": "en-injected-03", "language": "en", "narrative": "We served 103 people and invented 903.", "should_pass": false}
+{"display": "104", "id": "en-grounded-04", "language": "en", "narrative": "We served 104 people.", "should_pass": true}
+{"display": "104", "id": "en-injected-04", "language": "en", "narrative": "We served 104 people and invented 904.", "should_pass": false}
+{"display": "105", "id": "en-grounded-05", "language": "en", "narrative": "We served 105 people.", "should_pass": true}
+{"display": "105", "id": "en-injected-05", "language": "en", "narrative": "We served 105 people and invented 905.", "should_pass": false}
+{"display": "106", "id": "en-grounded-06", "language": "en", "narrative": "We served 106 people.", "should_pass": true}
+{"display": "106", "id": "en-injected-06", "language": "en", "narrative": "We served 106 people and invented 906.", "should_pass": false}
+{"display": "107", "id": "en-grounded-07", "language": "en", "narrative": "We served 107 people.", "should_pass": true}
+{"display": "107", "id": "en-injected-07", "language": "en", "narrative": "We served 107 people and invented 907.", "should_pass": false}
+{"display": "108", "id": "en-grounded-08", "language": "en", "narrative": "We served 108 people.", "should_pass": true}
+{"display": "108", "id": "en-injected-08", "language": "en", "narrative": "We served 108 people and invented 908.", "should_pass": false}
+{"display": "109", "id": "en-grounded-09", "language": "en", "narrative": "We served 109 people.", "should_pass": true}
+{"display": "109", "id": "en-injected-09", "language": "en", "narrative": "We served 109 people and invented 909.", "should_pass": false}
+{"display": "110", "id": "en-grounded-10", "language": "en", "narrative": "We served 110 people.", "should_pass": true}
+{"display": "110", "id": "en-injected-10", "language": "en", "narrative": "We served 110 people and invented 910.", "should_pass": false}
+{"display": "111", "id": "en-grounded-11", "language": "en", "narrative": "We served 111 people.", "should_pass": true}
+{"display": "111", "id": "en-injected-11", "language": "en", "narrative": "We served 111 people and invented 911.", "should_pass": false}
+{"display": "112", "id": "en-grounded-12", "language": "en", "narrative": "We served 112 people.", "should_pass": true}
+{"display": "112", "id": "en-injected-12", "language": "en", "narrative": "We served 112 people and invented 912.", "should_pass": false}
+{"display": "113", "id": "en-grounded-13", "language": "en", "narrative": "We served 113 people.", "should_pass": true}
+{"display": "113", "id": "en-injected-13", "language": "en", "narrative": "We served 113 people and invented 913.", "should_pass": false}
+{"display": "114", "id": "en-grounded-14", "language": "en", "narrative": "We served 114 people.", "should_pass": true}
+{"display": "114", "id": "en-injected-14", "language": "en", "narrative": "We served 114 people and invented 914.", "should_pass": false}
+{"display": "115", "id": "en-grounded-15", "language": "en", "narrative": "We served 115 people.", "should_pass": true}
+{"display": "115", "id": "en-injected-15", "language": "en", "narrative": "We served 115 people and invented 915.", "should_pass": false}
+{"display": "116", "id": "en-grounded-16", "language": "en", "narrative": "We served 116 people.", "should_pass": true}
+{"display": "116", "id": "en-injected-16", "language": "en", "narrative": "We served 116 people and invented 916.", "should_pass": false}
+{"display": "117", "id": "en-grounded-17", "language": "en", "narrative": "We served 117 people.", "should_pass": true}
+{"display": "117", "id": "en-injected-17", "language": "en", "narrative": "We served 117 people and invented 917.", "should_pass": false}
+{"display": "118", "id": "en-grounded-18", "language": "en", "narrative": "We served 118 people.", "should_pass": true}
+{"display": "118", "id": "en-injected-18", "language": "en", "narrative": "We served 118 people and invented 918.", "should_pass": false}
+{"display": "119", "id": "en-grounded-19", "language": "en", "narrative": "We served 119 people.", "should_pass": true}
+{"display": "119", "id": "en-injected-19", "language": "en", "narrative": "We served 119 people and invented 919.", "should_pass": false}
+{"display": "120", "id": "en-grounded-20", "language": "en", "narrative": "We served 120 people.", "should_pass": true}
+{"display": "120", "id": "en-injected-20", "language": "en", "narrative": "We served 120 people and invented 920.", "should_pass": false}
+{"display": "121", "id": "en-grounded-21", "language": "en", "narrative": "We served 121 people.", "should_pass": true}
+{"display": "121", "id": "en-injected-21", "language": "en", "narrative": "We served 121 people and invented 921.", "should_pass": false}
+{"display": "122", "id": "en-grounded-22", "language": "en", "narrative": "We served 122 people.", "should_pass": true}
+{"display": "122", "id": "en-injected-22", "language": "en", "narrative": "We served 122 people and invented 922.", "should_pass": false}
+{"display": "123", "id": "en-grounded-23", "language": "en", "narrative": "We served 123 people.", "should_pass": true}
+{"display": "123", "id": "en-injected-23", "language": "en", "narrative": "We served 123 people and invented 923.", "should_pass": false}
+{"display": "124", "id": "en-grounded-24", "language": "en", "narrative": "We served 124 people.", "should_pass": true}
+{"display": "124", "id": "en-injected-24", "language": "en", "narrative": "We served 124 people and invented 924.", "should_pass": false}
+{"display": "100", "id": "es-grounded-00", "language": "es", "narrative": "Atendimos a 100 personas.", "should_pass": true}
+{"display": "100", "id": "es-injected-00", "language": "es", "narrative": "Atendimos a 100 personas e inventamos 900.", "should_pass": false}
+{"display": "101", "id": "es-grounded-01", "language": "es", "narrative": "Atendimos a 101 personas.", "should_pass": true}
+{"display": "101", "id": "es-injected-01", "language": "es", "narrative": "Atendimos a 101 personas e inventamos 901.", "should_pass": false}
+{"display": "102", "id": "es-grounded-02", "language": "es", "narrative": "Atendimos a 102 personas.", "should_pass": true}
+{"display": "102", "id": "es-injected-02", "language": "es", "narrative": "Atendimos a 102 personas e inventamos 902.", "should_pass": false}
+{"display": "103", "id": "es-grounded-03", "language": "es", "narrative": "Atendimos a 103 personas.", "should_pass": true}
+{"display": "103", "id": "es-injected-03", "language": "es", "narrative": "Atendimos a 103 personas e inventamos 903.", "should_pass": false}
+{"display": "104", "id": "es-grounded-04", "language": "es", "narrative": "Atendimos a 104 personas.", "should_pass": true}
+{"display": "104", "id": "es-injected-04", "language": "es", "narrative": "Atendimos a 104 personas e inventamos 904.", "should_pass": false}
+{"display": "105", "id": "es-grounded-05", "language": "es", "narrative": "Atendimos a 105 personas.", "should_pass": true}
+{"display": "105", "id": "es-injected-05", "language": "es", "narrative": "Atendimos a 105 personas e inventamos 905.", "should_pass": false}
+{"display": "106", "id": "es-grounded-06", "language": "es", "narrative": "Atendimos a 106 personas.", "should_pass": true}
+{"display": "106", "id": "es-injected-06", "language": "es", "narrative": "Atendimos a 106 personas e inventamos 906.", "should_pass": false}
+{"display": "107", "id": "es-grounded-07", "language": "es", "narrative": "Atendimos a 107 personas.", "should_pass": true}
+{"display": "107", "id": "es-injected-07", "language": "es", "narrative": "Atendimos a 107 personas e inventamos 907.", "should_pass": false}
+{"display": "108", "id": "es-grounded-08", "language": "es", "narrative": "Atendimos a 108 personas.", "should_pass": true}
+{"display": "108", "id": "es-injected-08", "language": "es", "narrative": "Atendimos a 108 personas e inventamos 908.", "should_pass": false}
+{"display": "109", "id": "es-grounded-09", "language": "es", "narrative": "Atendimos a 109 personas.", "should_pass": true}
+{"display": "109", "id": "es-injected-09", "language": "es", "narrative": "Atendimos a 109 personas e inventamos 909.", "should_pass": false}
+{"display": "110", "id": "es-grounded-10", "language": "es", "narrative": "Atendimos a 110 personas.", "should_pass": true}
+{"display": "110", "id": "es-injected-10", "language": "es", "narrative": "Atendimos a 110 personas e inventamos 910.", "should_pass": false}
+{"display": "111", "id": "es-grounded-11", "language": "es", "narrative": "Atendimos a 111 personas.", "should_pass": true}
+{"display": "111", "id": "es-injected-11", "language": "es", "narrative": "Atendimos a 111 personas e inventamos 911.", "should_pass": false}
+{"display": "112", "id": "es-grounded-12", "language": "es", "narrative": "Atendimos a 112 personas.", "should_pass": true}
+{"display": "112", "id": "es-injected-12", "language": "es", "narrative": "Atendimos a 112 personas e inventamos 912.", "should_pass": false}
+{"display": "113", "id": "es-grounded-13", "language": "es", "narrative": "Atendimos a 113 personas.", "should_pass": true}
+{"display": "113", "id": "es-injected-13", "language": "es", "narrative": "Atendimos a 113 personas e inventamos 913.", "should_pass": false}
+{"display": "114", "id": "es-grounded-14", "language": "es", "narrative": "Atendimos a 114 personas.", "should_pass": true}
+{"display": "114", "id": "es-injected-14", "language": "es", "narrative": "Atendimos a 114 personas e inventamos 914.", "should_pass": false}
+{"display": "115", "id": "es-grounded-15", "language": "es", "narrative": "Atendimos a 115 personas.", "should_pass": true}
+{"display": "115", "id": "es-injected-15", "language": "es", "narrative": "Atendimos a 115 personas e inventamos 915.", "should_pass": false}
+{"display": "116", "id": "es-grounded-16", "language": "es", "narrative": "Atendimos a 116 personas.", "should_pass": true}
+{"display": "116", "id": "es-injected-16", "language": "es", "narrative": "Atendimos a 116 personas e inventamos 916.", "should_pass": false}
+{"display": "117", "id": "es-grounded-17", "language": "es", "narrative": "Atendimos a 117 personas.", "should_pass": true}
+{"display": "117", "id": "es-injected-17", "language": "es", "narrative": "Atendimos a 117 personas e inventamos 917.", "should_pass": false}
+{"display": "118", "id": "es-grounded-18", "language": "es", "narrative": "Atendimos a 118 personas.", "should_pass": true}
+{"display": "118", "id": "es-injected-18", "language": "es", "narrative": "Atendimos a 118 personas e inventamos 918.", "should_pass": false}
+{"display": "119", "id": "es-grounded-19", "language": "es", "narrative": "Atendimos a 119 personas.", "should_pass": true}
+{"display": "119", "id": "es-injected-19", "language": "es", "narrative": "Atendimos a 119 personas e inventamos 919.", "should_pass": false}
+{"display": "120", "id": "es-grounded-20", "language": "es", "narrative": "Atendimos a 120 personas.", "should_pass": true}
+{"display": "120", "id": "es-injected-20", "language": "es", "narrative": "Atendimos a 120 personas e inventamos 920.", "should_pass": false}
+{"display": "121", "id": "es-grounded-21", "language": "es", "narrative": "Atendimos a 121 personas.", "should_pass": true}
+{"display": "121", "id": "es-injected-21", "language": "es", "narrative": "Atendimos a 121 personas e inventamos 921.", "should_pass": false}
+{"display": "122", "id": "es-grounded-22", "language": "es", "narrative": "Atendimos a 122 personas.", "should_pass": true}
+{"display": "122", "id": "es-injected-22", "language": "es", "narrative": "Atendimos a 122 personas e inventamos 922.", "should_pass": false}
+{"display": "123", "id": "es-grounded-23", "language": "es", "narrative": "Atendimos a 123 personas.", "should_pass": true}
+{"display": "123", "id": "es-injected-23", "language": "es", "narrative": "Atendimos a 123 personas e inventamos 923.", "should_pass": false}
+{"display": "124", "id": "es-grounded-24", "language": "es", "narrative": "Atendimos a 124 personas.", "should_pass": true}
+{"display": "124", "id": "es-injected-24", "language": "es", "narrative": "Atendimos a 124 personas e inventamos 924.", "should_pass": false}

@@ -6,6 +6,7 @@ import pytest
 
 from outcome_receipts.charts import render_chart
 from outcome_receipts.comparison import ComparisonResult, ComparisonRow
+from outcome_receipts.copy import Locale
 from outcome_receipts.models import ChartSpec, Figure, Receipt
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
@@ -82,7 +83,7 @@ def test_render_report_without_optional_sections_is_just_narrative_and_receipts(
 def _receipt(metric_id: str, value: float, definition: str) -> Receipt:
     return Receipt(
         metric_id=metric_id,
-        value_sql=f"SELECT count(*) FROM enrollments WHERE metric = '{metric_id}'",  # noqa: S608 — fixture literal, never executed
+        value_sql=f"SELECT count(*) FROM enrollments WHERE metric = '{metric_id}'",  # noqa: S608  https://github.com/ChelseaKR/outcome-receipts/issues/52
         row_count=137,
         slice_hash="sha256:9f8c1e",
         value=value,
@@ -101,7 +102,7 @@ def _figure_full(metric_id: str, value: float, display: str, definition: str) ->
     )
 
 
-def _full_report(locale: str) -> str:
+def _full_report(locale: Locale) -> str:
     figures = [
         _figure_full("clients_served", 137.0, "137", "Distinct clients enrolled."),
         _figure_full("exit_rate", 0.62, "62.0%", "Share exiting to housing."),
@@ -127,7 +128,7 @@ def _full_report(locale: str) -> str:
         comparison=comparison,
         charts=[chart],
         provenance=provenance,
-        locale=locale,  # type: ignore[arg-type]
+        locale=locale,
     )
 
 
@@ -183,7 +184,7 @@ def test_figures_and_receipts_are_byte_identical_across_locales() -> None:
 
 
 @pytest.mark.parametrize("locale", ["en", "es"])
-def test_both_locales_render_without_raising(locale: str) -> None:
+def test_both_locales_render_without_raising(locale: Locale) -> None:
     report = _full_report(locale)
     assert report.startswith("# Program report")
     assert report.endswith("\n")

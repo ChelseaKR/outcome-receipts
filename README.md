@@ -80,8 +80,11 @@ make install
 source .venv/bin/activate
 ```
 
-`make install` creates `.venv`; it does not modify the parent shell's `PATH`.
-You can use `.venv/bin/receipts` instead of activating it.
+`make install` creates `.venv`, installs the locked Node/browser dependencies,
+and installs the checksum-verified security scanners consumed by `make verify`.
+It does not modify the parent shell's `PATH`; you can use
+`.venv/bin/receipts` instead of activating it. `make install-smoke` runs the
+same install and then asserts that the complete verification toolchain exists.
 
 Run the bundled demo:
 
@@ -153,7 +156,8 @@ from 1 through 10 are redacted, true zeros are preserved, and complementary
 suppression closes arithmetic recovery paths through totals, deltas, and
 percentages. HUD requires anonymous aggregate publication but does not prescribe
 this numeric floor, so the policy governing a particular report remains the
-operator's responsibility. See the [data card](docs/DATA-CARD.md) and suppression
+operator's responsibility. See the [data card](docs/cards/data-card-reporting.md),
+the [DPIA findings](docs/RESPONSIBLE-TECH-AUDITS.md), and the historic suppression
 ADRs in [docs/decisions](docs/decisions/).
 
 Check a narrative against the receipts at any time:
@@ -242,8 +246,9 @@ receipts run --config report.toml --out out --allow-cloud-drafting \
 The first model request may contain small aggregate displays even though the
 published artifact is subsequently suppressed. Organizations must explicitly
 authorize that transfer and configure their Bedrock logging and retention policy.
-See [docs/drafting.md](docs/drafting.md), the [model card](docs/MODEL-CARD.md),
-and the [data card](docs/DATA-CARD.md).
+See [docs/drafting.md](docs/drafting.md), the
+[model card](docs/cards/model-card.md), and the
+[data card](docs/cards/data-card-reporting.md).
 
 ### The trace view, the provenance statement, and re-derivation
 
@@ -352,21 +357,23 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 
 | Standard | State |
 |----------|-------|
-| Responsible-Tech Framework | Applies — see docs/RESPONSIBLE-TECH-AUDITS.md |
-| Code Quality | Applies — ruff, mypy --strict, pytest, merge-blocking |
-| Documentation | Applies |
-| Quality & Metrics | Applies — committed eval with Wilson CIs, fail-closed gate |
-| AI Evaluation | Applies only to the optional Bedrock drafting seam; numeric invention is merge-blocked, while a future model judge requires human-label calibration before use |
-| Security & Supply-Chain | Applies — SHA-pinned actions, least-privilege tokens, CycloneDX SBOM, Sigstore-signed build provenance, plus pip-audit, osv-scanner, gitleaks, zizmor, and Semgrep in CI. Open: CodeQL and OpenSSF Scorecard. |
-| CI/CD | Applies — `make verify` mirrors CI; `release.yml` re-runs it at the tagged commit before signing or publishing |
-| Accessibility | Applies to the chart output and the trace view — every chart ships an SVG with `role="img"`, `<title>`, and `<desc>` paired with an equivalent data table, and the trace-view HTML is semantic and high-contrast (one `<h1>`, `lang` set, table headers with `scope`, a `<caption>`); `ci.yml`'s `accessibility` job runs pa11y (WCAG2AA) against the built trace view; the CLI core stays headless |
-| Internationalization | Applies — public report and trace output have EN/ES parity; operational CLI messages remain English. See [docs/I18N.md](docs/I18N.md). |
-| Observability | N/A — library/CLI, no long-running service |
-| Release & Versioning | Applies — signed tag-triggered release with SBOM + Sigstore attestation and PyPI Trusted Publishing; see CHANGELOG.md |
+| Responsible-Tech Framework | Applies — dated ethics, bias, DPIA, transparency, accessibility, security, AI-risk, and residual-risk artifacts |
+| Code Quality | Applies — Python 3.12, current canonical ruff/mypy floors, strict typing, 90% branch coverage and 95% on integrity-critical modules |
+| Security & Supply-Chain | Applies — Semgrep, CodeQL, dependency and secret scans, Scorecard, SHA-pinned Actions, CycloneDX 1.7, Sigstore-backed attestations, and OIDC publishing |
+| CI/CD | Applies — `make verify` is the full local gate and CI invokes the same targets; main and release paths are ruleset-protected |
+| Release & Versioning | Applies — SemVer, signed immutable tags, CHANGELOG, exact-version build, PyPI Trusted Publishing, provenance, SBOM, and published-artifact verification |
+| Observability | Applies — Tier C local CLI; no service telemetry or SLO surface, with explicit operational and incident runbooks |
+| Accessibility | Applies — axe, pa11y, Lighthouse, reflow, and reduced-motion gates cover generated HTML; the ACR records manual VoiceOver/NVDA evidence status |
+| Internationalization | Applies — packaged gettext catalogs with EN/ES key and placeholder parity; operational CLI messages remain English |
+| AI Evaluation | Applies to optional Bedrock drafting — 100-case bilingual grounding benchmark, generated cards, red-team and governance artifacts; no judge ships |
+| Documentation | Applies — pinned standards, current root docs, canonical ADR log, data/incident/operations artifacts, and conformance checks |
+| Quality & Metrics | Applies — Definition of Done, committed eval with Wilson intervals, fail-closed gates, and project metrics ledger |
+| Incident Response | Applies — severity/label convention, private disclosure, secret-leak runbook, and committed-postmortem requirement |
+| Data Governance | Applies — L3 ephemeral input and L2 aggregate-output cards, retention boundary, lineage, and verified recovery procedure |
 
 ## For Claude Code
 
-Read [CLAUDE.md](CLAUDE.md) first. It is the source of truth for scope,
+Read [AGENTS.md](AGENTS.md) first. It is the source of truth for scope,
 conventions, and the build plan, and it states the hard guardrails: numbers never
 come from the model, the grounding gate is fail-closed, small-cell suppression is
 a privacy invariant, and the honest framing of what is solved art versus the

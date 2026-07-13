@@ -13,23 +13,20 @@ how each standard maps to this repo.
 ## The one command that proves it: `make verify`
 
 ```sh
-make install        # uv venv + editable install with dev deps
+make install        # complete locked Python, Node/browser, and security toolchain
 make verify         # the local mirror of the CI gate
 ```
 
-`make verify` runs `lint`, `type`, `test` in order: `ruff check`, `mypy --strict`, and
-`pytest`. It is the same path CI runs, so a change is not done until `make verify` is green
-locally. CI re-runs it and then checks that the committed eval report is current
-(`make eval`, then `git diff --exit-code eval/report.md`). **As of 2026-07-05, `main` has no
-branch protection or required status check configured yet** — the repo is private, and
-GitHub branch protection/rulesets require a public repo (or a paid plan) to enforce. Until
-that lands, treat `make verify` green as the gate you owe yourself and reviewers, not one
-GitHub enforces for you; see `docs/decisions/` for the tracked follow-up. Keep branch
-coverage at or above the documented **90%** bar ([`CLAUDE.md`](CLAUDE.md)); the metric
-engine is a library and its correctness is the product.
+`make verify` runs format/lint, strict typing, tests and coverage, source and
+documentation hygiene, gettext parity, dependency/SAST/secret/workflow scans,
+generated-HTML accessibility checks, generated-card drift, and the committed
+eval/benchmark drift check. CI invokes the same targets. The active main ruleset
+blocks force-push/deletion, requires pull requests and strict status checks, and
+requires signed linear history. Keep branch coverage at or above 90%, with 95%
+on the declared integrity-critical modules.
 
-Individual targets: `make lint`, `make type`, `make test`, `make eval`, `make run`,
-`make clean`.
+Individual targets include `make lint`, `make type`, `make test`, `make security`,
+`make i18n`, `make a11y`, `make eval`, `make run`, and `make clean`.
 
 ## Branch model
 
@@ -83,12 +80,12 @@ Before requesting review:
       `eval/report.md` is committed, so CI's `git diff --exit-code` passes.
 - [ ] `CHANGELOG.md` `[Unreleased]` is updated.
 - [ ] If a load-bearing guardrail changed (see below), an ADR under
-      [`docs/decisions/`](docs/decisions/) is linked and the change is called out.
+      [`docs/adr/`](docs/adr/) is linked and the change is called out.
 
 Solo-maintainer note: the "at least one review" expectation from the portfolio Code Quality
 standard is met by a recorded self-review pass plus every gate green. The point is that the
-checks ran and were acknowledged, not headcount. ADRs use the MADR format under
-`docs/decisions/`.
+checks ran and were acknowledged, not headcount. New ADRs use MADR under `docs/adr/`;
+`docs/decisions/` is the read-only historic log.
 
 ## The invariants (do not weaken these)
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from outcome_receipts.comparison import ComparisonResult, ComparisonRow
+from outcome_receipts.copy import ReportCopy, get_copy, normalize_locale
 from outcome_receipts.models import Figure
 from outcome_receipts.provenance import Provenance
 
@@ -45,16 +46,17 @@ h2 { font-size: 1.15rem; margin-top: 2rem; }
   padding: 0.75rem 1rem;
   margin: 1.25rem 0;
 }
-table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 1rem 0; }
 caption { text-align: left; font-weight: bold; margin-bottom: 0.5rem; }
 th, td {
   border: 1px solid #cbd5e0;
   padding: 0.5rem 0.6rem;
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 th { background: #edf2f7; }
-.value { font-variant-numeric: tabular-nums; font-weight: bold; white-space: nowrap; }
+.value { font-variant-numeric: tabular-nums; font-weight: bold; }
 .figure { margin-top: 1.75rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; }
 dt { font-weight: bold; }
@@ -66,6 +68,10 @@ code, .hash {
 }
 .muted { color: #4a5568; }
 .change { font-weight: bold; margin: 0.5rem 0; }
+@media (max-width: 30rem) {
+  body { padding-inline: 0.5rem; }
+  dl { grid-template-columns: minmax(0, 1fr); }
+}
 """.strip()
 
 
@@ -81,25 +87,25 @@ def _anchor(metric_id: str) -> str:
     return f"metric-{metric_id}"
 
 
-def _summary_table(figures: Sequence[Figure]) -> list[str]:
+def _summary_table(figures: Sequence[Figure], copy: ReportCopy) -> list[str]:
     lines = [
         "<table>",
-        "<caption>Figures in this report</caption>",
+        f"<caption>{_esc(copy.trace_figures_caption)}</caption>",
         "<thead>",
         "<tr>"
-        '<th scope="col">Figure</th>'
-        '<th scope="col">Value</th>'
-        '<th scope="col">What it counts</th>'
-        '<th scope="col">Caveat</th>'
-        '<th scope="col">Rows</th>'
+        f'<th scope="col">{_esc(copy.trace_header_figure)}</th>'
+        f'<th scope="col">{_esc(copy.trace_header_value)}</th>'
+        f'<th scope="col">{_esc(copy.trace_header_definition)}</th>'
+        f'<th scope="col">{_esc(copy.trace_header_caveat)}</th>'
+        f'<th scope="col">{_esc(copy.trace_header_rows)}</th>'
         "</tr>",
         "</thead>",
         "<tbody>",
     ]
     for figure in figures:
         receipt = figure.receipt
-        definition = receipt.definition or "(no definition recorded)"
-        caveat = receipt.caveat or "(none)"
+        definition = receipt.definition or copy.trace_no_definition
+        caveat = receipt.caveat or copy.trace_none
         lines.append(
             "<tr>"
             f'<td><a href="#{_anchor(figure.metric_id)}">{_esc(figure.metric_id)}</a></td>'
@@ -113,7 +119,7 @@ def _summary_table(figures: Sequence[Figure]) -> list[str]:
     return lines
 
 
-def _change_label(row: ComparisonRow, figure: Figure) -> str:
+def _change_label(row: ComparisonRow, figure: Figure, copy: ReportCopy) -> str:
     """A plain-language direction+magnitude label for a delta figure.
 
     Direction is ``row.direction`` and the magnitude is ``figure.display`` (the
@@ -122,14 +128,18 @@ def _change_label(row: ComparisonRow, figure: Figure) -> str:
     """
 
     if row.direction == "no change":
-        return "No change"
-    word = "Increase" if row.direction == "increase" else "Decrease"
-    return f"{word} of {_esc(figure.display)}"
+        return copy.direction_no_change.capitalize()
+    template = (
+        copy.trace_increase_template
+        if row.direction == "increase"
+        else copy.trace_decrease_template
+    )
+    return template.format(value=_esc(figure.display))
 
 
-def _figure_detail(figure: Figure, row: ComparisonRow | None = None) -> list[str]:
+def _figure_detail(figure: Figure, copy: ReportCopy, row: ComparisonRow | None = None) -> list[str]:
     receipt = figure.receipt
-    definition = receipt.definition or "(no definition recorded)"
+    definition = receipt.definition or copy.trace_no_definition
     lines = [
         f'<section class="figure" id="{_anchor(figure.metric_id)}" '
         f'aria-labelledby="{_anchor(figure.metric_id)}-h">',
@@ -138,9 +148,12 @@ def _figure_detail(figure: Figure, row: ComparisonRow | None = None) -> list[str
         f"<p>{_esc(definition)}</p>",
     ]
     if row is not None:
-        lines.append(f'<p class="change">{_change_label(row, figure)}</p>')
+        lines.append(f'<p class="change">{_change_label(row, figure, copy)}</p>')
     if receipt.caveat:
-        lines.append(f'<p class="caveat">Caveat: {_esc(receipt.caveat)}</p>')
+        lines.append(
+            f'<p class="caveat">{_esc(copy.receipt_caveat_label.capitalize())}: '
+            f"{_esc(receipt.caveat)}</p>"
+        )
     lines += [
         "<dl>",
     ]
@@ -148,28 +161,36 @@ def _figure_detail(figure: Figure, row: ComparisonRow | None = None) -> list[str
     # is optional, so a mapping term shows only when it was recorded; a figure with
     # no mapping renders exactly as before.
     for label, value in (
-        ("Indicator", receipt.indicator),
-        ("Data source", receipt.data_source),
-        ("Collection frequency", receipt.collection_frequency),
+        (copy.receipt_indicator_label.capitalize(), receipt.indicator),
+        (copy.receipt_data_source_label.capitalize(), receipt.data_source),
+        (copy.receipt_collection_frequency_label.capitalize(), receipt.collection_frequency),
     ):
         if value:
             lines.append(f"<dt>{label}</dt><dd>{_esc(value)}</dd>")
     lines.extend(
         [
-            f"<dt>Query</dt><dd><code>{_esc(receipt.value_sql)}</code></dd>",
-            f"<dt>Rows in slice</dt><dd>{receipt.row_count}</dd>",
-            f'<dt>Slice hash</dt><dd class="hash">{_esc(receipt.slice_hash)}</dd>',
-            f"<dt>Computed at</dt><dd>{_esc(receipt.computed_at)}</dd>",
+            f"<dt>{_esc(copy.receipt_query_label.capitalize())}</dt>"
+            f"<dd><code>{_esc(receipt.value_sql)}</code></dd>",
+            f"<dt>{_esc(copy.receipt_rows_label.capitalize())}</dt><dd>{receipt.row_count}</dd>",
+            f"<dt>{_esc(copy.receipt_slice_hash_label.capitalize())}</dt>"
+            f'<dd class="hash">{_esc(receipt.slice_hash)}</dd>',
+            f"<dt>{_esc(copy.receipt_computed_at_label.capitalize())}</dt>"
+            f"<dd>{_esc(receipt.computed_at)}</dd>",
         ]
     )
     if row is not None:
         lines.append(
-            "<dt>Compared periods</dt>"
+            f"<dt>{_esc(copy.trace_compared_periods_label)}</dt>"
             "<dd>"
-            f'<a href="#{_anchor(row.prior.metric_id)}">{_esc(row.prior.metric_id)}</a>'
-            " and "
-            f'<a href="#{_anchor(row.current.metric_id)}">{_esc(row.current.metric_id)}</a>'
-            "</dd>"
+            + copy.trace_compared_periods_template.format(
+                prior=(
+                    f'<a href="#{_anchor(row.prior.metric_id)}">{_esc(row.prior.metric_id)}</a>'
+                ),
+                current=(
+                    f'<a href="#{_anchor(row.current.metric_id)}">{_esc(row.current.metric_id)}</a>'
+                ),
+            )
+            + "</dd>"
         )
     lines.extend(["</dl>", "</section>"])
     return lines
@@ -181,6 +202,7 @@ def render_trace_html(
     *,
     provenance: Provenance | None = None,
     comparison: ComparisonResult | None = None,
+    locale: str = "en",
 ) -> str:
     """Render the receipts as a single accessible HTML page.
 
@@ -195,38 +217,45 @@ def render_trace_html(
     own rows, never recomputed, so no second path to a number is introduced.
     """
 
+    selected_locale = normalize_locale(locale)
+    copy = get_copy(selected_locale)
     delta_rows: dict[str, ComparisonRow] = (
         {row.delta.metric_id: row for row in comparison.rows} if comparison is not None else {}
     )
     ordered = sorted(figures, key=lambda f: f.metric_id)
     head = [
         "<!doctype html>",
-        '<html lang="en">',
+        f'<html lang="{selected_locale}">',
         "<head>",
         '<meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{_esc(title)}: trace this number</title>",
+        f"<title>{_esc(copy.trace_title_template.format(title=title))}</title>",
         f"<style>{_STYLE}</style>",
         "</head>",
         "<body>",
         "<main>",
-        f"<h1>{_esc(title)}: trace this number</h1>",
-        '<p class="muted">Every number in the report traces to a figure below. Each '
-        "figure was computed by a deterministic query over the organization's own "
-        "service data and carries a receipt: the exact query, the rows it drew from, "
-        "a content hash of that data slice, and a timestamp.</p>",
+        f"<h1>{_esc(copy.trace_title_template.format(title=title))}</h1>",
+        f'<p class="muted">{_esc(copy.trace_intro)}</p>',
     ]
     if provenance is not None:
-        gate = "passed" if provenance.gate_pass else "did not pass"
-        head.append(
-            '<p class="provenance">No figure was written by a language model. The '
-            f"grounding gate {gate}: {provenance.numbers_bound} number(s) in the "
-            "report bound to a receipt, "
-            f"{provenance.numbers_unbound} did not.</p>"
+        template = (
+            copy.trace_provenance_pass_template
+            if provenance.gate_pass
+            else copy.trace_provenance_fail_template
         )
-    body = _summary_table(ordered)
-    body.append("<h2>Figure details</h2>")
+        head.append(
+            '<p class="provenance">'
+            + _esc(
+                template.format(
+                    bound=provenance.numbers_bound,
+                    unbound=provenance.numbers_unbound,
+                )
+            )
+            + "</p>"
+        )
+    body = _summary_table(ordered, copy)
+    body.append(f"<h2>{_esc(copy.trace_details_heading)}</h2>")
     for figure in ordered:
-        body.extend(_figure_detail(figure, delta_rows.get(figure.metric_id)))
+        body.extend(_figure_detail(figure, copy, delta_rows.get(figure.metric_id)))
     tail = ["</main>", "</body>", "</html>"]
     return "\n".join([*head, *body, *tail]) + "\n"

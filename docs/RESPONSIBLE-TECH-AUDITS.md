@@ -1,174 +1,140 @@
-# Responsible-tech audits
+# Responsible-Tech Audits — outcome-receipts
 
-Project-specific findings for outcome-receipts, following a standard
-responsible-tech audit method: ethics, bias, privacy and a DPIA, transparency,
-accessibility, and security. This is a committed, dated artifact, regenerated on
-release. Sections marked TODO are scoped but not yet measured.
+Project-specific findings under the portfolio Responsible-Tech Framework. This
+artifact is reviewed on release; generic thresholds remain in portfolio-standards.
 
-Status: v0.1. *Last verified: 2026-07-05 · Recheck: quarterly*
+## Applicability
 
-## Ethics
+- A Ethics: applies.
+- B Bias: applies because metric definitions and denominators shape claims.
+- C Privacy/DPIA: applies; client-level L3 data is processed ephemerally and L2
+  aggregates are published.
+- D Transparency: applies; figures, model boundary, cards, and eval are disclosed.
+- E Accessibility: applies to generated trace HTML and chart SVG.
+- F Security: applies; ASVS authentication level is N/A because the offline CLI
+  has no auth, authorization, or network ingress. SAST, SCA, secret scanning, and
+  supply-chain controls still apply.
+- AI Evaluation: applies to the optional Bedrock drafting seam; RAG retrieval
+  metrics are N/A because there is no retriever, corpus, or vector store.
+- Internationalization: applies to public report and trace output in EN/ES.
 
-The harm this tool guards against is a wrong or invented number in a funder
-report, which can cost an organization its funding and its credibility. The
-design answer is structural: numbers come from queries, not from generated text,
-and the grounding gate refuses to export any number that does not trace to a
-receipt. The gate is fail-closed and mechanical, so the protection does not depend
-on a reviewer noticing.
+## A. Ethics
 
-## Bias
+The primary harm is a wrong or invented number reaching a funder, with funding
+and credibility consequences for the organization and indirect effects on the
+people it serves. The control is structural: SQL computes figures, immutable
+receipts record derivation, both pre- and post-suppression narratives pass the
+numeric-span gate, and a named person approves the final redacted artifact.
 
-A metric is only as fair as its definition. A query that counts "clients served"
-encodes choices (who counts, over what window) that can over- or under-represent
-groups. The tool does not hide those choices; it records the exact query in the
-receipt, so a reviewer can see and contest the definition.
+Review gate: changing the numeric origin, approval order, or export boundary
+requires an ADR and explicit trust/privacy review in the pull request.
 
-Each metric also carries a plain-language `definition` field that rides in the
-receipt and renders next to the figure, in the report, the trace view, and the
-manifest, so the choice is legible without reading SQL. The definitions in the
-bundled examples name the common traps directly:
+## B. Bias and fairness
 
-* **Deduplication window and unit.** "Clients served" is counted once per person
-  by `client_id`, so the unit is the person, not the enrollment; "exits" is counted
-  per enrollment, so one client who exited two enrollments counts twice. Stating
-  the unit keeps a person-count and an enrollment-count from being read as the same
-  thing.
-* **Exit-destination categories.** Destinations are taken as recorded. An
-  unrecorded destination is its own category, not folded into "permanent" or
-  dropped, so the destination categories sum to total exits and a missing outcome
-  is visible rather than silently favorable.
-* **Denominator scope.** A rate names its denominator. The permanent-housing rate
-  divides by exits, not by all enrolled clients, so a client still enrolled is not
-  counted against the outcome.
+A correct query can encode an unfair definition. Receipts therefore carry a
+plain-language definition, denominator, unit, category assumptions, data source,
+collection frequency, and caveat when provided. Mapping candidates never approve
+themselves; ambiguity and missing columns enter a human review queue.
 
-## Privacy and data minimization (DPIA)
+Known limits remain: receipts do not prove collection completeness, consent,
+measurement validity, causal impact, or that a category scheme treats groups
+fairly. EN/ES benchmark parity proves the same numeric grounding enforcement in
+both languages, not cultural or narrative-quality parity.
 
-The tool reads client-level service data to compute aggregates, and the output is
-a report of aggregate figures, not a client roster.
+## C. Privacy and data-protection impact assessment
 
-* The receipts manifest carries no client-level field values: it records the
-  query, the row count, and a hash of the slice, not the rows themselves. The trace
-  view (`trace.html`) and `receipts verify` read the same receipts, so neither adds
-  a client-level surface: the trace view renders counts, definitions, and slice
-  hashes, and verify re-derives values without emitting any slice rows.
-* Small-cell suppression (v0.2) will suppress aggregate counts below a threshold,
-  with complementary suppression and true zeros preserved, modeled on the U.S. CMS
-  Cell Size Suppression Policy and grounded in primary guidance, expressed as
-  tests. This is the same posture and the same honest attribution as the sibling
-  constituent-reconciler project's DV pack.
+### Data flow and classification
 
-### Data-flow map
+Organization CSV rows are L3 while held in process. The loader validates them and
+creates an in-memory SQLite table. Compute emits scalar figures with exact query,
+row count, column names, BLAKE2b slice hash, value, and timestamp. Drafting,
+grounding, suppression, rendering, bundles, and ledgers operate on figures and
+provenance, not source rows. Published reports and manifests are L2 aggregates.
 
-The chain runs compute, receipt, draft, ground, suppress, human-approve, export,
-in that order. Each stage below names what data crosses into it and what it
-carries forward.
+The optional Bedrock request is the sole cloud boundary. It receives the filled
+narrative and scalar display allowlist only, with no rows, identifiers, SQL,
+hashes, or paths. It is disabled unless the config policy and per-run CLI flag
+both opt in. Small aggregate displays can reach the provider before publication
+suppression, so the adopting organization must authorize the transfer and review
+its Bedrock logging and retention configuration.
 
-* **Ingest.** The org's client-level service data (a CSV) is read locally into
-  the deterministic engine (the data and engine layer). Client-level rows stay in
-  the local process; they are not sent anywhere and are not written back out by
-  the tool.
-* **Compute.** `engine.py` runs each `MetricSpec` and emits a `Figure`: a value
-  plus a `Receipt` of `{metric_id, value_sql, row_count, slice_hash, value, unit,
-  computed_at, definition, kind}`, where `slice_hash` is a BLAKE2b hash of the
-  canonicalized slice the figure was computed from. From this point on, only the
-  aggregates and the slice hash move forward. Raw rows are not carried into the
-  receipt.
-* **Draft.** The deterministic template drafter (or the optional policy-gated
-  Bedrock seam) writes prose around figures that already carry receipts. The
-  drafter receives figures, never raw rows.
-* **Ground.** `grounding.py` binds every numeric span in the narrative to a
-  receipt and fails closed: an unbound or mismatched number blocks the export
-  rather than passing silently.
-* **Suppress (v0.2, planned).** Small-cell and complementary suppression run over
-  the aggregate counts before export, consistent with the suppression posture
-  described above. This module has not landed yet.
-* **Human approve.** The operator reviews the grounded draft before exporting;
-  everything they see is already aggregate-only. A recorded sign-off (named
-  approver, timestamp, hash of the approved content in the manifest) is planned
-  (R8) and has not landed yet; today the approval is the operator's decision to
-  run the export.
-* **Export.** `report.py` and `provenance.py` emit the aggregate report together
-  with a manifest of receipts and slice hashes, and `ledger.py` appends one
-  hash-chained line per successful export (report title, manifest hash, optional
-  recipient, timestamp). No client-level field value and no client identifier is
-  emitted. This is the aggregate-only invariant: what leaves the tool is counts,
-  rates, narrative, and provenance metadata.
-* **Verify.** `verify.py` re-derives the figures from the spec and the cited data
-  and checks them against the manifest. It reads the same data and emits no slice
-  rows.
+### Minimization, suppression, retention, and recovery
 
-One external boundary exists in the whole chain: the optional drafting seam
-(Claude on Bedrock). It receives only receipted aggregate figures and narrative
-instructions, never client-level rows, and it is fused off entirely under any
-no-cloud policy pack.
+The application does not copy or persist source rows. Counts 1 through 10 are
+redacted under the CMS-modeled default; complementary, delta, and percentage
+controls block direct arithmetic recovery, while true zero remains distinct.
+HUD does not prescribe that numeric floor, so the report's controlling local or
+funder policy remains the operator's decision.
 
-### Retention model
+Reports, receipts, bundles, and the export ledger contain aggregates and
+provenance. They remain under operator retention. The application has no durable
+client database; backup and restore are documented as copying the report inputs,
+outputs, key, and ledger together, then running all verify commands before trust.
 
-Retention is bounded by what each artifact is allowed to contain.
+Data cards: `docs/data/organization-service-export.md`,
+`docs/data/synthetic-fixtures.md`, and `docs/cards/data-card-reporting.md`.
 
-* **Input service data.** Not copied or retained by the tool beyond the compute
-  run. It is read from the org's own store and stays owned and retained by the
-  org under the org's own policy.
-* **Receipts and manifest.** Retain aggregates, queries, row counts, slice
-  hashes, and timestamps, with no client-level values, so a report stays
-  reproducible. Slice hashes are one-way BLAKE2b digests and are not reversible
-  to the underlying rows.
-* **Drafting-seam prompts and responses (when the seam is enabled).** Contain
-  only aggregate figures and narrative, no client-level data. Their retention
-  follows the org's own Bedrock configuration, outside this tool.
-* **Export ledger (`export-ledger.jsonl`).** Append-only and retained
-  indefinitely by design (its tamper evidence depends on the chain staying
-  intact). Each entry holds a report title, a manifest hash, an optional
-  recipient, a timestamp, and chain hashes — aggregates' provenance metadata
-  only, no client-level data.
-* **Exported report.** Aggregate-only, retained by the org and its funder.
+## D. Transparency and explainability
 
-Because no client-level PII is retained in any artifact the tool produces, the
-retention obligation on tool-produced artifacts is bounded to aggregates and
-provenance metadata. The obligation over client-level data stays with the org's
-system of record, where it already lived.
+Every figure carries the query, row count, slice hash, timestamp, unit, and
+definition. The report and accessible trace render that evidence; manifests and
+bundle hashes support machine verification. `receipts verify`, bundle verification,
+and ledger verification fail closed on drift.
 
-## Transparency
+The generated model and data cards describe the Bedrock boundary, limitations,
+out-of-scope uses, and bilingual gate evidence. The committed eval reports Wilson
+confidence intervals, and the 100-case benchmark includes planted EN/ES failures.
+No model judge ships, so judge calibration is explicitly N/A until one is added.
 
-Every figure in a report ships with its receipt: the query, the row count, the
-slice hash, and the timestamp. The committed eval shows the gated grounding rate
-with a Wilson confidence interval, and the gate's PASS or FAIL, rather than a
-single headline number.
+## E. Accessibility
 
-Two transparency surfaces ship for the report's recipient. Every export embeds a
-provenance statement, in the report body and as a machine-readable record in the
-manifest, stating that each number was computed by a deterministic query, that no
-figure was written by a model, and that the gate bound every number before export.
-And `receipts verify` re-derives every figure from the spec and the cited data and
-checks it against the manifest, so the claim is reproducible and not only asserted;
-it fails closed on any drift. TODO: publish the model card for the optional drafting
-seam when it lands (v0.3).
+The generated trace and charts target WCAG 2.2 AA. `make a11y` builds a real trace
+and runs axe, pa11y, Lighthouse accessibility ≥0.90, 320px reflow, and reduced
+motion checks. Charts have an SVG title and description plus equivalent data
+tables. EN/ES pages set the document language.
 
-## Accessibility
+Review artifacts: `docs/a11y/ACR.md`, `docs/a11y/STATEMENT.md`, and the dated
+screen-reader walkthrough. The required macOS VoiceOver and Windows NVDA task
+walkthroughs remain unexecuted; they are recorded as a release review blocker and
+are not inferred from automated results.
 
-The CLI core stays headless. The HTML the tool emits is held to WCAG 2.2 AA. The
-chart output ships an SVG with `role="img"`, a `<title>`, and a `<desc>`, paired
-with an equivalent data table. The trace view (`trace.html`) is a single semantic,
-high-contrast page: one `<h1>`, a document `lang`, a summary table with a
-`<caption>` and `scope`-marked headers, dark text on white, and every number as
-text. It carries no script and no external asset, so it opens offline. When a
-review or approval UI lands, the same bar applies to it.
+## F. Security and supply chain
 
-## Security
+- ASVS: N/A for auth/authz/ingress because the product is an offline CLI. Input
+  validation, SQL trust boundaries, output encoding, and all supply-chain controls
+  still apply.
+- Container scanning: N/A because the repository has no Dockerfile or image.
+- SBOM/signing: CycloneDX 1.7 SBOM plus GitHub Sigstore-backed build and SBOM
+  attestations on every signed-tag release; PyPI uses OIDC Trusted Publishing.
+- Secret policy: credentials stay in environment/provider stores, never config;
+  rotate and revoke first on exposure, then assess history and notification using
+  `docs/OPERATIONS.md`. Review annually.
+- SAST/SCA/secrets: Ruff security rules, Semgrep, CodeQL, pip-audit, OSV-Scanner,
+  npm audit, gitleaks, zizmor, and OpenSSF Scorecard are blocking on their declared
+  triggers. Dynamic SQL waivers are narrow, quoted/trusted, and tracked in issue
+  52 plus `.semgrep-waivers.yml`. The Python 3.7 compatibility false positive
+  remains tracked in issue 53; a no-suppression scan on 2026-07-12 confirmed the
+  combined Semgrep profile still reports it against this Python 3.12-only package.
+- VEX: N/A today because scans report no unfixable HIGH/CRITICAL dependency CVE.
+  Any future exception requires a CycloneDX VEX and quarterly review.
 
-The deterministic core has no third-party runtime dependency, which keeps the
-supply-chain surface small. The SQL in a spec is author-supplied and runs against
-an in-memory database loaded only with the org's own data; it is not a
-multi-tenant or network surface. The threat model now ships at
-[`THREAT-MODEL.md`](THREAT-MODEL.md), and the supply-chain hardening it names is
-in place: SHA-pinned Actions, a least-privilege `GITHUB_TOKEN`, Sigstore-signed
-releases, PyPI Trusted Publishing over OIDC, and a CycloneDX SBOM on release.
-The remaining 1.0 security work is the retention and data-flow map, which
-completes with the suppression and export modes, and the drafting-seam model card
-that lands with v0.3.
+Threat and governance artifacts: `docs/THREAT-MODEL.md`, the AI risk register,
+impact assessment, ISO 42001 applicability map, red-team report, and residual-risk
+register under `docs/audits/`.
 
-## Legal note
+## Gate checklist
 
-This is a reference implementation, not legal advice. An organization adopting it,
-and the small-cell suppression in particular, needs its own review against its own
-funder and statutory obligations.
+| Control | Gate | Evidence |
+|---|---|---|
+| No unbound number survives export | AUTO | Grounding, property, benchmark, and CLI tests |
+| Small-cell and complementary recovery blocked | AUTO | Suppression and exhaustive recovery tests |
+| Aggregate-only output | AUTO | Renderer and manifest tests |
+| EN/ES key and placeholder parity | AUTO | gettext extraction/compile/parity target |
+| Generated HTML accessibility | AUTO | axe, pa11y, Lighthouse, reflow, reduced motion |
+| Dependency, secret, SAST, workflow security | AUTO | `make security`, CodeQL, Scorecard |
+| Model/data cards and eval current | AUTO | generated-card and eval diff checks |
+| Metric/policy fairness review | REVIEW | Human approval and ADR/PR checklist |
+| Manual assistive-technology review | REVIEW | Dated walkthrough; currently incomplete |
+| Residual-risk acceptance | REVIEW | Dated residual-risk register |
+
+Status: beta. *Last verified: 2026-07-12 · Recheck: quarterly and every release.*

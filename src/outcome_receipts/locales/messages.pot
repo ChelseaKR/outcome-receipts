@@ -1,0 +1,153 @@
+msgid "comparison_heading"
+msgstr ""
+
+msgid "comparing_sentence_template"
+msgstr ""
+
+msgid "header_outcome"
+msgstr ""
+
+msgid "header_change"
+msgstr ""
+
+msgid "header_direction"
+msgstr ""
+
+msgid "direction_increase"
+msgstr ""
+
+msgid "direction_decrease"
+msgstr ""
+
+msgid "direction_no_change"
+msgstr ""
+
+msgid "rate_metric_note"
+msgstr ""
+
+msgid "reconciliation_heading"
+msgstr ""
+
+msgid "reconciliation_sentence_template"
+msgstr ""
+
+msgid "header_item"
+msgstr ""
+
+msgid "outcome_suffix"
+msgstr ""
+
+msgid "financial_suffix"
+msgstr ""
+
+msgid "charts_heading"
+msgstr ""
+
+msgid "chart_data_caption_template"
+msgstr ""
+
+msgid "chart_alt_template"
+msgstr ""
+
+msgid "receipts_heading"
+msgstr ""
+
+msgid "receipt_kind_label"
+msgstr ""
+
+msgid "receipt_definition_label"
+msgstr ""
+
+msgid "receipt_indicator_label"
+msgstr ""
+
+msgid "receipt_data_source_label"
+msgstr ""
+
+msgid "receipt_collection_frequency_label"
+msgstr ""
+
+msgid "receipt_caveat_label"
+msgstr ""
+
+msgid "receipt_query_label"
+msgstr ""
+
+msgid "receipt_rows_label"
+msgstr ""
+
+msgid "receipt_slice_hash_label"
+msgstr ""
+
+msgid "receipt_computed_at_label"
+msgstr ""
+
+msgid "provenance_heading"
+msgstr ""
+
+msgid "provenance_statement"
+msgstr ""
+
+msgid "provenance_gate_pass_template"
+msgstr ""
+
+msgid "provenance_gate_fail_template"
+msgstr ""
+
+msgid "provenance_approval_template"
+msgstr ""
+
+msgid "provenance_approval_when_template"
+msgstr ""
+
+msgid "trace_title_template"
+msgstr ""
+
+msgid "trace_intro"
+msgstr ""
+
+msgid "trace_figures_caption"
+msgstr ""
+
+msgid "trace_header_figure"
+msgstr ""
+
+msgid "trace_header_value"
+msgstr ""
+
+msgid "trace_header_definition"
+msgstr ""
+
+msgid "trace_header_caveat"
+msgstr ""
+
+msgid "trace_header_rows"
+msgstr ""
+
+msgid "trace_no_definition"
+msgstr ""
+
+msgid "trace_none"
+msgstr ""
+
+msgid "trace_increase_template"
+msgstr ""
+
+msgid "trace_decrease_template"
+msgstr ""
+
+msgid "trace_details_heading"
+msgstr ""
+
+msgid "trace_compared_periods_label"
+msgstr ""
+
+msgid "trace_compared_periods_template"
+msgstr ""
+
+msgid "trace_provenance_pass_template"
+msgstr ""
+
+msgid "trace_provenance_fail_template"
+msgstr ""
+

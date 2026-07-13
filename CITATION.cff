@@ -8,7 +8,9 @@ abstract: >-
   it drew from, a content hash of that data slice, and a timestamp. It then drafts
   a narrative around the receipted figures and runs a fail-closed grounding gate
   that refuses to export if any number in the narrative does not trace to a
-  receipt. No language model is involved in v0.1.
+  receipt. An optional policy-gated Bedrock seam may revise prose, but the
+  deterministic path remains the default and every numeric span is mechanically
+  grounded before export.
 type: software
 authors:
   - given-names: "Chelsea"

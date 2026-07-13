@@ -341,10 +341,14 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
         "",
         "## Why this metric",
         "",
-        "A number in a funder report that is wrong or invented is the expensive, "
-        "sometimes irreversible error. So the gated metric is the grounding rate: "
-        "the share of numbers in the narrative that bind to a receipt. It is "
-        "fail-closed at 100%; a single unbound number blocks export.",
+        "".join(
+            (
+                "A number in a funder report that is wrong or invented is the expensive, ",
+                "sometimes irreversible error. So the gated metric is the grounding rate: ",
+                "the share of numbers in the narrative that bind to a receipt. It is ",
+                "fail-closed at 100%; a single unbound number blocks export.",
+            )
+        ),
         "",
         "## Results",
         "",
@@ -363,9 +367,13 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
         f"Grounding gate (100% required): **{gate_word}** "
         f"(observed {_pct(report.grounding_rate)}).",
         "",
-        "This committed run scores the drafted narrative, every number of which "
-        "comes from a receipt, so it passes. That the gate catches an injected "
-        "unverifiable number is shown by the merge-blocking test "
-        "`tests/test_grounding_gate.py`, not by failing this report.",
+        "".join(
+            (
+                "This committed run scores the drafted narrative, every number of which ",
+                "comes from a receipt, so it passes. That the gate catches an injected ",
+                "unverifiable number is shown by the merge-blocking test ",
+                "`tests/test_grounding_gate.py`, not by failing this report.",
+            )
+        ),
     ]
     return "\n".join(lines) + "\n"

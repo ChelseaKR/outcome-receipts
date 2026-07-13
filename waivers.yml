@@ -1,0 +1,56 @@
+version: 1
+
+waivers:
+  - id: WVR-003
+    control: SEC-10
+    repo: outcome-receipts
+    kind: semgrep
+    reason: >-
+      The registry profile applies a Python-below-3.7 compatibility rule to a
+      Python-3.12-only package. importlib.resources is the correct standard-
+      library API for packaged gettext catalogs; issue 53 owns retirement.
+    owner: chelseakr
+    granted: 2026-07-12
+    expires: 2026-10-12
+    link: https://github.com/ChelseaKR/outcome-receipts/issues/53
+
+  - id: WVR-004
+    control: CQ-35
+    repo: outcome-receipts
+    kind: other
+    reason: >-
+      Ruff S608 flags trusted dynamic identifiers and author-controlled report
+      SQL even where identifiers are quoted and values are bound. Suppressions
+      are per-line, issue-linked, and reviewed under issue 52.
+    owner: chelseakr
+    granted: 2026-07-12
+    expires: 2026-10-12
+    link: https://github.com/ChelseaKR/outcome-receipts/issues/52
+
+  - id: WVR-005
+    control: SEC-34
+    repo: outcome-receipts
+    kind: other
+    reason: >-
+      OpenSSF Branch-Protection scores 4 because GitHub cannot count the sole
+      maintainer's self-review. The live ruleset still requires pull requests,
+      signed linear history, resolved threads, strict checks, and no bypass.
+      ADR 0002 requires raising the review count when a second maintainer exists.
+    owner: chelseakr
+    granted: 2026-07-12
+    expires: 2026-10-12
+    link: docs/adr/0002-solo-maintainer-review-count.md
+
+  - id: WVR-006
+    control: SEC-37
+    repo: outcome-receipts
+    kind: other
+    reason: >-
+      The measured aggregate is 6.8 while OpenSSF assigns zero Maintained score
+      to repositories under 90 days old and zero Code-Review score to immutable
+      historic solo changes. Critical checks are at target and the workflow
+      ratchets 6.8 without permitting regression. Reassess after the 90-day mark.
+    owner: chelseakr
+    granted: 2026-07-12
+    expires: 2026-10-15
+    link: docs/audits/openssf-scorecard-2026-07-12.md

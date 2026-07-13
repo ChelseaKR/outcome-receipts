@@ -1,10 +1,10 @@
 # Security Policy
 
-outcome-receipts is an independent personal open-source project (Apache-2.0). At v0.1 it
-runs **offline**: no network, no authentication, no persisted user data, and no language
-model in any path. It has zero runtime dependencies. The attack surface is therefore small,
-and the security posture tracks the portfolio Security & Supply-Chain standard; per-repo
-values and the hardening timeline are in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+outcome-receipts is an independent personal open-source project (Apache-2.0).
+The default path is offline, with no network listener, authentication, or durable
+client database and zero required runtime dependencies. An optional Bedrock extra
+adds one explicitly authorized model request for prose only. The security posture
+and current values are in [`docs/RESPONSIBLE-TECH-AUDITS.md`](docs/RESPONSIBLE-TECH-AUDITS.md).
 
 ## Supported versions
 
@@ -68,11 +68,10 @@ spec, or data issue rather than a vulnerability; file those as normal issues.
 Release actions are pinned to commit SHAs, release artifacts carry a Sigstore build-provenance
 attestation and a CycloneDX SBOM, and publishing to PyPI uses Trusted Publishing (OIDC, no
 long-lived token). The CI token is least-privilege and does not persist credentials.
-`ci.yml`'s `security` job runs `pip-audit` and `osv-scanner` over the locked dev toolchain
-(`uv.lock`), `gitleaks` over the full commit history, and `zizmor` over the workflow files, on
-every push and pull request. `release.yml` re-runs the full `make verify` gate at the tagged
-commit before anything is signed or published (see `docs/ROADMAP.md` for what's still open:
-CodeQL/Scorecard, both gated on the repo going public).
+`make security` and CI run pip-audit, npm audit, OSV-Scanner, gitleaks,
+Semgrep, and zizmor. CodeQL covers Python and Actions; OpenSSF Scorecard enforces
+the portfolio score floors on its automatic triggers. `release.yml` re-runs the
+full `make verify` gate at the tagged commit before signing or publishing.
 
 ## Hardening notes for operators
 

@@ -58,20 +58,12 @@ def test_every_all_name_is_importable() -> None:
 
 
 def test_end_to_end_flow_via_top_level_only() -> None:
-    from outcome_receipts import (
-        FixedClock,
-        MetricSpec,
-        compute_figures,
-        draft,
-        ground,
-    )
-
     rows = [
         {"client_id": "C1", "dest": "permanent"},
         {"client_id": "C2", "dest": "permanent"},
         {"client_id": "C3", "dest": "temporary"},
     ]
-    spec = MetricSpec(
+    spec = orx.MetricSpec(
         metric_id="permanent",
         description="permanent exits",
         value_sql="SELECT COUNT(*) FROM data WHERE dest = 'permanent'",
@@ -79,7 +71,7 @@ def test_end_to_end_flow_via_top_level_only() -> None:
         unit="count",
     )
 
-    figures = compute_figures(rows, [spec], clock=FixedClock())
+    figures = orx.compute_figures(rows, [spec], clock=orx.FixedClock())
     assert len(figures) == 1
     assert figures[0].display == "2"
 
@@ -88,9 +80,9 @@ def test_end_to_end_flow_via_top_level_only() -> None:
         template="We recorded {permanent} permanent exits.",
         metrics=(spec,),
     )
-    narrative = draft(report_spec, figures)
+    narrative = orx.draft(report_spec, figures)
     assert "2 permanent exits" in narrative
 
-    result = ground(narrative, figures)
+    result = orx.ground(narrative, figures)
     assert result.ok
     assert not result.unbound

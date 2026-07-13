@@ -64,7 +64,7 @@ compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> expor
   narrative drafter was used; both raw and publishable drafts must pass the gate.
 * If an LLM judge scores narrative faithfulness, calibrate against human labels
   with Cohen's kappa and fail closed on drift.
-* ✅ Generated [model](MODEL-CARD.md) and [data](DATA-CARD.md) cards describe the
+* ✅ Generated [model](cards/model-card.md) and [data](cards/data-card-reporting.md) cards describe the
   provider boundary, limitations, evaluation, privacy, and retention. Tagged
   release verification fails if committed cards drift from the generator.
 
@@ -116,16 +116,37 @@ and semantic-versioning guarantees on the spec and the receipts manifest schema.
 
 ## Metrics ledger
 
-| Attribute | Target | Gate |
-|-----------|--------|------|
-| Grounding rate (eval) | 100%, fail-closed | AUTO |
-| Test coverage (logic) | per CODE-QUALITY-STANDARD | AUTO |
-| Hallucinated-number rate | reported with Wilson CIs | REVIEW |
-| Small-cell suppression invariants | from primary CMS guidance, as tests | AUTO (v0.2) |
-| LLM judge calibration (Cohen's kappa) | fail-closed on drift | N/A — no judge ships; mandatory if one is added |
-| Supply chain | SBOM, signed releases, SHA-pinned actions | AUTO — landed in `release.yml` and `ci.yml`'s `security` job (pip-audit, osv-scanner, gitleaks, zizmor) |
-| Accessibility (trace.html) | zero pa11y WCAG2AA errors | AUTO — `ci.yml`'s `accessibility` job |
-| Gate invariants (property + mutation) | Hypothesis properties; 0 surviving mutants in the grounding gate | AUTO |
+| Attribute | Current value | Gate |
+|-----------|---------------|------|
+| AI-Evaluation-Standard | APPLIES — optional Bedrock prose drafter; numeric grounding, red-team, cards, and governance tiers; no RAG or judge | REVIEW scope declaration |
+| Grounding rate | 100% of numeric spans bound on exported fixtures; any unbound span blocks | AUTO |
+| Bilingual benchmark | 100 committed cases: 50 EN, 50 ES; 50 planted unbound failures all rejected | AUTO |
+| Hallucinated-number rate | Reported with Wilson intervals in `eval/report.md` | AUTO artifact / REVIEW interpretation |
+| LLM judge calibration | N/A — no model judge ships; calibration becomes blocking before one can gate | Declared N/A |
+| Branch coverage | 90% repository floor; integrity-critical module group 95% | AUTO |
+| Mutation quality | 0 surviving grounding-gate mutants in the last scoped run | REVIEW/nightly |
+| Small-cell privacy | Counts 1–10 plus complementary, delta, and percentage recovery controls; zero is distinct | AUTO |
+| Supply chain | CycloneDX 1.7, signed attestations, exact published bytes, OIDC, SHA-pinned Actions | AUTO |
+| SAST/SCA/secrets | Ruff, Semgrep, CodeQL, pip-audit, npm audit, OSV, gitleaks, zizmor | AUTO |
+| OpenSSF Scorecard | Aggregate and named critical-check floors enforced in scheduled/push workflow | AUTO |
+| axe WCAG 2.2 AA | 0 critical, serious, or moderate violations on generated trace | AUTO |
+| pa11y | 0 errors on generated trace | AUTO |
+| Lighthouse accessibility | At least 0.90 on generated trace | AUTO |
+| Keyboard/reflow/motion | Native-link path; no overflow at 320px; no residual motion | AUTO + REVIEW |
+| Screen readers | VoiceOver/macOS and NVDA/Windows task reviews not yet executed | REVIEW blocker |
+| i18n | 51 EN/ES gettext keys, zero missing/fuzzy entries, placeholder parity | AUTO |
+| Data governance | Three current data cards; L3 input ephemeral, L2 output operator-retained | AUTO + REVIEW |
+| Incident response | 0 recorded incidents; label/postmortem and secret runbook armed | REVIEW |
+
+### DORA and quality-debt baseline
+
+Portfolio collection on 2026-07-11 measured 2.1 deploy/merge proxies per week,
+149.8 hours median lead time, 0.0 revert-based change-fail ratio, 27 merges, and
+3.19 PRs per week over the 90-day window. These are observe-only proxies, not
+release gates. The same run measured 0.074 churn ratio, 69% short-term churn,
+100% unreviewed merges, and zero reverts. The unreviewed-merge value is a risk
+signal for a solo-maintained, agent-assisted repo and motivates the required PR
+acknowledgement and complete automated gates.
 
 ## Out of scope
 

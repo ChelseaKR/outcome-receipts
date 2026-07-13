@@ -1,0 +1,167 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: outcome-receipts 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/ChelseaKR/outcome-receipts/issues\n"
+"POT-Creation-Date: 2026-07-12 00:00+0000\n"
+"PO-Revision-Date: 2026-07-12 00:00+0000\n"
+"Last-Translator: outcome-receipts maintainers\n"
+"Language: en\n"
+"Language-Team: English\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid "comparison_heading"
+msgstr "## Period comparison"
+
+msgid "comparing_sentence_template"
+msgstr "Comparing {current} with {prior}. Each value is a figure with a receipt; the change is itself computed by a single query, not arithmetic over the page."
+
+msgid "header_outcome"
+msgstr "Outcome"
+
+msgid "header_change"
+msgstr "Change"
+
+msgid "header_direction"
+msgstr "Direction"
+
+msgid "direction_increase"
+msgstr "increase"
+
+msgid "direction_decrease"
+msgstr "decrease"
+
+msgid "direction_no_change"
+msgstr "no change"
+
+msgid "rate_metric_note"
+msgstr "Change for a rate metric is in percentage points."
+
+msgid "reconciliation_heading"
+msgstr "## Board reconciliation"
+
+msgid "reconciliation_sentence_template"
+msgstr "Pairing each receipted outcome figure with its financial line, {prior} to {current}. Every value is a figure with a receipt."
+
+msgid "header_item"
+msgstr "Item"
+
+msgid "outcome_suffix"
+msgstr "outcome"
+
+msgid "financial_suffix"
+msgstr "financial"
+
+msgid "charts_heading"
+msgstr "## Charts"
+
+msgid "chart_data_caption_template"
+msgstr "Data for the chart above ({title}):"
+
+msgid "chart_alt_template"
+msgstr "{title} (see data table below)"
+
+msgid "receipts_heading"
+msgstr "## Receipts"
+
+msgid "receipt_kind_label"
+msgstr "kind"
+
+msgid "receipt_definition_label"
+msgstr "definition"
+
+msgid "receipt_indicator_label"
+msgstr "indicator"
+
+msgid "receipt_data_source_label"
+msgstr "data source"
+
+msgid "receipt_collection_frequency_label"
+msgstr "collection frequency"
+
+msgid "receipt_caveat_label"
+msgstr "caveat"
+
+msgid "receipt_query_label"
+msgstr "query"
+
+msgid "receipt_rows_label"
+msgstr "rows in slice"
+
+msgid "receipt_slice_hash_label"
+msgstr "slice hash"
+
+msgid "receipt_computed_at_label"
+msgstr "computed at"
+
+msgid "provenance_heading"
+msgstr "## Provenance"
+
+msgid "provenance_statement"
+msgstr "Every number in this report was computed by a deterministic SQL query over the organization's own service data. No figure was written by a language model. Each figure carries a receipt below: the exact query, the count of rows it drew from, a content hash of that data slice, and a timestamp."
+
+msgid "provenance_gate_pass_template"
+msgstr "Before this report was exported, the grounding gate bound all {bound} of its numbers to a receipt; a number that traced to no receipt would have blocked the export."
+
+msgid "provenance_gate_fail_template"
+msgstr "The grounding gate left {unbound} number(s) unbound, so this report is not cleared for export."
+
+msgid "provenance_approval_template"
+msgstr "This report was reviewed and approved for export by {approver}{when}."
+
+msgid "provenance_approval_when_template"
+msgstr " on {timestamp}"
+
+msgid "trace_title_template"
+msgstr "{title}: trace this number"
+
+msgid "trace_intro"
+msgstr "Every number in the report traces to a figure below. Each figure was computed by a deterministic query over the organization's own service data and carries a receipt: the exact query, the rows it drew from, a content hash of that data slice, and a timestamp."
+
+msgid "trace_figures_caption"
+msgstr "Figures in this report"
+
+msgid "trace_header_figure"
+msgstr "Figure"
+
+msgid "trace_header_value"
+msgstr "Value"
+
+msgid "trace_header_definition"
+msgstr "What it counts"
+
+msgid "trace_header_caveat"
+msgstr "Caveat"
+
+msgid "trace_header_rows"
+msgstr "Rows"
+
+msgid "trace_no_definition"
+msgstr "(no definition recorded)"
+
+msgid "trace_none"
+msgstr "(none)"
+
+msgid "trace_increase_template"
+msgstr "Increase of {value}"
+
+msgid "trace_decrease_template"
+msgstr "Decrease of {value}"
+
+msgid "trace_details_heading"
+msgstr "Figure details"
+
+msgid "trace_compared_periods_label"
+msgstr "Compared periods"
+
+msgid "trace_compared_periods_template"
+msgstr "{prior} and {current}"
+
+msgid "trace_provenance_pass_template"
+msgstr "No figure was written by a language model. The grounding gate passed: {bound} number(s) in the report bound to a receipt, {unbound} did not."
+
+msgid "trace_provenance_fail_template"
+msgstr "No figure was written by a language model. The grounding gate did not pass: {bound} number(s) in the report bound to a receipt, {unbound} did not."

@@ -36,7 +36,7 @@ def _multi_template_spec(tmp_path: Path, second_template: str) -> Path:
         '[report]\ntitle = "Shared"\n',
         '[[report.templates]]\nid = "funder-a"\ntemplate = "served {clients}"\n',
         f'[[report.templates]]\nid = "funder-b"\ntemplate = "{second_template}"\n',
-        '[metrics.clients]\nvalue_sql = "SELECT COUNT(*) FROM data"\n'
+        '[metrics.clients]\nvalue_sql = "SELECT COUNT(*) FROM data"\n',
         'slice_sql = "SELECT * FROM data"\n',
     ]
     spec = tmp_path / "report.toml"

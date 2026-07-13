@@ -11,6 +11,7 @@ TTY, and that it never runs before or instead of the grounding gate.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ import pytest
 from outcome_receipts import cli
 from outcome_receipts.cli import main
 from outcome_receipts.draft import draft
-from outcome_receipts.models import ReportSpec
+from outcome_receipts.models import Figure, ReportSpec
 from outcome_receipts.provenance import Provenance, provenance_record
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
@@ -64,8 +65,8 @@ def test_grounding_gate_fail_returns_2_before_the_approval_prompt(
 ) -> None:
     # A stray, ungrounded number must be caught by the grounding gate (exit 2)
     # before the approval gate is ever consulted — approval never bypasses it.
-    def _tampered_draft(spec: ReportSpec, figures: object) -> str:
-        clean = draft(spec, figures)  # type: ignore[arg-type]
+    def _tampered_draft(spec: ReportSpec, figures: Sequence[Figure]) -> str:
+        clean = draft(spec, figures)
         return clean + " We also served 999 extra clients."
 
     monkeypatch.setattr(cli, "draft", _tampered_draft)

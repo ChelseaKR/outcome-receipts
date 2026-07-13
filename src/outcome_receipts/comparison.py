@@ -72,7 +72,7 @@ def _delta_spec(spec: MetricSpec, current: PeriodSpec, prior: PeriodSpec) -> Met
     # documents as author-trusted input, not user-supplied. Suppressed per-line
     # so any genuinely dynamic SQL introduced elsewhere still gets flagged.
     value_sql = f"SELECT ({cur_val}) - ({pri_val})"
-    slice_sql = f"SELECT * FROM ({cur_slice}) UNION ALL SELECT * FROM ({pri_slice})"  # noqa: S608
+    slice_sql = f"SELECT * FROM ({cur_slice}) UNION ALL SELECT * FROM ({pri_slice})"  # noqa: S608  https://github.com/ChelseaKR/outcome-receipts/issues/52
     return replace(
         spec,
         metric_id=f"{spec.metric_id}__delta",

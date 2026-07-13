@@ -45,6 +45,10 @@ jobs:
         with:
           version: "0.11.19"
           enable-cache: false # signing/publish path: no cache poisoning surface
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: "22"
+          package-manager-cache: false
       # REL-08: fail closed unless the tag is an annotated tag object that
       # carries a signature and points at the exact commit this job verifies.
       # The tag object is read through the GitHub API because the checkout
@@ -82,12 +86,12 @@ jobs:
           verified=$(jq -r '.verification.verified' <<<"$tag_json")
           reason=$(jq -r '.verification.reason' <<<"$tag_json")
           echo "Tag $RELEASE_TAG: annotated, signed, points at $head_sha (GitHub signature check: verified=$verified reason=$reason)."
-      - name: Install
-        run: make install
+      - name: Install and smoke-check the complete toolchain
+        run: make install-smoke
       - name: Verify (ruff, mypy --strict, pytest)
         run: make verify
       - name: Model and data cards match the release generator
-        run: uv run receipts cards --out docs --check
+        run: uv run receipts cards --out docs/cards --check
       - name: CHANGELOG has a section for this release
         run: |
           set -euo pipefail
@@ -132,6 +136,7 @@ jobs:
           uvx --from cyclonedx-bom==7.3.0 cyclonedx-py environment .sbom-venv/bin/python \
             --pyproject pyproject.toml \
             --mc-type library \
+            --spec-version 1.7 \
             --output-reproducible \
             --output-format JSON \
             --validate \
@@ -147,7 +152,7 @@ jobs:
             dist/outcome-receipts.cdx.json > dist/outcome-receipts.cdx.tmp
           mv dist/outcome-receipts.cdx.tmp dist/outcome-receipts.cdx.json
           jq -e \
-            '.bomFormat == "CycloneDX" and (.specVersion | type == "string") and (.serialNumber | startswith("urn:uuid:"))' \
+            '.bomFormat == "CycloneDX" and .specVersion == "1.7" and (.serialNumber | startswith("urn:uuid:"))' \
             dist/outcome-receipts.cdx.json >/dev/null
       - name: Attest the SBOM (signed via Sigstore)
         # `actions/attest-sbom` v2 rejected the CycloneDX 1.6 document emitted
@@ -157,6 +162,17 @@ jobs:
         with:
           subject-path: "dist/*.whl,dist/*.tar.gz"
           sbom-path: "dist/outcome-receipts.cdx.json"
+      - name: Download portable attestation bundle for release consumers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/release-attestations
+          (
+            cd /tmp/release-attestations
+            gh attestation download "$GITHUB_WORKSPACE"/dist/*.whl --repo "$GITHUB_REPOSITORY"
+          )
+          cat /tmp/release-attestations/sha256*.jsonl > dist/outcome-receipts.intoto.jsonl
       - name: Upload SBOM as a build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -218,3 +234,28 @@ jobs:
       # environment pypi). No API token needed once configured.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+
+  verify-published:
+    name: verify published package and attestations
+    needs: [release, pypi-publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read # verify the published wheel's GitHub attestation
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: dist-attested
+          path: dist
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
+        with:
+          version: "0.11.19"
+          enable-cache: false
+      - name: Verify Sigstore-backed GitHub attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh attestation verify dist/*.whl --repo "$GITHUB_REPOSITORY"
+      - name: Pull the published version from PyPI and smoke-test it
+        run: |
+          set -euo pipefail
+          uvx --refresh --from "outcome-receipts==${RELEASE_TAG#v}" receipts --help >/dev/null

@@ -148,7 +148,9 @@ def test_parse_data_checks_full_entry() -> None:
             "message": "blank ids present",
         }
     ]
-    (check,) = _parse_data_checks(raw)
+    checks = _parse_data_checks(raw)
+    assert len(checks) == 1
+    check = checks[0]
     assert check.check_id == "no_blank_ids"
     assert check.description == "every row has an id"
     assert check.message == "blank ids present"

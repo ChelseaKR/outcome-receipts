@@ -1,0 +1,41 @@
+{
+  "name": "protect-main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {"include": ["refs/heads/main"], "exclude": []}
+  },
+  "rules": [
+    {"type": "deletion"},
+    {"type": "non_fast_forward"},
+    {"type": "required_linear_history"},
+    {"type": "required_signatures"},
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "allowed_merge_methods": ["squash", "rebase"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {"context": "verify"},
+          {"context": "security (pip-audit · osv-scanner · gitleaks · zizmor)"},
+          {"context": "accessibility (pa11y, WCAG2AA, trace.html)"},
+          {"context": "dogfood-action"},
+          {"context": "codeql (python · actions)"},
+          {"context": "portfolio standards conformance"}
+        ]
+      }
+    }
+  ],
+  "bypass_actors": []
+}

@@ -341,7 +341,11 @@ def _export_outputs(
         locale=args.locale,
     )
     trace_text = render_trace_html(
-        export_title, figures, provenance=provenance, comparison=comparison
+        export_title,
+        figures,
+        provenance=provenance,
+        comparison=comparison,
+        locale=args.locale,
     )
 
     digests = {
@@ -938,7 +942,9 @@ def _cmd_map(args: argparse.Namespace) -> int:
     queue = build_mapping_queue(Path(args.data), Path(args.requirements))
     payload = {"command": "map", "out": args.out, **queue.payload()}
     if args.out:
-        Path(args.out).write_text(json.dumps(queue.payload(), indent=2, sort_keys=True) + "\n")
+        Path(args.out).write_text(
+            json.dumps(queue.payload(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
     if args.json:
         _emit_json(payload)
     else:
