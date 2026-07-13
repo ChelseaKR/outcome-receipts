@@ -1,0 +1,8 @@
+{
+  "standard": "WCAG2AA",
+  "runners": ["axe"],
+  "level": "error",
+  "chromeLaunchConfig": {
+    "args": ["--no-sandbox"]
+  }
+}

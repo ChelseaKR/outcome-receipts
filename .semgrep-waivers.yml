@@ -12,10 +12,23 @@
 # code comment and this row in the same PR.
 
 waivers:
+  - rule_id: python37-compatibility-importlib2
+    locations:
+      - src/outcome_receipts/copy.py (packaged gettext catalog loading)
+    added: 2026-07-12
+    last_reviewed: 2026-07-12
+    tracking_issue: https://github.com/ChelseaKR/outcome-receipts/issues/53
+    reason: >
+      The rule protects Python versions below 3.7. This package requires Python
+      3.12, and importlib.resources is the standard-library mechanism for loading
+      packaged gettext catalogs without filesystem-path assumptions. A scan with
+      nosemgrep disabled confirmed that Semgrep 1.168.0's combined p/default and
+      p/python profile still reports this rule, so the waiver remains necessary.
   - rule_id: sqlalchemy-execute-raw-query
     locations:
       - src/outcome_receipts/engine.py (load_table, CREATE TABLE)
     added: 2026-07-10
+    tracking_issue: https://github.com/ChelseaKR/outcome-receipts/issues/52
     reason: >
       Same false positive already documented for ruff's S608 on this function: `table` defaults
       to the "data" constant everywhere it is called (grep confirms no caller passes a dynamic

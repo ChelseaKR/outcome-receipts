@@ -162,11 +162,11 @@ def _candidate(requirement: dict[str, object], columns: tuple[str, ...]) -> Mapp
     where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
     if aggregation == "count_distinct":
         value_sql = (
-            f"SELECT COUNT(DISTINCT {_quote_identifier(by_logical[source_field])}) "  # noqa: S608
+            f"SELECT COUNT(DISTINCT {_quote_identifier(by_logical[source_field])}) "  # noqa: S608  https://github.com/ChelseaKR/outcome-receipts/issues/52
             f"FROM data{where}"
         )
     else:
-        value_sql = f"SELECT COUNT(*) FROM data{where}"  # noqa: S608
+        value_sql = f"SELECT COUNT(*) FROM data{where}"  # noqa: S608  https://github.com/ChelseaKR/outcome-receipts/issues/52
     spec: dict[str, object] = {
         "metric_id": metric_id,
         "description": str(requirement.get("description", "")).strip(),
@@ -174,7 +174,7 @@ def _candidate(requirement: dict[str, object], columns: tuple[str, ...]) -> Mapp
         "unit": str(requirement.get("unit", "count")).strip(),
         "decimals": int(str(requirement.get("decimals", 0))),
         "value_sql": value_sql,
-        "slice_sql": f"SELECT * FROM data{where}",  # noqa: S608
+        "slice_sql": f"SELECT * FROM data{where}",  # noqa: S608  https://github.com/ChelseaKR/outcome-receipts/issues/52
     }
     confidence = min((match.confidence for match in matches), default=1.0)
     return MappingCandidate(metric_id, "review_required", confidence, tuple(matches), spec)

@@ -1,0 +1,53 @@
+name: scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "37 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  analysis:
+    name: analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read # Scorecard inspects dependency-update and security issue activity
+      pull-requests: read # Scorecard evaluates review and branch-protection signals
+      checks: read # Scorecard evaluates required-check enforcement
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a  # v2.4.3
+        with:
+          results_file: results.json
+          results_format: json
+          publish_results: false
+      - name: Enforce portfolio score floors
+        run: |
+          set -euo pipefail
+          # WVR-006: ratchet the measured baseline while the repository-age
+          # component is immutable; the waiver expires after the 90-day mark.
+          jq -e '.score >= 6.8' results.json >/dev/null
+          jq -e '[.checks[] | select(.name == "Pinned-Dependencies") | .score][0] >= 9' results.json >/dev/null
+          jq -e '[.checks[] | select(.name == "Token-Permissions") | .score][0] == 10' results.json >/dev/null
+          jq -e '[.checks[] | select(.name == "Dangerous-Workflow") | .score][0] == 10' results.json >/dev/null
+          # WVR-005: the solo-maintainer approval exception caps this at 4.
+          jq -e '[.checks[] | select(.name == "Branch-Protection") | .score][0] >= 4' results.json >/dev/null
+          jq -e '[.checks[] | select(.name == "Signed-Releases") | .score][0] == 10' results.json >/dev/null
+          jq -e '[.checks[] | select(.name == "Vulnerabilities") | .score][0] == 10' results.json >/dev/null
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: scorecard-results
+          path: results.json
+          retention-days: 30
+          if-no-files-found: error

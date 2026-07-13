@@ -1,0 +1,42 @@
+name: portfolio standards
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "11 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portfolio-standards-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  conformance:
+    name: portfolio standards conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          repository: ChelseaKR/portfolio-standards
+          ref: v1.0.1
+          ssh-key: ${{ secrets.STANDARDS_DEPLOY_KEY }}
+          path: .standards
+          persist-credentials: false
+      - name: Pin and staleness checks
+        run: |
+          set -euo pipefail
+          test "$(cat .standards-version)" = "v1.0.1"
+          python3 .standards/automation/check_staleness.py --standards-dir .standards
+      - name: Repository declarations and waivers
+        run: |
+          set -euo pipefail
+          python3 scripts/check_conformance.py
+          python3 scripts/check_waivers.py waivers.yml

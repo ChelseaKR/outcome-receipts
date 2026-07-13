@@ -30,7 +30,8 @@ Package metadata checked in this pass:
 
 - src/outcome_receipts/ contains the deterministic metric engine (`engine.py`), the receipt and spec models (`models.py`), the fail-closed grounding gate (`grounding.py`), config loading, the template drafter, charts, period comparison, provenance, the trace view, report export, the hash-chained export ledger (`ledger.py`), the spec scaffolder, verification (`verify.py`), the eval harness, and the CLI.
 - examples/ contains small report inputs.
-- docs/decisions/ records grounding, templates, comparison, and trace choices.
+- `docs/adr/` is the canonical decision log; `docs/decisions/` preserves the
+  pre-migration grounding, templates, comparison, and trace choices.
 - eval/ contains report material.
 - tests/ checks the report and verification behavior.
 

@@ -5,3 +5,10 @@
 
 * @ChelseaKR
 /.github/workflows/ @ChelseaKR
+/DEFINITION_OF_DONE.md @ChelseaKR
+/SECURITY.md @ChelseaKR
+/src/outcome_receipts/grounding.py @ChelseaKR
+/src/outcome_receipts/suppression.py @ChelseaKR
+/src/outcome_receipts/bundle.py @ChelseaKR
+/docs/adr/ @ChelseaKR
+/docs/RESPONSIBLE-TECH-AUDITS.md @ChelseaKR

@@ -1,0 +1,167 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: outcome-receipts 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/ChelseaKR/outcome-receipts/issues\n"
+"POT-Creation-Date: 2026-07-12 00:00+0000\n"
+"PO-Revision-Date: 2026-07-12 00:00+0000\n"
+"Last-Translator: outcome-receipts maintainers\n"
+"Language: es\n"
+"Language-Team: Spanish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid "comparison_heading"
+msgstr "## Comparación de periodos"
+
+msgid "comparing_sentence_template"
+msgstr "Comparando {current} con {prior}. Cada valor es un dato con un recibo; el cambio se calcula a su vez mediante una sola consulta, no con aritmética sobre la página."
+
+msgid "header_outcome"
+msgstr "Resultado"
+
+msgid "header_change"
+msgstr "Cambio"
+
+msgid "header_direction"
+msgstr "Dirección"
+
+msgid "direction_increase"
+msgstr "aumento"
+
+msgid "direction_decrease"
+msgstr "disminución"
+
+msgid "direction_no_change"
+msgstr "sin cambio"
+
+msgid "rate_metric_note"
+msgstr "El cambio de una métrica de tasa se expresa en puntos porcentuales."
+
+msgid "reconciliation_heading"
+msgstr "## Conciliación de la junta directiva"
+
+msgid "reconciliation_sentence_template"
+msgstr "Se empareja cada resultado con recibo con su partida financiera, de {prior} a {current}. Cada valor es un dato con recibo."
+
+msgid "header_item"
+msgstr "Elemento"
+
+msgid "outcome_suffix"
+msgstr "resultado"
+
+msgid "financial_suffix"
+msgstr "financiero"
+
+msgid "charts_heading"
+msgstr "## Gráficos"
+
+msgid "chart_data_caption_template"
+msgstr "Datos del gráfico anterior ({title}):"
+
+msgid "chart_alt_template"
+msgstr "{title} (véase la tabla de datos a continuación)"
+
+msgid "receipts_heading"
+msgstr "## Recibos"
+
+msgid "receipt_kind_label"
+msgstr "tipo"
+
+msgid "receipt_definition_label"
+msgstr "definición"
+
+msgid "receipt_indicator_label"
+msgstr "indicador"
+
+msgid "receipt_data_source_label"
+msgstr "fuente de datos"
+
+msgid "receipt_collection_frequency_label"
+msgstr "frecuencia de recopilación"
+
+msgid "receipt_caveat_label"
+msgstr "salvedad"
+
+msgid "receipt_query_label"
+msgstr "consulta"
+
+msgid "receipt_rows_label"
+msgstr "filas en el segmento"
+
+msgid "receipt_slice_hash_label"
+msgstr "hash del segmento"
+
+msgid "receipt_computed_at_label"
+msgstr "calculado en"
+
+msgid "provenance_heading"
+msgstr "## Procedencia"
+
+msgid "provenance_statement"
+msgstr "Cada número de este informe fue calculado por una consulta SQL determinista sobre los propios datos de servicio de la organización. Ningún dato fue redactado por un modelo de lenguaje. Cada dato lleva un recibo a continuación: la consulta exacta, el número de filas de las que se extrajo, un hash de contenido de ese segmento de datos y una marca de tiempo."
+
+msgid "provenance_gate_pass_template"
+msgstr "Antes de exportar este informe, la verificación de fundamentación vinculó los {bound} números a un recibo; un número que no correspondiera a ningún recibo habría bloqueado la exportación."
+
+msgid "provenance_gate_fail_template"
+msgstr "La verificación de fundamentación dejó {unbound} número(s) sin vincular, por lo que este informe no está autorizado para exportación."
+
+msgid "provenance_approval_template"
+msgstr "Este informe fue revisado y aprobado para su exportación por {approver}{when}."
+
+msgid "provenance_approval_when_template"
+msgstr " el {timestamp}"
+
+msgid "trace_title_template"
+msgstr "{title}: rastrear este número"
+
+msgid "trace_intro"
+msgstr "Cada número del informe se vincula con un dato a continuación. Cada dato se calculó mediante una consulta determinista sobre los datos de servicio de la organización y lleva un recibo: la consulta exacta, las filas utilizadas, un hash de contenido de ese segmento y una marca de tiempo."
+
+msgid "trace_figures_caption"
+msgstr "Datos de este informe"
+
+msgid "trace_header_figure"
+msgstr "Dato"
+
+msgid "trace_header_value"
+msgstr "Valor"
+
+msgid "trace_header_definition"
+msgstr "Qué cuenta"
+
+msgid "trace_header_caveat"
+msgstr "Salvedad"
+
+msgid "trace_header_rows"
+msgstr "Filas"
+
+msgid "trace_no_definition"
+msgstr "(no se registró una definición)"
+
+msgid "trace_none"
+msgstr "(ninguna)"
+
+msgid "trace_increase_template"
+msgstr "Aumento de {value}"
+
+msgid "trace_decrease_template"
+msgstr "Disminución de {value}"
+
+msgid "trace_details_heading"
+msgstr "Detalles de los datos"
+
+msgid "trace_compared_periods_label"
+msgstr "Periodos comparados"
+
+msgid "trace_compared_periods_template"
+msgstr "{prior} y {current}"
+
+msgid "trace_provenance_pass_template"
+msgstr "Ningún dato fue redactado por un modelo de lenguaje. La verificación de fundamentación se aprobó: {bound} número(s) del informe se vincularon con un recibo y {unbound} no se vincularon."
+
+msgid "trace_provenance_fail_template"
+msgstr "Ningún dato fue redactado por un modelo de lenguaje. La verificación de fundamentación no se aprobó: {bound} número(s) del informe se vincularon con un recibo y {unbound} no se vincularon."

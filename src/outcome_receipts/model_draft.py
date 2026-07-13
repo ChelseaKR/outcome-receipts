@@ -15,11 +15,13 @@ class DraftingPolicyError(ValueError):
 
 
 class ConverseClient(Protocol):
-    def converse(self, **kwargs: object) -> dict[str, object]: ...
+    def converse(self, **kwargs: object) -> dict[str, object]:
+        raise NotImplementedError
 
 
 class NarrativeDrafter(Protocol):
-    def draft(self, template: str, figures: Sequence[Figure]) -> str: ...
+    def draft(self, template: str, figures: Sequence[Figure]) -> str:
+        raise NotImplementedError
 
 
 class BedrockDrafter:

@@ -1,0 +1,78 @@
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "19 4 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: codeql (python · actions)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # analyze repository Actions workflows without granting write access
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
+        with:
+          languages: python,actions
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
+        with:
+          upload: never
+          output: codeql-results
+      - name: Enforce zero CodeQL findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' sarif_files < <(
+            find codeql-results -type f -name '*.sarif' -print0
+          )
+          if (( ${#sarif_files[@]} == 0 )); then
+            printf '%s\n' \
+              '::error::CodeQL produced no SARIF files; refusing to pass without scan evidence.'
+            exit 1
+          fi
+
+          for sarif_file in "${sarif_files[@]}"; do
+            if ! jq -e '
+              .version == "2.1.0"
+              and ((.runs | type) == "array")
+              and ((.runs | length) > 0)
+              and all(.runs[]; .results == null or ((.results | type) == "array"))
+            ' "$sarif_file" >/dev/null; then
+              printf '::error::Invalid or empty CodeQL SARIF: %s\n' "$sarif_file"
+              exit 1
+            fi
+          done
+
+          finding_count=$(jq -s '[.[] | .runs[]?.results[]?] | length' "${sarif_files[@]}")
+          if (( finding_count != 0 )); then
+            jq -rs \
+              '.[] | .runs[]?.results[]? | "\(.ruleId // "unknown rule"): \(.message.text // "finding")"' \
+              "${sarif_files[@]}"
+            printf '::error::CodeQL reported %s finding(s).\n' "$finding_count"
+            exit 1
+          fi
+
+          printf 'CodeQL SARIF gate: %s file(s), zero findings.\n' "${#sarif_files[@]}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: always()
+        with:
+          name: codeql-results
+          path: codeql-results
+          if-no-files-found: error

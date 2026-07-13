@@ -45,6 +45,22 @@ def test_trace_is_an_accessible_html_document() -> None:
     assert html.count('scope="col"') == 5
 
 
+def test_trace_localizes_the_complete_spanish_shell() -> None:
+    html = render_trace_html("Informe", [_figure("a", "5")], locale="es")
+    assert '<html lang="es">' in html
+    assert "Informe: rastrear este número" in html
+    assert "Datos de este informe" in html
+    assert "Detalles de los datos" in html
+    assert "no se registró una definición" in html
+
+
+def test_trace_normalizes_an_unsupported_locale_in_copy_and_html_lang() -> None:
+    html = render_trace_html("Report", [_figure("a", "5")], locale="fr-CA")
+    assert '<html lang="en">' in html
+    assert "Figures in this report" in html
+    assert 'lang="fr-CA"' not in html
+
+
 def test_trace_shows_value_and_definition() -> None:
     html = render_trace_html(
         "Report", [_figure("clients_served", "12", definition="Distinct people, once each.")]

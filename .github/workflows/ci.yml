@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   verify:
+    name: verify
     runs-on: ubuntu-latest
     steps:
       # Actions are pinned to commit SHAs per the supply-chain standard; the
@@ -27,15 +28,14 @@ jobs:
           version: "0.11.19"
           enable-cache: true
           cache-dependency-glob: uv.lock
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: "22"
       # Drive CI through the Makefile so it runs the same path as `make verify`.
-      - name: Install
-        run: make install
-      - name: Verify (ruff, mypy --strict, pytest with >=90% branch coverage)
+      - name: Install and smoke-check the complete toolchain
+        run: make install-smoke
+      - name: Verify (full local AUTO-GATE set)
         run: make verify
-      - name: Eval report is current
-        run: |
-          make eval
-          git diff --exit-code eval/report.md
 
   security:
     # The display name is a required-status-check context in the applied main
@@ -53,55 +53,13 @@ jobs:
         with:
           version: "0.11.19"
 
-      # SEC-07: SAST. Pinned scanner version + pinned registry configs so the
-      # gate is deterministic across scanner releases (rule *contents* can
-      # still evolve server-side since p/default and p/python are fetched from
-      # the Semgrep registry). --error makes any ERROR-severity finding fail
-      # the build — no `|| true`, no advisory-only mode.
-      - name: Semgrep (SAST)
-        # Waivers for verified false-positives live in .semgrep-waivers.yml (inline
-        # `# nosemgrep:` comments do the actual suppression; that file is the audit ledger).
-        run: >
-          uvx --from semgrep==1.168.0 semgrep scan
-          --config p/default
-          --config p/python
-          --severity ERROR
-          --error
-          --metrics off
-
-      - name: Install (the same .venv make verify uses; pip-audit is a dev-group member)
-        run: make install
-
-      - name: pip-audit over the installed dev toolchain
-        run: .venv/bin/pip-audit --local
-
-      - name: Install osv-scanner (checksum-verified)
-        run: |
-          set -euo pipefail
-          curl -sL -o /tmp/osv-scanner \
-            "https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_linux_amd64"
-          echo "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0  /tmp/osv-scanner" \
-            | sha256sum -c -
-          chmod +x /tmp/osv-scanner
-
-      - name: osv-scanner --lockfile uv.lock
-        run: /tmp/osv-scanner --lockfile uv.lock
-
-      - name: Install gitleaks (checksum-verified)
-        run: |
-          set -euo pipefail
-          curl -sL -o /tmp/gitleaks.tar.gz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
-          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" \
-            | sha256sum -c -
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          chmod +x /tmp/gitleaks
-
-      - name: gitleaks detect (secrets redacted in output)
-        run: /tmp/gitleaks detect --source . --redact --exit-code 1
-
-      - name: zizmor (workflow SAST)
-        run: uvx --from zizmor==1.16.3 zizmor .github/workflows/
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: "22"
+      - name: Install and smoke-check the complete toolchain
+        run: make install-smoke
+      - name: Security gates (same target used by make verify)
+        run: make security
 
   accessibility:
     name: accessibility (pa11y, WCAG2AA, trace.html)
@@ -117,20 +75,15 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install
-        run: make install
-
-      - name: Build the demo output (writes out/trace.html)
-        run: make run
-
-      - name: pa11y --standard WCAG2AA against the trace view
-        run: |
-          printf '%s\n' '{"chromeLaunchConfig":{"args":["--no-sandbox"]}}' > /tmp/pa11y-ci.json
-          npx --yes pa11y@9.1.1 "file://${GITHUB_WORKSPACE}/out/trace.html" --standard WCAG2AA --config /tmp/pa11y-ci.json
+      - name: Install and smoke-check the complete toolchain
+        run: make install-smoke
+      - name: Accessibility gates (same target used by make verify)
+        run: make a11y
 
   # Exercise the reusable composite action against a committed example manifest,
   # so the action that downstream repos gate on is itself verified in CI.
   dogfood-action:
+    name: dogfood-action
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

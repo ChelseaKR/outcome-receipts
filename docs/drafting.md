@@ -40,4 +40,4 @@ The first request can contain small aggregate displays. Enabling cloud drafting
 therefore requires an organization-level data-transfer decision even though the
 published report later suppresses those cells. Bedrock account logging and
 retention settings remain the operator's responsibility. See the generated
-[model card](MODEL-CARD.md) and [data card](DATA-CARD.md).
+[model card](cards/model-card.md) and [data card](cards/data-card-reporting.md).

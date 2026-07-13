@@ -17,13 +17,13 @@ from pathlib import Path
 
 import pytest
 
-from outcome_receipts.cli import (
-    EXIT_APPROVAL_FAIL,
-    EXIT_GATE_FAIL,
-    EXIT_OK,
-    EXIT_VERIFY_FAIL,
-    main,
-)
+import outcome_receipts.cli as cli
+
+EXIT_APPROVAL_FAIL = cli.EXIT_APPROVAL_FAIL
+EXIT_GATE_FAIL = cli.EXIT_GATE_FAIL
+EXIT_OK = cli.EXIT_OK
+EXIT_VERIFY_FAIL = cli.EXIT_VERIFY_FAIL
+main = cli.main
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 HOUSING = str(EXAMPLES / "housing-demo" / "report.toml")
@@ -188,7 +188,6 @@ def test_run_gate_failure_uses_the_gate_exit_code(
     # failure (1), and write no report.
     from collections.abc import Sequence
 
-    import outcome_receipts.cli as cli
     from outcome_receipts.draft import draft as real_draft
     from outcome_receipts.models import Figure, ReportSpec
 
@@ -283,7 +282,6 @@ def test_run_gate_failure_appends_no_ledger_entry(
 ) -> None:
     from collections.abc import Sequence
 
-    import outcome_receipts.cli as cli
     from outcome_receipts.draft import draft as real_draft
     from outcome_receipts.models import Figure, ReportSpec
 

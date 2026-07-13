@@ -106,11 +106,11 @@ def load_table(rows: Sequence[dict[str, str]], *, table: str = "data") -> sqlite
     conn = sqlite3.connect(":memory:")
     columns = list(rows[0].keys())
     quoted = ", ".join(f"{_quote_ident(c)} TEXT" for c in columns)
-    # nosemgrep: sqlalchemy-execute-raw-query
+    # nosemgrep: sqlalchemy-execute-raw-query  https://github.com/ChelseaKR/outcome-receipts/issues/52
     conn.execute(f"CREATE TABLE {_quote_ident(table)} ({quoted})")
     placeholders = ", ".join("?" for _ in columns)
     conn.executemany(
-        f"INSERT INTO {_quote_ident(table)} VALUES ({placeholders})",  # noqa: S608
+        f"INSERT INTO {_quote_ident(table)} VALUES ({placeholders})",  # noqa: S608  https://github.com/ChelseaKR/outcome-receipts/issues/52
         [tuple(row.get(c, "") for c in columns) for row in rows],
     )
     conn.commit()

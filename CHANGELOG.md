@@ -10,12 +10,44 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Added
+- Full portfolio-standards v1.0.1 conformance gate: CodeQL, OpenSSF Scorecard,
+  standards pin/fetch, source and documentation hygiene, critical-module
+  coverage, npm/OSV/security scans, and live repository hardening.
+- WCAG 2.2 AA browser gates (axe, pa11y, Lighthouse, 320px reflow, reduced
+  motion) plus ACR, statement, and an honest manual screen-reader review record.
+- AI governance evidence for the optional Bedrock seam: canonical generated
+  model/data cards, 100-case bilingual benchmark, risk register, impact
+  assessment, SoA, red-team report, and residual-risk register.
+- Definition of Done, canonical ADR log, incident and secret runbooks, operations
+  recovery procedure, and per-source data-governance cards.
+
+### Changed
+- Reviewer-facing English and Spanish copy now ships as compiled gettext
+  catalogs with extraction, compilation, BCP 47, key, and placeholder gates.
+  The trace view is fully localized instead of always rendering English.
+- `make verify` now reproduces the complete applicable AUTO-GATE set used by CI,
+  including security, i18n, accessibility, generated cards, and eval drift.
+- The active main ruleset now requires pull requests, signed linear history,
+  resolved threads, strict checks, and no bypass actors. The zero approval count
+  is an explicit solo-maintainer ADR, not a silent missing rule.
+
 ### Fixed
+- The required CodeQL job now fails closed when SARIF output is missing or
+  contains any finding, while retaining the SARIF artifact for diagnosis.
+- Compiled English and Spanish gettext catalogs now have explicit, deterministic
+  metadata and a byte-reproducibility regression test, preventing Babel from
+  embedding the compilation time in committed `.mo` files.
+- The security-tool installer now authenticates cached executables as well as
+  downloads, rejects symlink and directory substitution, verifies exact binary
+  versions, and uses the repository's Python 3.12 runtime for `uvx` scanners.
 - The release workflow now uses the maintained `actions/attest` v4 SBOM path,
-  which accepts CycloneDX 1.6, and adds the deterministic UUIDv5 serial that
+  emits and validates CycloneDX 1.7, and adds the deterministic UUIDv5 serial that
   GitHub requires but `cyclonedx-bom --output-reproducible` omits. The first
   `v0.1.0` attempts stopped before release publication when the SBOM predicate
   detector rejected the document as an unsupported format.
+- Release verification now pulls the published PyPI version and verifies the
+  Sigstore-backed GitHub attestation after publication.
 
 ## [0.1.0] - 2026-07-11
 
