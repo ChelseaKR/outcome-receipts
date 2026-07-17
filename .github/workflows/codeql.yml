@@ -1,8 +1,8 @@
 name: codeql
 
 on:
-  push:
-    branches: [main]
+  # CI-CD-STANDARD §11e: PRs into main + weekly schedule; the former push:main
+  # trigger was redundant with the pull_request run and is dropped.
   pull_request:
     branches: [main]
   schedule:
