@@ -28,6 +28,27 @@ trace to a receipt.
 [inspect the current evaluation](eval/report.md), or
 [bring an anonymized schema-mapping question](https://github.com/ChelseaKR/outcome-receipts/issues/new?template=schema-mapping.yml).
 
+## Quickstart
+
+Prerequisites: Python 3.12+, [uv](https://docs.astral.sh/uv/), GNU Make. This
+runs on synthetic data and makes no network calls:
+
+```sh
+git clone https://github.com/ChelseaKR/outcome-receipts.git
+cd outcome-receipts
+make install
+.venv/bin/receipts run \
+  --config examples/housing-demo/report.toml \
+  --out out/demo \
+  --approved-by "Demo reviewer"
+```
+
+A successful run prints `grounding gate: PASS` and writes the approved report,
+its receipts manifest, and a funder-facing trace view under `out/demo/`. The
+[five-minute demo walkthrough](docs/TRY_THE_DEMO.md) continues from here —
+verifying the receipts and watching the gate fail closed on an invented number —
+and [Usage](#usage) covers the full CLI.
+
 ## The problem
 
 Funders are starting to reject reports that are "substantially AI-developed,"
@@ -370,16 +391,6 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Quality & Metrics | Applies — Definition of Done, committed eval with Wilson intervals, fail-closed gates, and project metrics ledger |
 | Incident Response | Applies — severity/label convention, private disclosure, secret-leak runbook, and committed-postmortem requirement |
 | Data Governance | Applies — L3 ephemeral input and L2 aggregate-output cards, retention boundary, lineage, and verified recovery procedure |
-
-## For Claude Code
-
-Read [AGENTS.md](AGENTS.md) first. It is the source of truth for scope,
-conventions, and the build plan, and it states the hard guardrails: numbers never
-come from the model, the grounding gate is fail-closed, small-cell suppression is
-a privacy invariant, and the honest framing of what is solved art versus the
-contribution. Then read [docs/ROADMAP.md](docs/ROADMAP.md) for the delivered
-architecture and future release gates; it is no longer an open implementation
-backlog.
 
 ## License
 
