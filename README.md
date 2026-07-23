@@ -28,6 +28,18 @@ trace to a receipt.
 [inspect the current evaluation](eval/report.md), or
 [bring an anonymized schema-mapping question](https://github.com/ChelseaKR/outcome-receipts/issues/new?template=schema-mapping.yml).
 
+## Try it, review it, or contribute
+
+- **Try it:** complete the synthetic demo and
+  [report where it passed or stopped](https://github.com/ChelseaKR/outcome-receipts/issues/new?template=demo-run.yml).
+- **Review it:** inspect the trace view, suppression behavior, and verification
+  command, then ask a
+  [question in Discussions](https://github.com/ChelseaKR/outcome-receipts/discussions).
+- **Contribute:** choose a
+  [bounded open issue](https://github.com/ChelseaKR/outcome-receipts/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)
+  or follow [CONTRIBUTING.md](CONTRIBUTING.md). Documentation, accessibility
+  review, and practitioner feedback are useful contributions.
+
 ## The problem
 
 Funders are starting to reject reports that are "substantially AI-developed,"
