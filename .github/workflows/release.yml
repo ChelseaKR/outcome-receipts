@@ -2,135 +2,120 @@
 name: release
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to (re)build and attest"
+        description: "Existing signed stable SemVer tag (vX.Y.Z)"
         required: true
+        type: string
 
-# Least-privilege default token. Elevated scopes are granted per job below.
 permissions:
   contents: read
 
-# Serialize releases of the same tag so a re-run (workflow_dispatch) can't race
-# a concurrent build/publish of that tag.
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: release
   cancel-in-progress: false
 
-# Single source of truth for which tag this run builds, signs, and publishes.
-# Referenced as "$RELEASE_TAG" in run: steps (never interpolated via ${{ }}
-# into a shell body — tag names are attacker-influenced for a tag-pusher and
-# ${{ }} interpolation directly into `run:` is a template-injection vector).
-env:
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
-
 jobs:
-  # Gate: nothing downstream signs, attests, or publishes anything unless this
-  # job passes at the exact commit the tag points to. Closes the gap where an
-  # untested commit could be tagged and shipped with a Sigstore attestation.
-  verify:
-    name: verify at tagged commit
+  verify-build:
+    name: verify signed tag · build exact artifacts
     runs-on: ubuntu-latest
+    outputs:
+      release_commit: ${{ steps.tag.outputs.commit }}
+      release_tag: ${{ steps.tag.outputs.tag }}
+      tag_object_sha: ${{ steps.tag.outputs.tag_object_sha }}
+    permissions:
+      contents: read
     steps:
-      - name: Checkout tagged commit
+      - name: Checkout trusted main with complete history
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
-      - name: Install uv (pinned)
+
+      - name: Resolve the reviewed signed tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG}"
+          test "${GITHUB_REF}" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(git rev-parse origin/main)" = "${GITHUB_SHA}"
+          if [[ ! "${TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Release tag '${TAG}' must be stable SemVer (vX.Y.Z)."
+            exit 1
+          fi
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          if [ "$(git cat-file -t "refs/tags/${TAG}")" != tag ]; then
+            echo "::error::Release tag '${TAG}' must be an annotated tag object."
+            exit 1
+          fi
+          TAG_COMMIT="$(git rev-parse --verify --end-of-options "${TAG}^{commit}")"
+          if ! git merge-base --is-ancestor "${TAG_COMMIT}" origin/main; then
+            echo "::error::Release tag '${TAG}' is not on reviewed main history."
+            exit 1
+          fi
+          TAG_OBJECT_SHA="$(git rev-parse "refs/tags/${TAG}")"
+          {
+            echo "tag=${TAG}"
+            echo "commit=${TAG_COMMIT}"
+            echo "tag_object_sha=${TAG_OBJECT_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Verify the maintainer's SSH tag signature
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config gpg.format ssh
+          git config gpg.ssh.allowedSignersFile "${GITHUB_WORKSPACE}/.github/allowed_signers"
+          git verify-tag -- "${TAG}"
+
+      - name: Check out the exact verified release commit
+        env:
+          RELEASE_COMMIT: ${{ steps.tag.outputs.commit }}
+        run: |
+          set -euo pipefail
+          git checkout --detach "${RELEASE_COMMIT}"
+          test "$(git rev-parse HEAD)" = "${RELEASE_COMMIT}"
+
+      - name: Guard tag, package, and changelog version parity
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${TAG#v}"
+          PACKAGE_VERSION="$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')"
+          test "${TAG_VERSION}" = "${PACKAGE_VERSION}"
+          grep -q "^## \[${TAG_VERSION}\]" CHANGELOG.md
+
+      - name: Install uv
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "0.11.19"
-          enable-cache: false # signing/publish path: no cache poisoning surface
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+          enable-cache: false
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22"
           package-manager-cache: false
-      # REL-08: fail closed unless the tag is an annotated tag object that
-      # carries a signature and points at the exact commit this job verifies.
-      # The tag object is read through the GitHub API because the checkout
-      # above fetches only the dereferenced commit and persist-credentials:
-      # false rules out a later authenticated `git fetch`. GitHub's own
-      # `verification.verified` result is printed for the audit trail; the
-      # hard gate is annotated + signature present + target == HEAD, since
-      # `verified: true` additionally requires the maintainer's key to be
-      # registered with the GitHub account.
-      - name: Tag is annotated, signed, and points at HEAD (fail closed)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          ref_json=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")
-          obj_type=$(jq -r '.object.type' <<<"$ref_json")
-          if [ "$obj_type" != "tag" ]; then
-            echo "::error::$RELEASE_TAG is a lightweight tag (points straight at a $obj_type); release tags must be signed annotated tags (git tag -s)."
-            exit 1
-          fi
-          tag_sha=$(jq -r '.object.sha' <<<"$ref_json")
-          tag_json=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha")
-          sig=$(jq -r '.verification.signature // empty' <<<"$tag_json")
-          if [ -z "$sig" ]; then
-            echo "::error::$RELEASE_TAG is annotated but carries no signature; release tags must be signed (git tag -s)."
-            exit 1
-          fi
-          target_type=$(jq -r '.object.type' <<<"$tag_json")
-          target_sha=$(jq -r '.object.sha' <<<"$tag_json")
-          head_sha=$(git rev-parse HEAD)
-          if [ "$target_type" != "commit" ] || [ "$target_sha" != "$head_sha" ]; then
-            echo "::error::$RELEASE_TAG points at $target_type $target_sha, not the verified commit $head_sha."
-            exit 1
-          fi
-          verified=$(jq -r '.verification.verified' <<<"$tag_json")
-          reason=$(jq -r '.verification.reason' <<<"$tag_json")
-          echo "Tag $RELEASE_TAG: annotated, signed, points at $head_sha (GitHub signature check: verified=$verified reason=$reason)."
       - name: Install and smoke-check the complete toolchain
         run: make install-smoke
-      - name: Verify (ruff, mypy --strict, pytest)
+      - name: Run the full merge gate at the tagged commit
         run: make verify
-      - name: Model and data cards match the release generator
+      - name: Confirm model and data cards match their generator
         run: uv run receipts cards --out docs/cards --check
-      - name: CHANGELOG has a section for this release
-        run: |
-          set -euo pipefail
-          grep -q "^## \[${RELEASE_TAG#v}\]" CHANGELOG.md || {
-            echo "No CHANGELOG section found for ${RELEASE_TAG}"
-            exit 1
-          }
-
-  release:
-    name: build · provenance · SBOM · GitHub release
-    needs: verify
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # create/edit the GitHub release
-      id-token: write # Sigstore signing for provenance and SBOM attestations
-      attestations: write # build-provenance and SBOM attestations
-    steps:
-      - name: Checkout tagged commit
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-          persist-credentials: false
-      - name: Install uv (pinned)
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
-        with:
-          version: "0.11.19"
-          enable-cache: false # signing/publish path: no cache poisoning surface
-      - name: Build wheel + sdist
+      - name: Build wheel and source distribution
         run: uv build
-      - name: Attest build provenance (signed via Sigstore)
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
-        with:
-          subject-path: "dist/*.whl,dist/*.tar.gz"
-      - name: Generate CycloneDX SBOM
+
+      - name: Generate the CycloneDX 1.7 runtime SBOM
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          # Install the freshly built wheel into an isolated environment and
-          # describe exactly what ships. The dependency set is empty at v0.1,
-          # and the SBOM records that rather than asserting it in prose.
           uv venv --python 3.12 .sbom-venv
           uv pip install --python .sbom-venv/bin/python dist/*.whl
           uvx --from cyclonedx-bom==7.3.0 cyclonedx-py environment .sbom-venv/bin/python \
@@ -140,122 +125,160 @@ jobs:
             --output-reproducible \
             --output-format JSON \
             --validate \
-            --output-file "dist/outcome-receipts.cdx.json"
-          # Reproducible CycloneDX output omits its random serial number, while
-          # GitHub's SBOM predicate detector requires one. Derive a stable UUIDv5
-          # from the immutable release URL so each tag gets a unique, repeatable
-          # serial without weakening reproducibility.
-          serial_number=$(.sbom-venv/bin/python -c \
-            'import os, uuid; value = "https://github.com/ChelseaKR/outcome-receipts/releases/tag/" + os.environ["RELEASE_TAG"]; print("urn:uuid:" + str(uuid.uuid5(uuid.NAMESPACE_URL, value)))')
-          jq --arg serial_number "$serial_number" \
+            --output-file dist/outcome-receipts.cdx.json
+          SERIAL_NUMBER="$(
+            .sbom-venv/bin/python -c \
+              'import os, uuid; print("urn:uuid:" + str(uuid.uuid5(uuid.NAMESPACE_URL, "https://github.com/ChelseaKR/outcome-receipts/releases/tag/" + os.environ["TAG"])))'
+          )"
+          jq --arg serial_number "${SERIAL_NUMBER}" \
             '.serialNumber = $serial_number' \
             dist/outcome-receipts.cdx.json > dist/outcome-receipts.cdx.tmp
           mv dist/outcome-receipts.cdx.tmp dist/outcome-receipts.cdx.json
           jq -e \
             '.bomFormat == "CycloneDX" and .specVersion == "1.7" and (.serialNumber | startswith("urn:uuid:"))' \
             dist/outcome-receipts.cdx.json >/dev/null
-      - name: Attest the SBOM (signed via Sigstore)
-        # `actions/attest-sbom` v2 rejected the CycloneDX 1.6 document emitted
-        # by cyclonedx-bom 7.3. `actions/attest` v4 is the maintained successor
-        # and accepts JSON-serialized SPDX and CycloneDX predicates.
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
-        with:
-          subject-path: "dist/*.whl,dist/*.tar.gz"
-          sbom-path: "dist/outcome-receipts.cdx.json"
-      - name: Download portable attestation bundle for release consumers
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/release-attestations
-          (
-            cd /tmp/release-attestations
-            gh attestation download "$GITHUB_WORKSPACE"/dist/*.whl --repo "$GITHUB_REPOSITORY"
-          )
-          cat /tmp/release-attestations/sha256*.jsonl > dist/outcome-receipts.intoto.jsonl
-      - name: Upload SBOM as a build artifact
+
+      - name: Record distribution digests
+        run: (cd dist && sha256sum ./*.whl ./*.tar.gz > SHA256SUMS)
+      - name: Hand verified distributions to the PyPI publisher
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: sbom-cyclonedx
-          path: dist/outcome-receipts.cdx.json
-          if-no-files-found: error
-      # Release integrity (BUG-2/REL-16 half 1): hand the exact bytes that were
-      # Sigstore-attested above to the publish job. pypi-publish must never
-      # rebuild — a second build's output is not covered by the attestation.
-      - name: Record attested artifact digests
-        run: |
-          set -euo pipefail
-          (cd dist && sha256sum ./*.whl ./*.tar.gz | tee SHA256SUMS)
-      - name: Upload attested dist for the publish job
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dist-attested
+          name: pypi-distributions
           path: |
             dist/*.whl
             dist/*.tar.gz
             dist/SHA256SUMS
           if-no-files-found: error
-      - name: Publish artifacts to the GitHub release
+          retention-days: 7
+      - name: Hand verified assets to the checkout-free release publisher
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-assets
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: recheck tag · attest · publish without checkout
+    needs: verify-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download only assets produced by the read-only verifier
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-assets
+          path: dist
+
+      - name: Recheck the immutable tag object before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify-build.outputs.release_tag }}
+          TAG_OBJECT_SHA: ${{ needs.verify-build.outputs.tag_object_sha }}
+        run: |
+          set -euo pipefail
+          LIVE_TAG_OBJECT="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq .object.sha
+          )"
+          test "${LIVE_TAG_OBJECT}" = "${TAG_OBJECT_SHA}"
+
+      - name: Attest the exact distributions
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: "dist/*.whl,dist/*.tar.gz"
+      - name: Attest the exact SBOM
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: "dist/*.whl,dist/*.tar.gz"
+          sbom-path: "dist/outcome-receipts.cdx.json"
+      - name: Download the portable attestation bundle
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
-            || gh release create "$RELEASE_TAG" --title "outcome-receipts $RELEASE_TAG" --generate-notes
-          gh release upload "$RELEASE_TAG" dist/* --clobber
+          mkdir -p /tmp/outcome-receipts-attestations
+          (
+            cd /tmp/outcome-receipts-attestations
+            gh attestation download "${GITHUB_WORKSPACE}"/dist/*.whl \
+              --repo "${GITHUB_REPOSITORY}"
+          )
+          cat /tmp/outcome-receipts-attestations/sha256*.jsonl \
+            > dist/outcome-receipts.intoto.jsonl
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify-build.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release view "${TAG}" >/dev/null 2>&1 \
+            || gh release create "${TAG}" --verify-tag \
+              --title "outcome-receipts ${TAG}" --generate-notes
+          gh release upload "${TAG}" dist/* --clobber
 
   pypi-publish:
-    name: publish to PyPI (Trusted Publishing)
-    needs: release
+    name: publish exact verified bytes to PyPI
+    needs: [verify-build, publish-release]
     runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/outcome-receipts
     permissions:
-      id-token: write # OIDC token for PyPI Trusted Publishing (no long-lived secret)
+      contents: read
+      id-token: write
     steps:
-      # Release integrity (BUG-2): publish the exact bytes the release job
-      # built and Sigstore-attested. No checkout, no toolchain, no rebuild in
-      # this job — a rebuilt wheel/sdist would not be covered by the
-      # attestations, so the only inputs here are the attested artifacts.
-      - name: Download attested dist from the release job
+      - name: Download the verified distributions
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: dist-attested
+          name: pypi-distributions
           path: dist
-      - name: Re-check artifact digests against the attested manifest
+      - name: Recheck the transferred distribution set
+        env:
+          RELEASE_COMMIT: ${{ needs.verify-build.outputs.release_commit }}
+          RELEASE_TAG: ${{ needs.verify-build.outputs.release_tag }}
         run: |
           set -euo pipefail
           cd dist
           sha256sum -c SHA256SUMS
-          rm SHA256SUMS # not a distribution file; PyPI upload takes dist/ wholesale
-      # Trusted Publishing: requires a one-time PyPI "pending publisher" for project
-      # "outcome-receipts" (repo ChelseaKR/outcome-receipts, workflow release.yml,
-      # environment pypi). No API token needed once configured.
-      - name: Publish to PyPI
+          rm SHA256SUMS
+          mapfile -t WHEELS < <(find . -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t SDISTS < <(find . -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t ALL_FILES < <(find . -maxdepth 1 -type f -print)
+          test "${#WHEELS[@]}" -eq 1
+          test "${#SDISTS[@]}" -eq 1
+          test "${#ALL_FILES[@]}" -eq 2
+          echo "Publishing ${RELEASE_TAG} from reviewed commit ${RELEASE_COMMIT}."
+      - name: Publish through PyPI Trusted Publishing
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
 
   verify-published:
     name: verify published package and attestations
-    needs: [release, pypi-publish]
+    needs: [verify-build, publish-release, pypi-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      attestations: read # verify the published wheel's GitHub attestation
+      attestations: read
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+      - name: Download the verified distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: dist-attested
+          name: pypi-distributions
           path: dist
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "0.11.19"
           enable-cache: false
-      - name: Verify Sigstore-backed GitHub attestation
+      - name: Verify GitHub's Sigstore-backed attestation
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh attestation verify dist/*.whl --repo "$GITHUB_REPOSITORY"
-      - name: Pull the published version from PyPI and smoke-test it
+        run: gh attestation verify dist/*.whl --repo "${GITHUB_REPOSITORY}"
+      - name: Install the published version from PyPI and smoke-test it
+        env:
+          RELEASE_TAG: ${{ needs.verify-build.outputs.release_tag }}
         run: |
-          set -euo pipefail
-          uvx --refresh --from "outcome-receipts==${RELEASE_TAG#v}" receipts --help >/dev/null
+          uvx --refresh --from "outcome-receipts==${RELEASE_TAG#v}" \
+            receipts --help >/dev/null

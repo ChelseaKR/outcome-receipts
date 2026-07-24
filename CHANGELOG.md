@@ -10,6 +10,16 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Security
+- Split release verification/building from publication: a read-only job starts
+  from trusted `main`, verifies an SSH-signed annotated tag on reviewed history,
+  and hands exact artifacts to checkout-free GitHub and PyPI publishers that
+  recheck the live tag object before granting write authority.
+
+### Documentation
+- Move agent-only instructions out of the practitioner README and document the
+  signed-tag release ceremony and recovery boundaries in `docs/RELEASING.md`.
+
 ### Added
 - Full portfolio-standards v1.0.1 conformance gate: CodeQL, OpenSSF Scorecard,
   standards pin/fetch, source and documentation hygiene, critical-module

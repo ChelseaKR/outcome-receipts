@@ -1,0 +1,4 @@
+# SSH allowed-signers file for the fail-closed release-tag guard.
+# Public key only; the maintainer retains the private signing key.
+# ED25519 fingerprint: SHA256:Kz1JPRtDNVmRa1tD/buR0/iOGDSwEa4P4iu3DN+bElk
+3114598+ChelseaKR@users.noreply.github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIOjn/aI0d9jElCoi7qT4+6j9UmgTH7vLGAqJXiKMoCE
