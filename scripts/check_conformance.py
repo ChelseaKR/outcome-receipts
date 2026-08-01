@@ -35,6 +35,7 @@ REQUIRED = (
     "docs/adr/0000-record-architecture-decisions.md",
     "docs/RESPONSIBLE-TECH-AUDITS.md",
     "docs/OPERATIONS.md",
+    "docs/NOVEL-USE-CASES.md",
     "docs/THREAT-MODEL.md",
     "docs/a11y/ACR.md",
     "docs/a11y/STATEMENT.md",
@@ -47,6 +48,8 @@ REQUIRED = (
     "docs/data/organization-service-export.md",
     "docs/data/synthetic-fixtures.md",
     "docs/incidents/README.md",
+    "docs/schema/workflow-artifact.schema.json",
+    "tests/fixtures/compat/v1/workflow-artifacts.json",
 )
 
 

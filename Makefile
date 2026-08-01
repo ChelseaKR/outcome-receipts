@@ -1,4 +1,4 @@
-.PHONY: install install-security install-smoke verify lint type test hygiene security i18n \
+.PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
 	a11y build-html cards benchmark eval eval-check mutation run clean
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
@@ -74,7 +74,10 @@ benchmark:
 eval-check: benchmark eval
 	git diff --exit-code -- eval/report.md eval/grounding-benchmark.jsonl
 
-verify: lint type test hygiene i18n security a11y cards eval-check
+compat:
+	.venv/bin/python scripts/generate_workflow_compat_fixtures.py --check
+
+verify: lint type test hygiene i18n security a11y cards eval-check compat
 
 # Mutation testing over the invariant core (grounding gate + engine). Slow, so it
 # is opt-in and not part of `verify`. A low surviving-mutant count is evidence the
