@@ -1,5 +1,6 @@
 .PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
-	a11y build-html cards benchmark eval eval-check mutation run clean
+	a11y build-html cards benchmark eval eval-check mutation run container-build \
+	container-smoke container-scan container-verify container-demo clean
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
 # --frozen: install exactly what uv.lock records, never re-resolve; a lockfile
@@ -18,6 +19,7 @@ install-smoke: install
 	test -x .venv/bin/receipts
 	test -x .tools/osv-scanner
 	test -x .tools/gitleaks
+	docker version --format '{{.Server.Version}}'
 	node -e "const fs=require('node:fs'); const {chromium}=require('playwright'); fs.accessSync(chromium.executablePath(), fs.constants.X_OK)"
 
 lint:
@@ -77,7 +79,7 @@ eval-check: benchmark eval
 compat:
 	.venv/bin/python scripts/generate_workflow_compat_fixtures.py --check
 
-verify: lint type test hygiene i18n security a11y cards eval-check compat
+verify: lint type test hygiene i18n security a11y cards eval-check compat container-verify
 
 # Mutation testing over the invariant core (grounding gate + engine). Slow, so it
 # is opt-in and not part of `verify`. A low surviving-mutant count is evidence the
@@ -95,6 +97,40 @@ eval:
 # the non-interactive export explicit; a real report is signed off by a person.
 run:
 	.venv/bin/receipts run --config examples/housing-demo/report.toml --out out --approved-by "make run (demo)"
+
+container-build:
+	docker build --pull --tag outcome-receipts:local .
+
+container-smoke: container-build
+	docker run --rm --read-only --network none --cap-drop ALL \
+		--security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+		outcome-receipts:local --version
+
+container-scan: container-build
+	@set -eu; \
+		image_tar=$$(mktemp "$${TMPDIR:-/tmp}/outcome-receipts-image.XXXXXX.tar"); \
+		trap 'rm -f "$$image_tar"' EXIT; \
+		docker save --output "$$image_tar" outcome-receipts:local; \
+		docker run --rm \
+			--volume "$$image_tar:/scan/image.tar:ro" \
+			--volume outcome-receipts-trivy-cache:/root/.cache/trivy \
+			aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f \
+			image --input /scan/image.tar --scanners vuln \
+			--severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed=false
+
+container-verify: container-smoke container-scan
+
+# One-command offline demo after the image is built. The host UID/GID owns the
+# generated files; the runtime has no network, capabilities, or writable root.
+container-demo: container-build
+	mkdir -p out/container
+	docker run --rm --read-only --network none --cap-drop ALL \
+		--security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+		--user "$$(id -u):$$(id -g)" --volume "$(CURDIR):/workspace" \
+		outcome-receipts:local run \
+		--config examples/housing-demo/report.toml \
+		--out out/container --ledger out/container/export-ledger.jsonl \
+		--approved-by "Container demo" --reproducible
 
 clean:
 	rm -rf out .pytest_cache .mypy_cache .ruff_cache .lighthouseci
