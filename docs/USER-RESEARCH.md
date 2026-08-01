@@ -16,6 +16,13 @@
 > [`docs/RESEARCH-ROADMAP.md`](RESEARCH-ROADMAP.md).
 >
 > **Last assembled: 2026-06-30.**
+>
+> **Historical-state note: 2026-07-22.** The interviews below intentionally
+> preserve what the synthetic panel saw in v0.1. Suppression, human-readable
+> definitions, approval, mapping, optional drafting, provenance, and
+> `receipts verify` have since shipped. Their present-tense "not built" language
+> is a dated research input, not the current product state. See
+> [`docs/ROADMAP.md`](ROADMAP.md) for the implementation record.
 
 ## Why do this at all
 

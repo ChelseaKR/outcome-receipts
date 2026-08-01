@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last verified: 2026-07-11 · Recheck: quarterly*
+*Last verified: 2026-07-22 · Recheck: quarterly*
 
 Planned direction for outcome-receipts. Dates are intentions, not promises;
 items move earlier when users ask for them. Feedback is welcome as GitHub issues.
@@ -91,12 +91,42 @@ compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> expor
   (`action.yml`), so a downstream repo can gate CI on receipt drift with
   `uses: ChelseaKR/outcome-receipts@v1`. See [ci-action.md](ci-action.md).
 
-## v1.0.0 — Future stability gates (not open implementation backlog)
+## v1.0.0 — Implementation package complete; release evidence pending
 
-Gated on the pipeline proving out against more than one real organization and on
-a stable spec and report schema for two consecutive releases. Adds a second
-template format, one-command Docker self-host, committed responsible-tech audits,
-and semantic-versioning guarantees on the spec and the receipts manifest schema.
+The repository-side work is complete:
+
+* ✅ Multi-funder output renders one receipted figure set into two distinct
+  maintained funder templates under `examples/multi-funder/`.
+* ✅ `make container-demo` provides one-command Docker self-hosting. The
+  digest-pinned, non-root image is smoke-tested without network access and
+  scanned by Trivy for HIGH/CRITICAL findings in CI.
+* ✅ All six responsible-tech audits and the AI, privacy, accessibility,
+  security, data-governance, and residual-risk evidence are committed.
+* ✅ The report spec and receipts manifest publish `1.0` JSON Schemas and a
+  SemVer compatibility policy. Unsupported declared versions fail before
+  compute or verification.
+* ✅ Six bounded evidence workflows cover restatements, migration equivalence,
+  funder requirement changes, contract milestones, verified partner rollups,
+  and suppression-aware equity review. Receipt-composed values are visibly
+  distinct from row-backed receipts.
+* ✅ `receipts verify-workflow` fail-closes on unsupported artifact versions,
+  malformed relationships and digests, client-level fields, or broken composed
+  lineage. Generated version-1.0 fixtures freeze every workflow kind for future
+  release-to-release checks.
+
+A `v1.0.0` tag remains evidence-gated, not code-gated. It requires use against
+more than one real organization
+([#64](https://github.com/ChelseaKR/outcome-receipts/issues/64)), compatible
+schema evidence across two consecutive tagged releases
+([#65](https://github.com/ChelseaKR/outcome-receipts/issues/65)), and the
+recorded VoiceOver/macOS and NVDA/Windows task reviews
+([#59](https://github.com/ChelseaKR/outcome-receipts/issues/59) and
+[#60](https://github.com/ChelseaKR/outcome-receipts/issues/60)). Those
+observations cannot be manufactured in this repository. There are no remaining
+implementation items in the authoritative roadmap.
+
+The implemented designs and real-world validation gates are recorded in
+[`NOVEL-USE-CASES.md`](NOVEL-USE-CASES.md).
 
 ## Eval and quality plan
 
@@ -127,6 +157,7 @@ and semantic-versioning guarantees on the spec and the receipts manifest schema.
 | Mutation quality | 0 surviving grounding-gate mutants in the last scoped run | REVIEW/nightly |
 | Small-cell privacy | Counts 1–10 plus complementary, delta, and percentage recovery controls; zero is distinct | AUTO |
 | Supply chain | CycloneDX 1.7, signed attestations, exact published bytes, OIDC, SHA-pinned Actions | AUTO |
+| Container | Digest-pinned, non-root, networkless smoke; Trivy HIGH/CRITICAL floor | AUTO |
 | SAST/SCA/secrets | Ruff, Semgrep, CodeQL, pip-audit, npm audit, OSV, gitleaks, zizmor | AUTO |
 | OpenSSF Scorecard | Aggregate and named critical-check floors enforced in scheduled/push workflow | AUTO |
 | axe WCAG 2.2 AA | 0 critical, serious, or moderate violations on generated trace | AUTO |
