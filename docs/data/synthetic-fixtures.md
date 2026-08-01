@@ -12,7 +12,12 @@
 
 Fixtures cover housing-service examples, planted receipt-backed values, planted
 unbound numbers, suppression recovery paths, mapping ambiguity, English/Spanish
-numeric spans, and bundle tampering. They are deliberately small and do not
-represent the distribution or data quality of any real organization's records.
+numeric spans, bundle tampering, and all six version-1.0 evidence-workflow
+artifacts. They are deliberately small and do not represent the distribution or
+data quality of any real organization's records.
 
-*Last verified: 2026-07-12 · Recheck: with each eval or fixture change.*
+The compatibility directory also preserves the signed `v0.1.0` housing fixture
+byte-for-byte, with its immutable source commit recorded in `SOURCE.md`. It is
+synthetic L1 data, not an organization export.
+
+*Last verified: 2026-07-22 · Recheck: with each eval or fixture change.*

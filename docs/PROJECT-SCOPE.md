@@ -1,6 +1,6 @@
 # Project Scope
 
-Last reviewed: 2026-07-08. Base branch: `main`.
+Last reviewed: 2026-07-22. Base branch: `main`.
 
 This file is a plain-language map of the project as it exists on `main`. It does not replace the README, roadmap, audit docs, or source comments. It points to them so a reviewer can see the whole shape without reading every file first.
 
@@ -21,14 +21,19 @@ Package metadata checked in this pass:
 ## What It Covers
 
 - A Python library and CLI for report config, drafting, charts, comparisons, provenance, trace, and verification.
+- A digest-pinned, non-root container for the same offline CLI.
 - Examples for board, grant, and housing reports.
 - Docs for roadmap, user research, decisions, audits, and I18N.
 - Evaluation reports and tests for definitions, grounding, traces, reports, and verification.
 - Config-driven receipts that can be checked after generation.
+- Six bounded evidence workflows for restatement, migration, requirement change,
+  contract milestones, partner rollup, and equity review.
+- Published `1.0` contracts for report specs, receipts manifests, and workflow
+  artifacts.
 
 ## How It Is Put Together
 
-- src/outcome_receipts/ contains the deterministic metric engine (`engine.py`), the receipt and spec models (`models.py`), the fail-closed grounding gate (`grounding.py`), config loading, the template drafter, charts, period comparison, provenance, the trace view, report export, the hash-chained export ledger (`ledger.py`), the spec scaffolder, verification (`verify.py`), the eval harness, and the CLI.
+- src/outcome_receipts/ contains the deterministic metric engine (`engine.py`), the receipt and spec models (`models.py`), the fail-closed grounding gate (`grounding.py`), config loading, the template drafter, charts, period comparison, provenance, the trace view, report export, the hash-chained export ledger (`ledger.py`), the spec scaffolder, report and workflow verification (`verify.py`, `workflows.py`), the eval harness, and the CLI.
 - examples/ contains small report inputs.
 - `docs/adr/` is the canonical decision log; `docs/decisions/` preserves the
   pre-migration grounding, templates, comparison, and trace choices.
@@ -51,7 +56,10 @@ GitHub workflow files checked:
 
 - Every number in a report must trace to a receipt (the exact query, row count, and a hash of the data slice). The grounding gate is fail-closed: a number without a receipt blocks the export instead of passing through.
 - No number comes from a model. The deterministic engine computes every figure; the optional drafting seam (v0.3, off by default) only writes prose around already-receipted figures.
-- Verification is part of the output contract: `receipts verify` re-derives every figure from the spec and cited data and exits non-zero on any drift, and each export appends to a hash-chained ledger so the reporting history is tamper-evident.
+- Verification is part of the output contract: `receipts verify` re-derives every figure from the spec and cited data, while `receipts verify-workflow` validates workflow versions, relationships, digests, aggregate-only fields, and receipt-composed lineage. Each export appends to a hash-chained ledger so the reporting history is tamper-evident.
+- A derived workflow value is labeled `receipt_composed`; it cannot be mistaken
+  for a row-backed receipt. Rollups verify every partner bundle and reject
+  suppressed inputs.
 
 ## Outside This Scope
 
@@ -61,7 +69,9 @@ GitHub workflow files checked:
 
 ## Docs And Evidence Checked
 
-This pass checked 21 hand-authored doc or metadata files, 18 test files, and 2 workflow files on `main`. The count excludes vendored provider licenses, dependency folders, generated cache files, and large generated artifact history.
+The repository inventory is enforced by `scripts/check_conformance.py`, schema
+tests, generated-artifact drift checks, and source hygiene checks. Vendored
+provider licenses, dependency folders, and generated caches are excluded.
 
 Primary docs checked:
 
@@ -110,4 +120,7 @@ Representative test files checked:
 
 ## Validation Notes
 
-For this docs PR, validation means the scope file was generated from the clean `origin/main` worktree, reviewed against repo metadata and docs inventory, and checked with `git diff --check`. Project test suites are still the authority for code behavior, because this PR changes documentation only.
+Validation is the complete `make verify` gate: lint, strict typing, tests and
+coverage, documentation/source hygiene, localization, security scans,
+accessibility, generated cards and eval, compatibility fixtures, and locked-down
+container verification.

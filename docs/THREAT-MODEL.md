@@ -26,6 +26,8 @@ validated before use.
 | Small cell recovered from total, delta, rate, or complementary cells | Primary plus exhaustive complementary/delta/percentage suppression before final drafting | Medium because operator policy may differ from CMS default |
 | Source/spec path traversal or malformed CSV causes unintended read | Paths resolve from explicit operator config; loader fails on malformed shape; operator runs trusted specs | Low in single-user local boundary |
 | Report/bundle/ledger is altered after approval | Artifact digests, optional keyed bundle signature, whole-bundle verification, hash-chained ledger | Low when key and ledger are retained together |
+| A forged aggregate or edited composed query enters a restatement or partner rollup | Complete source-bundle verification, typed `receipt_composed` provenance, canonical input digests, fixed composition queries, `verify-workflow` | Low for structural tamper; source re-derivation still requires the cited bundles |
+| Workflow artifact carries client-level rows | Allowlisted aggregate structures plus recursive rejection of row/client container fields | Low; compatibility and adversarial tests |
 | Signing key is disclosed | Key path supplied explicitly; key not embedded in artifacts; gitleaks plus incident runbook | Medium because local key storage is operator-owned |
 | CI dependency or workflow is compromised | SHA-pinned actions, least privilege, no persisted checkout credentials, lock scans, SAST, Scorecard, OIDC release, no release caches | Low; monthly evidence review still required |
 | Bedrock retains aggregate prompt/response | Two explicit opt-ins, documented provider boundary, organization-owned logging/retention review | Medium; outside local process control |
@@ -49,5 +51,5 @@ under `docs/audits/`, `docs/cards/`, and `docs/data/`. An integrity bypass,
 recoverable suppressed cell, secret exposure, or L2/L3 data disclosure uses the
 private channel and postmortem process in `SECURITY.md` and `docs/OPERATIONS.md`.
 
-Status: current beta architecture. *Last verified: 2026-07-12 · Recheck: every
+Status: current beta architecture. *Last verified: 2026-07-22 · Recheck: every
 release, threat-boundary change, or disclosed supply-chain compromise.*

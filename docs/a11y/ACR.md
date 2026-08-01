@@ -27,7 +27,10 @@ Supports, Partially Supports, Does Not Support, and Not Applicable.
 
 ## Known gap
 
-Manual VoiceOver and NVDA task walkthroughs are not complete. Until both rows in
+Manual VoiceOver and NVDA task walkthroughs are tracked in
+[issues 59](https://github.com/ChelseaKR/outcome-receipts/issues/59) and
+[60](https://github.com/ChelseaKR/outcome-receipts/issues/60) and are not
+complete. Until both rows in
 the dated walkthrough are signed, this ACR reports Partially Supports and must not
 be represented as a completed human WCAG conformance assessment.
 
