@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from outcome_receipts.clock import FixedClock
-from outcome_receipts.config import load_spec
+from outcome_receipts.config import SPEC_SCHEMA_VERSION, load_spec
 from outcome_receipts.draft import draft
 from outcome_receipts.engine import compute_figures, read_csv
 from outcome_receipts.models import Figure, MetricSpec, Receipt, ReportSpec
@@ -42,10 +42,37 @@ def test_draft_raises_on_unknown_metric() -> None:
 
 def test_load_spec_reads_metrics_and_template() -> None:
     spec = load_spec(EXAMPLES / "report.toml")
+    assert spec.schema_version == SPEC_SCHEMA_VERSION
     assert spec.report.title == "Housing Program Outcome Report"
     ids = {m.metric_id for m in spec.report.metrics}
     assert ids == {"clients_served", "exits", "exits_permanent", "pct_permanent"}
     assert spec.data_path.name == "services.csv"
+
+
+def test_load_spec_rejects_unknown_schema_version(tmp_path: Path) -> None:
+    bad = tmp_path / "bad-version.toml"
+    bad.write_text(
+        'schema_version = "2.0"\n'
+        '[data]\npath = "x.csv"\n'
+        '[report]\ntemplate = "{m}"\n'
+        '[metrics.m]\nvalue_sql = "SELECT 1"\nslice_sql = "SELECT 1"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"schema_version.*not supported"):
+        load_spec(bad)
+
+
+def test_load_spec_rejects_non_string_schema_version(tmp_path: Path) -> None:
+    bad = tmp_path / "bad-version-type.toml"
+    bad.write_text(
+        "schema_version = 1.0\n"
+        '[data]\npath = "x.csv"\n'
+        '[report]\ntemplate = "{m}"\n'
+        '[metrics.m]\nvalue_sql = "SELECT 1"\nslice_sql = "SELECT 1"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="schema_version must be a string"):
+        load_spec(bad)
 
 
 def test_load_spec_rejects_unknown_unit(tmp_path: Path) -> None:

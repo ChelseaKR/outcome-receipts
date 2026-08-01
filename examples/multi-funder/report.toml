@@ -8,6 +8,8 @@
 #
 #   receipts run --config examples/multi-funder/report.toml --out out/multi
 
+schema_version = "1.0"
+
 [data]
 path = "services.csv"
 

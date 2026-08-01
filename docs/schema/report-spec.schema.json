@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChelseaKR/outcome-receipts/docs/schema/report-spec.schema.json",
+  "title": "Outcome Receipts report specification",
+  "description": "The stable 1.0 contract for parsed report TOML. Existing unversioned beta specs are interpreted as 1.0, while newly scaffolded and maintained specs declare schema_version explicitly.",
+  "type": "object",
+  "required": ["schema_version", "data", "report", "metrics"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "data": {
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "template": {
+          "type": "string"
+        },
+        "templates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "template"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string"
+              },
+              "template": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "drafting": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "enum": ["deterministic", "bedrock"]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "max_tokens": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["template"]
+        },
+        {
+          "required": ["templates"]
+        }
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/metric"
+      }
+    },
+    "data_checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/data_check"
+      }
+    },
+    "charts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/chart"
+      }
+    },
+    "comparison": {
+      "$ref": "#/$defs/comparison"
+    },
+    "reconciliation": {
+      "$ref": "#/$defs/reconciliation"
+    }
+  },
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "required": ["value_sql", "slice_sql"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": ["output", "outcome"]
+        },
+        "unit": {
+          "enum": ["count", "percent", "money", "duration", "rate"]
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "value_sql": {
+          "type": "string"
+        },
+        "slice_sql": {
+          "type": "string"
+        },
+        "indicator": {
+          "type": "string"
+        },
+        "data_source": {
+          "type": "string"
+        },
+        "collection_frequency": {
+          "type": "string"
+        },
+        "caveat": {
+          "type": "string"
+        }
+      }
+    },
+    "data_check": {
+      "type": "object",
+      "required": ["id", "assert_sql"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "assert_sql": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "chart": {
+      "type": "object",
+      "required": ["id", "kind", "metrics"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": ["bar", "line"]
+        },
+        "metrics": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "period": {
+      "type": "object",
+      "required": ["id", "predicate"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string"
+        },
+        "predicate": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "required": ["current", "prior", "periods", "metrics"],
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "type": "string"
+        },
+        "prior": {
+          "type": "string"
+        },
+        "periods": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/period"
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/metric"
+          }
+        }
+      }
+    },
+    "reconciliation_metric_pair": {
+      "type": "object",
+      "required": ["label", "outcome", "financial"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/metric"
+        },
+        "financial": {
+          "$ref": "#/$defs/metric"
+        }
+      }
+    },
+    "reconciliation": {
+      "type": "object",
+      "required": ["current", "prior", "periods", "rows"],
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "type": "string"
+        },
+        "prior": {
+          "type": "string"
+        },
+        "periods": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/period"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/reconciliation_metric_pair"
+          }
+        }
+      }
+    }
+  }
+}

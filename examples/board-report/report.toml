@@ -8,6 +8,8 @@
 #
 #   receipts run --config examples/board-report/report.toml --out out/board
 
+schema_version = "1.0"
+
 [data]
 path = "services.csv"
 

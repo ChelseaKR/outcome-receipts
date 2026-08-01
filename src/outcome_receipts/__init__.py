@@ -17,7 +17,7 @@ Supported v0.x surface:
 - Reporting: :func:`render_report`, :func:`receipts_manifest`
 - Comparison: :func:`compute_comparison`, :class:`ComparisonResult`
 - Diffing: :func:`diff_manifests`, :class:`FigureDelta`, :class:`ManifestDiff`
-- Configuration: :func:`load_spec`, :class:`Spec`
+- Configuration: :func:`load_spec`, :class:`Spec`, :data:`SPEC_SCHEMA_VERSION`
 - Clocks: :class:`Clock`, :class:`SystemClock`, :class:`FixedClock`
 - Core models: :class:`Figure`, :class:`MetricSpec`, :class:`Receipt`,
   :class:`ReportSpec`
@@ -36,7 +36,7 @@ __version__ = version("outcome-receipts")
 
 from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import ComparisonResult, compute_comparison
-from outcome_receipts.config import Spec, load_spec
+from outcome_receipts.config import SPEC_SCHEMA_VERSION, Spec, load_spec
 from outcome_receipts.diff import FigureDelta, ManifestDiff, diff_manifests
 from outcome_receipts.draft import draft
 from outcome_receipts.engine import (
@@ -58,6 +58,7 @@ from outcome_receipts.report import receipts_manifest, render_report
 from outcome_receipts.verify import Check, VerifyResult, verify_manifest
 
 __all__ = [
+    "SPEC_SCHEMA_VERSION",
     "Check",
     # Clocks
     "Clock",

@@ -36,6 +36,7 @@ REQUIRED = (
     "docs/RESPONSIBLE-TECH-AUDITS.md",
     "docs/OPERATIONS.md",
     "docs/NOVEL-USE-CASES.md",
+    "docs/SPEC-STABILITY.md",
     "docs/THREAT-MODEL.md",
     "docs/a11y/ACR.md",
     "docs/a11y/STATEMENT.md",
@@ -48,7 +49,11 @@ REQUIRED = (
     "docs/data/organization-service-export.md",
     "docs/data/synthetic-fixtures.md",
     "docs/incidents/README.md",
+    "docs/schema/report-spec.schema.json",
+    "docs/schema/receipts.schema.json",
     "docs/schema/workflow-artifact.schema.json",
+    "tests/fixtures/compat/v0.1.0/SOURCE.md",
+    "tests/fixtures/compat/v0.1.0/receipts.json",
     "tests/fixtures/compat/v1/workflow-artifacts.json",
 )
 
