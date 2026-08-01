@@ -3,6 +3,17 @@
 > Source of truth for project intent, scope, conventions, and the build plan.
 > Read it fully before writing any code.
 
+## Reading order
+
+Read [AGENTS.md](AGENTS.md) first. It is the source of truth for scope,
+conventions, and the build plan, and it states the hard guardrails: numbers never
+come from the model, the grounding gate is fail-closed, small-cell suppression is
+a privacy invariant, and the honest framing of what is solved art versus the
+contribution. Then read [docs/ROADMAP.md](docs/ROADMAP.md) for the delivered
+architecture and future release gates; it is no longer an open implementation
+backlog. *(Moved here from the README's "For Claude Code" section per
+DOCUMENTATION-STANDARD §9 [DOC-18].)*
+
 ## What this is
 
 `outcome-receipts` drafts a funder outcome report in which **every number is a
