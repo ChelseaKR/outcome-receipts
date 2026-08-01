@@ -19,6 +19,19 @@ Commands:
           member that was tampered, is missing, or is extra
   diff    compare two receipts manifests from different reporting cycles and report
           which figures moved, were added, or removed, and why
+  restate
+          link a current run to a verified prior bundle without rewriting history
+  migrate-check
+          compare reviewed metrics across two schema-variant exports
+  requirements-diff
+          classify funder requirement changes by stable identifier
+  contract-check
+          package receipted milestone, threshold, and financial evidence
+  rollup  compose a count from verified, unsuppressed partner bundles
+  equity-review
+          package allowlisted subgroup receipts after whole-report suppression
+  verify-workflow
+          validate a versioned evidence-workflow artifact before interpreting it
   eval    score the drafted narrative's grounding and write the eval report
 
 Every command exits with a code from the contract below, and ``--json`` makes any
@@ -79,6 +92,17 @@ from outcome_receipts.suppression import (
 )
 from outcome_receipts.trace import render_trace_html
 from outcome_receipts.verify import BundleResult, VerifyResult, verify_bundle, verify_manifest
+from outcome_receipts.workflows import (
+    WorkflowError,
+    build_contract_evidence,
+    build_equity_review,
+    build_migration_check,
+    build_requirement_change,
+    build_restatement,
+    build_rollup,
+    verify_workflow_artifact,
+    write_artifact,
+)
 
 # The chart subdirectory under the output directory, referenced from the report.
 _CHART_DIR = "charts"
@@ -957,6 +981,103 @@ def _cmd_map(args: argparse.Namespace) -> int:
     return EXIT_OK if queue.ok else EXIT_VERIFY_FAIL
 
 
+def _finish_workflow(args: argparse.Namespace, artifact: dict[str, object]) -> int:
+    """Write and report a fully validated workflow artifact."""
+
+    out_path = Path(args.out)
+    write_artifact(out_path, artifact)
+    if args.json:
+        _emit_json({"command": artifact["kind"], "out": str(out_path), "artifact": artifact})
+    else:
+        print(f"wrote {artifact['kind']} artifact: {out_path}")
+    return EXIT_OK
+
+
+def _cmd_restate(args: argparse.Namespace) -> int:
+    artifact = build_restatement(
+        prior_config=Path(args.prior_config),
+        prior_bundle=Path(args.prior_bundle),
+        current_config=Path(args.config),
+        reason=args.reason,
+        approved_by=args.approved_by,
+        reproducible=args.reproducible,
+    )
+    return _finish_workflow(args, artifact)
+
+
+def _cmd_migrate_check(args: argparse.Namespace) -> int:
+    artifact = build_migration_check(
+        before_config=Path(args.before_config),
+        after_config=Path(args.after_config),
+        approved_by=args.approved_by,
+        reproducible=args.reproducible,
+    )
+    return _finish_workflow(args, artifact)
+
+
+def _cmd_requirements_diff(args: argparse.Namespace) -> int:
+    artifact = build_requirement_change(Path(args.prior), Path(args.current))
+    return _finish_workflow(args, artifact)
+
+
+def _cmd_contract_check(args: argparse.Namespace) -> int:
+    artifact = build_contract_evidence(
+        config_path=Path(args.config),
+        contract_path=Path(args.contract),
+        approved_by=args.approved_by,
+        reproducible=args.reproducible,
+    )
+    return _finish_workflow(args, artifact)
+
+
+def _cmd_rollup(args: argparse.Namespace) -> int:
+    artifact = build_rollup(
+        plan_path=Path(args.plan),
+        approved_by=args.approved_by,
+        reproducible=args.reproducible,
+    )
+    return _finish_workflow(args, artifact)
+
+
+def _cmd_equity_review(args: argparse.Namespace) -> int:
+    artifact = build_equity_review(
+        config_path=Path(args.config),
+        plan_path=Path(args.plan),
+        approved_by=args.approved_by,
+        reproducible=args.reproducible,
+    )
+    return _finish_workflow(args, artifact)
+
+
+def _cmd_verify_workflow(args: argparse.Namespace) -> int:
+    try:
+        artifact = json.loads(Path(args.artifact).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise WorkflowError(f"cannot read workflow artifact: {exc}") from exc
+    if not isinstance(artifact, dict):
+        raise WorkflowError("workflow artifact must be a JSON object")
+    result = verify_workflow_artifact(artifact)
+    if args.json:
+        _emit_json(
+            {
+                "command": "verify-workflow",
+                "ok": result.ok,
+                "artifact": args.artifact,
+                "checks": [
+                    {"scope": check.scope, "ok": check.ok, "detail": check.detail}
+                    for check in result.checks
+                ],
+            }
+        )
+    else:
+        for check in result.checks:
+            status = "ok" if check.ok else "FAIL"
+            print(f"  [{status}] {check.scope}: {check.detail}")
+        outcome = "PASS" if result.ok else "FAIL"
+        print(f"\nverify-workflow: {outcome}")
+    return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
+
+
 def _cmd_cards(args: argparse.Namespace) -> int:
     current = write_cards(Path(args.out), check=args.check)
     if args.json:
@@ -1126,6 +1247,85 @@ def build_parser() -> argparse.ArgumentParser:
     map_parser.add_argument("--out", help="write the review queue JSON here")
     map_parser.set_defaults(func=_cmd_map)
 
+    restate_parser = sub.add_parser(
+        "restate",
+        help="write a restatement linked to a verified prior bundle",
+        parents=[json_parent],
+    )
+    restate_parser.add_argument("--prior-config", required=True)
+    restate_parser.add_argument("--prior-bundle", required=True)
+    restate_parser.add_argument("--config", required=True, help="current report spec TOML")
+    restate_parser.add_argument("--reason", required=True)
+    restate_parser.add_argument("--approved-by", required=True, metavar="NAME")
+    restate_parser.add_argument("--out", required=True)
+    restate_parser.add_argument("--reproducible", action="store_true")
+    restate_parser.set_defaults(func=_cmd_restate)
+
+    migrate_parser = sub.add_parser(
+        "migrate-check",
+        help="compare reviewed metrics across two data-system exports",
+        parents=[json_parent],
+    )
+    migrate_parser.add_argument("--before-config", required=True)
+    migrate_parser.add_argument("--after-config", required=True)
+    migrate_parser.add_argument("--approved-by", required=True, metavar="NAME")
+    migrate_parser.add_argument("--out", required=True)
+    migrate_parser.add_argument("--reproducible", action="store_true")
+    migrate_parser.set_defaults(func=_cmd_migrate_check)
+
+    requirements_parser = sub.add_parser(
+        "requirements-diff",
+        help="classify funder requirement changes by stable ID",
+        parents=[json_parent],
+    )
+    requirements_parser.add_argument("--prior", required=True)
+    requirements_parser.add_argument("--current", required=True)
+    requirements_parser.add_argument("--out", required=True)
+    requirements_parser.set_defaults(func=_cmd_requirements_diff)
+
+    contract_parser = sub.add_parser(
+        "contract-check",
+        help="package receipted contract milestone evidence",
+        parents=[json_parent],
+    )
+    contract_parser.add_argument("--config", required=True)
+    contract_parser.add_argument("--contract", required=True)
+    contract_parser.add_argument("--approved-by", required=True, metavar="NAME")
+    contract_parser.add_argument("--out", required=True)
+    contract_parser.add_argument("--reproducible", action="store_true")
+    contract_parser.set_defaults(func=_cmd_contract_check)
+
+    rollup_parser = sub.add_parser(
+        "rollup",
+        help="compose a count from verified partner bundles",
+        parents=[json_parent],
+    )
+    rollup_parser.add_argument("--plan", required=True)
+    rollup_parser.add_argument("--approved-by", required=True, metavar="NAME")
+    rollup_parser.add_argument("--out", required=True)
+    rollup_parser.add_argument("--reproducible", action="store_true")
+    rollup_parser.set_defaults(func=_cmd_rollup)
+
+    equity_parser = sub.add_parser(
+        "equity-review",
+        help="package allowlisted subgroup receipts after whole-report suppression",
+        parents=[json_parent],
+    )
+    equity_parser.add_argument("--config", required=True)
+    equity_parser.add_argument("--plan", required=True)
+    equity_parser.add_argument("--approved-by", required=True, metavar="NAME")
+    equity_parser.add_argument("--out", required=True)
+    equity_parser.add_argument("--reproducible", action="store_true")
+    equity_parser.set_defaults(func=_cmd_equity_review)
+
+    verify_workflow_parser = sub.add_parser(
+        "verify-workflow",
+        help="validate a versioned evidence-workflow artifact",
+        parents=[json_parent],
+    )
+    verify_workflow_parser.add_argument("--artifact", required=True)
+    verify_workflow_parser.set_defaults(func=_cmd_verify_workflow)
+
     cards_parser = sub.add_parser(
         "cards", help="generate or check the model and data cards", parents=[json_parent]
     )
@@ -1142,8 +1342,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     func = args.func
     try:
         result: int = func(args)
-    except DraftingPolicyError as exc:
-        print(f"drafting policy: FAIL — {exc}", file=sys.stderr)
+    except (DraftingPolicyError, WorkflowError) as exc:
+        label = "drafting policy" if isinstance(exc, DraftingPolicyError) else "workflow"
+        print(f"{label}: FAIL — {exc}", file=sys.stderr)
         return EXIT_VERIFY_FAIL
     return result
 
