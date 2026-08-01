@@ -1,0 +1,96 @@
+{
+  "artifacts": {
+    "report.md": "754bf57c0fbe20f9f8bc74f0f82a14b77739fe90107b863524df0a66e58624bd",
+    "trace.html": "a638481e81d83e794c66a0767d21142b13cad71253fb43c761e808e13eb84b88"
+  },
+  "hash": {
+    "algorithm": "blake2b",
+    "canonicalization": "v1",
+    "digest_size": 32
+  },
+  "provenance": {
+    "aggregate_only": true,
+    "approved_at": "1970-01-01T00:00:00+00:00",
+    "approved_by": "CI",
+    "grounding_gate": "pass",
+    "model_wrote_numbers": false,
+    "narrative_drafter": "deterministic",
+    "numbers_bound": 1,
+    "numbers_from": "deterministic_sql",
+    "numbers_unbound": 0,
+    "suppression_applied": true
+  },
+  "receipts": [
+    {
+      "caveat": "Client records missing a client_id are dropped before counting, so this figure may slightly undercount clients with incomplete intake data.",
+      "collection_frequency": "Continuous, reported quarterly",
+      "column_names": [
+        "client_id"
+      ],
+      "computed_at": "1970-01-01T00:00:00+00:00",
+      "data_source": "HMIS enrollment records",
+      "definition": "Each person enrolled in the housing program during the reporting period, counted once by client_id even if they enrolled more than once. The unit is the person, not the enrollment.",
+      "display": "12",
+      "indicator": "Number of unduplicated individuals served",
+      "kind": "output",
+      "metric_id": "clients_served",
+      "row_count": 12,
+      "slice_hash": "5fb9cf7a45262e7ecb099944819e8605f28a036d084034898fd93edda1f7e01e",
+      "unit": "count",
+      "value": 12.0,
+      "value_sql": "SELECT COUNT(DISTINCT client_id) FROM data"
+    },
+    {
+      "caveat": "",
+      "collection_frequency": "",
+      "column_names": [],
+      "computed_at": "1970-01-01T00:00:00+00:00",
+      "data_source": "",
+      "definition": "Enrollments with a recorded exit date. The unit is the enrollment, so a client who exited two enrollments counts twice. A blank exit date is treated as still enrolled, not as an exit.",
+      "display": "[SUPPRESSED]",
+      "indicator": "",
+      "kind": "output",
+      "metric_id": "exits",
+      "row_count": 0,
+      "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "unit": "count",
+      "value": 0.0,
+      "value_sql": "SELECT COUNT(*) FROM data WHERE exit_date != ''"
+    },
+    {
+      "caveat": "",
+      "collection_frequency": "",
+      "column_names": [],
+      "computed_at": "1970-01-01T00:00:00+00:00",
+      "data_source": "",
+      "definition": "Exits whose exit_destination is 'permanent'. Destination categories are taken as recorded; an unrecorded destination is not counted as permanent.",
+      "display": "[SUPPRESSED]",
+      "indicator": "",
+      "kind": "output",
+      "metric_id": "exits_permanent",
+      "row_count": 0,
+      "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "unit": "count",
+      "value": 0.0,
+      "value_sql": "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
+    },
+    {
+      "caveat": "",
+      "collection_frequency": "",
+      "column_names": [],
+      "computed_at": "1970-01-01T00:00:00+00:00",
+      "data_source": "",
+      "definition": "Permanent-housing exits divided by all exits in the period, as a whole-number percent. The denominator is exits, not all enrolled clients, so a client still enrolled is not in it.",
+      "display": "[SUPPRESSED]",
+      "indicator": "",
+      "kind": "outcome",
+      "metric_id": "pct_permanent",
+      "row_count": 0,
+      "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "unit": "percent",
+      "value": 0.0,
+      "value_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN exit_destination = 'permanent' THEN 1 ELSE 0 END) / COUNT(*)) FROM data WHERE exit_date != ''"
+    }
+  ],
+  "schema_version": "1.0"
+}

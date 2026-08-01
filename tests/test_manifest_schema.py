@@ -49,6 +49,11 @@ def test_manifest_carries_schema_version_and_hash_block() -> None:
     }
 
 
+def test_published_schema_pins_the_manifest_version() -> None:
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    assert schema["properties"]["schema_version"]["const"] == SCHEMA_VERSION
+
+
 def test_manifest_receipts_carry_column_names() -> None:
     manifest = json.loads(receipts_manifest(_figures()))
     for receipt in manifest["receipts"]:

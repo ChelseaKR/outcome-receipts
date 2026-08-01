@@ -5,8 +5,6 @@
 #
 #   receipts run --config examples/housing-demo/report.toml --out out
 
-schema_version = "1.0"
-
 [data]
 path = "services.csv"
 

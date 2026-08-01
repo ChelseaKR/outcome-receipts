@@ -32,6 +32,7 @@ PROMISED = (
     "FigureDelta",
     "ManifestDiff",
     "load_spec",
+    "SPEC_SCHEMA_VERSION",
     "Spec",
     "Clock",
     "SystemClock",

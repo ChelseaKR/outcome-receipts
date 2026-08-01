@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from outcome_receipts.config import load_spec
+from outcome_receipts.config import SPEC_SCHEMA_VERSION, load_spec
 from outcome_receipts.scaffold import scaffold_spec
 
 _HEADER = "client_id,program,enrolled_date,exit_date,exit_destination"
@@ -63,6 +63,7 @@ def test_data_path_is_the_csv_basename(tmp_path: Path) -> None:
 def test_scaffold_parses_as_toml(tmp_path: Path) -> None:
     csv_path = _fixture_csv(tmp_path)
     parsed = tomllib.loads(scaffold_spec(csv_path))
+    assert parsed["schema_version"] == SPEC_SCHEMA_VERSION
     assert parsed["metrics"]["row_count"]["value_sql"] == ""
     assert parsed["metrics"]["row_count"]["slice_sql"] == ""
     assert parsed["metrics"]["row_count"]["definition"] == ""
