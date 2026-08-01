@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+.tools
+.lighthouseci
+.mypy_cache
+.pytest_cache
+.ruff_cache
+node_modules
+out
+dist
+tests
+docs
+examples
+*.pyc
+__pycache__
