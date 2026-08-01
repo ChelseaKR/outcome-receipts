@@ -11,6 +11,20 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- Digest-pinned, non-root Docker self-hosting with a one-command demo,
+  networkless/read-only smoke test, and blocking Trivy HIGH/CRITICAL scan.
+- A `1.0` report-spec schema and compatibility policy beside the existing
+  receipts-manifest schema; scaffolds and maintained examples declare the
+  version, and unsupported versions fail before compute.
+- Deterministic, fail-closed CLI workflows for restatements, migration
+  equivalence, requirement changes, contract evidence, federated rollups, and
+  suppression-aware equity reviews, with typed relationships, receipt-composed
+  derived figures, a versioned artifact schema, and passing/failing fixtures.
+- `receipts verify-workflow` plus generated, drift-checked version-1.0
+  compatibility fixtures for all six workflow artifact kinds.
+- A byte-for-byte compatibility baseline from signed tag `v0.1.0`; current code
+  loads its unversioned beta report spec and re-derives its version-1.0 receipt
+  manifest in CI.
 - Full portfolio-standards v1.0.1 conformance gate: CodeQL, OpenSSF Scorecard,
   standards pin/fetch, source and documentation hygiene, critical-module
   coverage, npm/OSV/security scans, and live repository hardening.

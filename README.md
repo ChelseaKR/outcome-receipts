@@ -17,12 +17,16 @@ trace to a receipt.
 > **Status: Beta.** The first tagged release is `v0.1.0`. The default path is
 > deterministic, offline, and tested end to end. The release includes the completed privacy,
 > verification, mapping, localization, multi-template, reconciliation, and
-> optional Bedrock-drafting roadmap work. Bedrock is off by default and requires
-> two explicit opt-ins. A committed eval ([eval/report.md](eval/report.md)) scores
-> the grounding gate. See [CHANGELOG.md](CHANGELOG.md) and
+> optional Bedrock-drafting roadmap work. The v1 implementation package adds
+> container self-hosting, stable report and artifact contracts, and six bounded
+> evidence workflows; the v1 tag remains gated on real-organization,
+> cross-release, and manual assistive-technology evidence. Bedrock is off by
+> default and requires two explicit opt-ins. A
+> committed eval ([eval/report.md](eval/report.md)) scores the grounding gate.
+> See [CHANGELOG.md](CHANGELOG.md) and
 > [SECURITY.md](SECURITY.md#supported-versions).
 >
-> *Last verified: 2026-07-11 · Recheck: quarterly*
+> *Last verified: 2026-07-22 · Recheck: quarterly*
 
 **Start here:** [run the five-minute synthetic demo](docs/TRY_THE_DEMO.md),
 [inspect the current evaluation](eval/report.md), or
@@ -84,8 +88,9 @@ alteration blocks export.
 ## Usage
 
 Prerequisites: Python 3.12, [uv](https://docs.astral.sh/uv/), GNU Make, and a
-clone of this repository. Install the locked development environment and activate
-it:
+clone of this repository. Docker with a running daemon is also required for the
+full contributor verification gate and container path, but not for ordinary
+Python CLI use. Install the locked development environment and activate it:
 
 ```sh
 make install
@@ -103,6 +108,15 @@ Run the bundled demo:
 ```sh
 receipts run --config examples/housing-demo/report.toml --out out --approved-by "A. Reviewer"
 ```
+
+Or run the same deterministic demo in the locked-down container:
+
+```sh
+make container-demo
+```
+
+See [container self-hosting](docs/SELF-HOSTING.md) for an organization-owned
+spec and the mount, identity, and backup boundaries.
 
 ```text
 loaded examples/housing-demo/services.csv: 12 rows, 5 columns, digest b8b5e05adefaa26f
@@ -140,6 +154,8 @@ A report spec identifies the CSV, narrative template, and deterministic query fo
 each placeholder. Paths resolve relative to the TOML file.
 
 ```toml
+schema_version = "1.0"
+
 [data]
 path = "services.csv"
 
@@ -158,7 +174,9 @@ slice_sql = "SELECT client_id FROM data"
 
 See [examples/housing-demo/report.toml](examples/housing-demo/report.toml) for a
 complete spec and `receipts init --data services.csv --out report.toml` for a
-fail-loud starter containing the source-column inventory.
+fail-loud starter containing the source-column inventory. The public spec and
+manifest compatibility rules are in
+[Specification and manifest stability](docs/SPEC-STABILITY.md).
 
 ### Privacy defaults
 
@@ -229,6 +247,11 @@ The committed result is in [eval/report.md](eval/report.md): the drafted
 narrative grounds 100% of its numbers, so the gate passes. That the gate catches
 an injected unverifiable number is shown by the merge-blocking test
 `tests/test_grounding_gate.py`.
+
+The authoritative product roadmap has no remaining repository-side
+implementation items. Evidence gates for a v1 tag and the implemented bounded
+applications are in [the roadmap](docs/ROADMAP.md) and
+[evidence use cases](docs/NOVEL-USE-CASES.md).
 
 ### English and Spanish report output
 
@@ -313,10 +336,23 @@ pinning guidance.
 | `receipts verify-bundle` | Recompute `bundle.json` member digests and an optional keyed signature. |
 | `receipts verify-ledger` | Re-hash the append-only export ledger and detect a broken chain. |
 | `receipts diff` | Explain added, removed, or changed figures between two manifests. |
+| `receipts restate` | Link a verified prior bundle to a receipted restatement and named approval. |
+| `receipts migrate-check` | Compare reviewed metrics across two schema-variant exports. |
+| `receipts requirements-diff` | Classify funder requirement changes by stable ID and text digest. |
+| `receipts contract-check` | Package receipted milestone, threshold, and financial evidence without making a legal determination. |
+| `receipts rollup` | Compose an aggregate count from verified, unsuppressed partner bundles. |
+| `receipts equity-review` | Package allowlisted subgroup receipts after whole-report suppression, with required policy and consent context. |
+| `receipts verify-workflow` | Validate an evidence artifact's schema version, typed relationship, digests, aggregate-only boundary, and composed-receipt lineage. |
 | `receipts cards` | Generate or drift-check the model and data cards. |
 
 Run `receipts <command> --help` for the complete option reference. Every command
 supports `--json` before or after the subcommand.
+
+The six evidence workflows are documented in
+[implemented use cases](docs/NOVEL-USE-CASES.md). Their artifacts share the
+versioned [workflow artifact schema](docs/schema/workflow-artifact.schema.json).
+Rollup and equity review are experimental for real organizational data until
+their documented privacy and user-validation gates are complete.
 
 ### CLI output and exit codes
 
@@ -337,9 +373,11 @@ recorded approval. Under `--json` there is no interactive sign-off prompt, so
 `null` approval in the payload. The `audit`, `verify`, `verify-bundle`,
 `verify-ledger`, `eval`, `diff`, and `cards` objects report their own results and
 details; `map` reports pending or blocked candidates without executing them;
-`init` carries the scaffolded spec and where it was written. The `--json` flag is
-accepted before or after the subcommand, so `receipts --json run ...` and
-`receipts run ... --json` are equivalent.
+`init` carries the scaffolded spec and where it was written.
+`verify-workflow` reports every artifact-contract check, and each workflow
+command returns the artifact it wrote. The `--json` flag is accepted before or
+after the subcommand, so `receipts --json run ...` and `receipts run ... --json`
+are equivalent.
 
 The exit code is the contract a script should read. It is stable across the human
 and JSON forms.

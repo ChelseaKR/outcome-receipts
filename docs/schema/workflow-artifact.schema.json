@@ -1,0 +1,378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChelseaKR/outcome-receipts/blob/main/docs/schema/workflow-artifact.schema.json",
+  "title": "Outcome Receipts workflow artifact",
+  "description": "Versioned contract for deterministic evidence-workflow artifacts.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "relationship"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "kind": {
+      "enum": [
+        "restatement",
+        "migration_equivalence",
+        "requirement_change",
+        "contract_evidence",
+        "federated_rollup",
+        "equity_review"
+      ]
+    },
+    "relationship": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "supersedes",
+            "compares_to",
+            "supports_contract",
+            "rolls_up",
+            "slices"
+          ]
+        },
+        "bundle_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "additionalProperties": false
+    },
+    "approved_by": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "current_spec_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "current_manifest_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "before_spec_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "after_spec_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "prior_document_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "current_document_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "contract_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "plan_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "spec_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "reason": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "contract_id": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "controlling_text": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "policy_citation": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "legal_determination": {
+      "const": "not_made"
+    },
+    "period": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "population_overlap": {
+      "enum": [
+        "disjoint",
+        "not_deduplicated"
+      ]
+    },
+    "suppression_policy_id": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "dimension": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "purpose": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "controlling_policy": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "consent_basis": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "category_provenance": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "changed": {
+      "type": "array"
+    },
+    "added": {
+      "type": "array"
+    },
+    "removed": {
+      "type": "array"
+    },
+    "unchanged": {
+      "type": "array"
+    },
+    "metrics": {
+      "type": "array"
+    },
+    "requirements": {
+      "type": "array"
+    },
+    "milestones": {
+      "type": "array",
+      "minItems": 1
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 2
+    },
+    "rollup_receipt": {
+      "$ref": "#/$defs/composedReceipt"
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 2
+    },
+    "interpretation_limits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": {
+          "const": "restatement"
+        },
+        "relationship": {
+          "properties": {
+            "type": {
+              "const": "supersedes"
+            }
+          },
+          "required": [
+            "bundle_digest"
+          ]
+        }
+      },
+      "required": [
+        "reason",
+        "approved_by",
+        "current_spec_digest",
+        "current_manifest_digest",
+        "changed",
+        "added",
+        "removed",
+        "unchanged"
+      ]
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "migration_equivalence"
+        },
+        "relationship": {
+          "properties": {
+            "type": {
+              "const": "compares_to"
+            }
+          }
+        }
+      },
+      "required": [
+        "approved_by",
+        "before_spec_digest",
+        "after_spec_digest",
+        "metrics"
+      ]
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "requirement_change"
+        },
+        "relationship": {
+          "properties": {
+            "type": {
+              "const": "compares_to"
+            }
+          }
+        }
+      },
+      "required": [
+        "prior_document_digest",
+        "current_document_digest",
+        "requirements"
+      ]
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "contract_evidence"
+        },
+        "relationship": {
+          "properties": {
+            "type": {
+              "const": "supports_contract"
+            }
+          }
+        }
+      },
+      "required": [
+        "contract_id",
+        "contract_digest",
+        "controlling_text",
+        "policy_citation",
+        "approved_by",
+        "milestones",
+        "legal_determination"
+      ]
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "federated_rollup"
+        },
+        "relationship": {
+          "properties": {
+            "type": {
+              "const": "rolls_up"
+            }
+          }
+        }
+      },
+      "required": [
+        "plan_digest",
+        "period",
+        "population_overlap",
+        "suppression_policy_id",
+        "approved_by",
+        "inputs",
+        "rollup_receipt"
+      ]
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "equity_review"
+        },
+        "relationship": {
+          "properties": {
+            "type": {
+              "const": "slices"
+            }
+          }
+        }
+      },
+      "required": [
+        "spec_digest",
+        "plan_digest",
+        "dimension",
+        "purpose",
+        "controlling_policy",
+        "consent_basis",
+        "category_provenance",
+        "approved_by",
+        "groups",
+        "interpretation_limits"
+      ]
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "composedReceipt": {
+      "type": "object",
+      "required": [
+        "provenance_type",
+        "metric_id",
+        "operation",
+        "query",
+        "inputs",
+        "input_digest",
+        "value",
+        "display",
+        "unit",
+        "computed_at"
+      ],
+      "properties": {
+        "provenance_type": {
+          "const": "receipt_composed"
+        },
+        "metric_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "operation": {
+          "enum": [
+            "sum",
+            "delta"
+          ]
+        },
+        "query": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "metric_id",
+              "receipt_digest"
+            ],
+            "properties": {
+              "metric_id": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "receipt_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "input_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "value": {
+          "type": "number"
+        },
+        "display": {
+          "type": "string"
+        },
+        "unit": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "computed_at": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

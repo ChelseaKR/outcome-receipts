@@ -95,3 +95,13 @@ jobs:
           config: examples/housing-demo/report.toml
           receipts: examples/housing-demo/receipts.json
           version: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  container:
+    name: container (build · smoke · trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Build, smoke-test, and scan through the local verification target
+        run: make container-verify

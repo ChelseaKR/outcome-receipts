@@ -14,6 +14,8 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from outcome_receipts.config import SPEC_SCHEMA_VERSION
+
 
 def _columns(csv_path: Path) -> list[str]:
     """The CSV's column names in file order.
@@ -72,6 +74,8 @@ def scaffold_spec(csv_path: Path, title: str | None = None) -> str:
         "# lists the columns your export actually has (see the inventory below) and",
         "# writes the spec's shape. Fill each stub in, then add one metric table per",
         "# figure your report needs.",
+        "",
+        f'schema_version = "{SPEC_SCHEMA_VERSION}"',
         "",
         "[data]",
         f"path = {_toml_basic_string(filename)}",

@@ -1,0 +1,13 @@
+client_id,program,enrolled_date,exit_date,exit_destination
+C001,housing,2025-01-05,2025-04-10,permanent
+C002,housing,2025-01-06,2025-05-01,permanent
+C003,housing,2025-01-10,2025-05-15,permanent
+C004,housing,2025-02-01,2025-06-01,permanent
+C005,housing,2025-02-03,2025-06-10,permanent
+C006,housing,2025-02-15,2025-06-20,permanent
+C007,housing,2025-03-01,2025-06-25,temporary
+C008,housing,2025-03-05,2025-06-28,temporary
+C009,housing,2025-03-10,2025-06-30,unknown
+C010,housing,2025-03-12,2025-07-01,temporary
+C011,housing,2025-04-01,,
+C012,housing,2025-04-05,,

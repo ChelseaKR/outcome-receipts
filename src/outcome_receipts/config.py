@@ -36,6 +36,7 @@ from outcome_receipts.models import (
 _VALID_UNITS = frozenset({"count", "percent", "money", "duration", "rate"})
 _VALID_KINDS = frozenset({"output", "outcome"})
 _VALID_CHART_KINDS = frozenset({"bar", "line"})
+SPEC_SCHEMA_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class Spec:
 
     data_path: Path
     report: ReportSpec
+    schema_version: str = SPEC_SCHEMA_VERSION
 
 
 def _resolve(base: Path, value: str) -> Path:
@@ -256,6 +258,15 @@ def load_spec(path: str | Path) -> Spec:
     with spec_path.open("rb") as handle:
         data = tomllib.load(handle)
 
+    raw_schema_version = data.get("schema_version", SPEC_SCHEMA_VERSION)
+    if not isinstance(raw_schema_version, str):
+        raise ValueError("spec schema_version must be a string")
+    if raw_schema_version != SPEC_SCHEMA_VERSION:
+        raise ValueError(
+            f"spec schema_version {raw_schema_version!r} is not supported; "
+            f"expected {SPEC_SCHEMA_VERSION!r}"
+        )
+
     data_section = data.get("data", {})
     report_section = data.get("report", {})
     metric_section = data.get("metrics", {})
@@ -300,4 +311,8 @@ def load_spec(path: str | Path) -> Spec:
         templates=templates,
         drafting=drafting,
     )
-    return Spec(data_path=_resolve(base, str(data_section["path"])), report=report)
+    return Spec(
+        data_path=_resolve(base, str(data_section["path"])),
+        report=report,
+        schema_version=raw_schema_version,
+    )

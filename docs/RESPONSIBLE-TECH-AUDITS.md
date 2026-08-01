@@ -103,7 +103,10 @@ are not inferred from automated results.
 - ASVS: N/A for auth/authz/ingress because the product is an offline CLI. Input
   validation, SQL trust boundaries, output encoding, and all supply-chain controls
   still apply.
-- Container scanning: N/A because the repository has no Dockerfile or image.
+- Container scanning: the optional self-host image pins its Python and uv bases
+  by digest, installs from `uv.lock`, runs as a numeric non-root user, and is
+  smoke-tested with no network, no capabilities, and a read-only root. CI fails
+  on HIGH or CRITICAL OS/library findings from Trivy.
 - SBOM/signing: CycloneDX 1.7 SBOM plus GitHub Sigstore-backed build and SBOM
   attestations on every signed-tag release; PyPI uses OIDC Trusted Publishing.
 - Secret policy: credentials stay in environment/provider stores, never config;
@@ -113,8 +116,10 @@ are not inferred from automated results.
   npm audit, gitleaks, zizmor, and OpenSSF Scorecard are blocking on their declared
   triggers. Dynamic SQL waivers are narrow, quoted/trusted, and tracked in issue
   52 plus `.semgrep-waivers.yml`. The Python 3.7 compatibility false positive
-  remains tracked in issue 53; a no-suppression scan on 2026-07-12 confirmed the
-  combined Semgrep profile still reports it against this Python 3.12-only package.
+  remains tracked in issue 53. The 2026-07-22 waiver review confirmed that
+  identifiers remain quoted, SQL values remain parameterized, mapping candidates
+  remain unexecuted, and a no-suppression Semgrep 1.168.0 scan still reports the
+  obsolete Python 3.7 rule against this Python 3.12-only package.
 - VEX: N/A today because scans report no unfixable HIGH/CRITICAL dependency CVE.
   Any future exception requires a CycloneDX VEX and quarterly review.
 
@@ -132,9 +137,10 @@ register under `docs/audits/`.
 | EN/ES key and placeholder parity | AUTO | gettext extraction/compile/parity target |
 | Generated HTML accessibility | AUTO | axe, pa11y, Lighthouse, reflow, reduced motion |
 | Dependency, secret, SAST, workflow security | AUTO | `make security`, CodeQL, Scorecard |
+| Container build and vulnerability scan | AUTO | Locked-down smoke and Trivy in CI |
 | Model/data cards and eval current | AUTO | generated-card and eval diff checks |
 | Metric/policy fairness review | REVIEW | Human approval and ADR/PR checklist |
 | Manual assistive-technology review | REVIEW | Dated walkthrough; currently incomplete |
 | Residual-risk acceptance | REVIEW | Dated residual-risk register |
 
-Status: beta. *Last verified: 2026-07-12 · Recheck: quarterly and every release.*
+Status: beta. *Last verified: 2026-07-22 · Recheck: quarterly and every release.*

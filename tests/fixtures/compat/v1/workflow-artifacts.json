@@ -1,0 +1,371 @@
+{
+  "artifact_schema_version": "1.0",
+  "artifacts": [
+    {
+      "added": [],
+      "approved_by": "Compatibility fixture reviewer",
+      "changed": [
+        {
+          "current": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "synthetic_key"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "People represented by one row in the synthetic compatibility fixture.",
+            "display": "14",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "served",
+            "row_count": 14,
+            "slice_hash": "7b3c5f34e1662f3db560400ee4af33ca00715d14126fdbc555d268a754cb21b6",
+            "unit": "count",
+            "value": 14.0,
+            "value_sql": "SELECT COUNT(*) FROM data"
+          },
+          "delta_receipt": {
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "display": "2",
+            "input_digest": "8b2fc1c8adc5794d701b505205e4156c7294d15eddac1a9d746a2ff9db08bdc9",
+            "inputs": [
+              {
+                "metric_id": "served",
+                "receipt_digest": "d7f681a6d075585ce9c66b72d91113fe8cc1af90b8c518dce580079665cb46ee"
+              },
+              {
+                "metric_id": "served",
+                "receipt_digest": "930443373616c473f0588186ae44fefcebb9f26a78833805d99881f216c600f6"
+              }
+            ],
+            "metric_id": "served__restatement_delta",
+            "operation": "delta",
+            "provenance_type": "receipt_composed",
+            "query": "SELECT (SELECT value FROM receipt_inputs WHERE position = 1) - (SELECT value FROM receipt_inputs WHERE position = 0)",
+            "unit": "count",
+            "value": 2.0
+          },
+          "metric_id": "served",
+          "prior": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "synthetic_key"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "People represented by one row in the synthetic compatibility fixture.",
+            "display": "12",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "served",
+            "row_count": 12,
+            "slice_hash": "9691ab7c9a94f163b01bd45348fd313cabd811875e0d2a72ed7c1afeab9e344c",
+            "unit": "count",
+            "value": 12.0,
+            "value_sql": "SELECT COUNT(*) FROM data"
+          },
+          "reasons": [
+            "value 12.0 -> 14.0",
+            "row count 12 -> 14",
+            "slice hash changed"
+          ]
+        }
+      ],
+      "current_manifest_digest": "86d757f180367f18637b4ab33cc9f5760342405ce7d418a78c5d9701e7aa89cb",
+      "current_spec_digest": "d65438ef0569cdae5edde76215e7309876aaba5ca5dca0745a64b51a40ffa35a",
+      "kind": "restatement",
+      "reason": "Synthetic late records were accepted.",
+      "relationship": {
+        "bundle_digest": "3f5ff3bd8ba8a8ee3279514436aee987febe6ec08551885773db33a1321076d0",
+        "type": "supersedes"
+      },
+      "removed": [],
+      "schema_version": "1.0",
+      "unchanged": []
+    },
+    {
+      "after_spec_digest": "d65438ef0569cdae5edde76215e7309876aaba5ca5dca0745a64b51a40ffa35a",
+      "approved_by": "Compatibility fixture reviewer",
+      "before_spec_digest": "d65438ef0569cdae5edde76215e7309876aaba5ca5dca0745a64b51a40ffa35a",
+      "kind": "migration_equivalence",
+      "metrics": [
+        {
+          "after": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "synthetic_key"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "People represented by one row in the synthetic compatibility fixture.",
+            "display": "14",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "served",
+            "row_count": 14,
+            "slice_hash": "7b3c5f34e1662f3db560400ee4af33ca00715d14126fdbc555d268a754cb21b6",
+            "unit": "count",
+            "value": 14.0,
+            "value_sql": "SELECT COUNT(*) FROM data"
+          },
+          "before": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "synthetic_key"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "People represented by one row in the synthetic compatibility fixture.",
+            "display": "12",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "served",
+            "row_count": 12,
+            "slice_hash": "9691ab7c9a94f163b01bd45348fd313cabd811875e0d2a72ed7c1afeab9e344c",
+            "unit": "count",
+            "value": 12.0,
+            "value_sql": "SELECT COUNT(*) FROM data"
+          },
+          "delta_receipt": {
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "display": "2",
+            "input_digest": "8b2fc1c8adc5794d701b505205e4156c7294d15eddac1a9d746a2ff9db08bdc9",
+            "inputs": [
+              {
+                "metric_id": "served",
+                "receipt_digest": "d7f681a6d075585ce9c66b72d91113fe8cc1af90b8c518dce580079665cb46ee"
+              },
+              {
+                "metric_id": "served",
+                "receipt_digest": "930443373616c473f0588186ae44fefcebb9f26a78833805d99881f216c600f6"
+              }
+            ],
+            "metric_id": "served__migration_delta",
+            "operation": "delta",
+            "provenance_type": "receipt_composed",
+            "query": "SELECT (SELECT value FROM receipt_inputs WHERE position = 1) - (SELECT value FROM receipt_inputs WHERE position = 0)",
+            "unit": "count",
+            "value": 2.0
+          },
+          "metric_id": "served",
+          "status": "changed"
+        }
+      ],
+      "relationship": {
+        "type": "compares_to"
+      },
+      "schema_version": "1.0"
+    },
+    {
+      "current_document_digest": "2c20cd0a6eee46293cf35e04abd408b7f02c71b53d9490f9e3ad7c6aa28c8b6b",
+      "kind": "requirement_change",
+      "prior_document_digest": "6e953dc2d0b85be6e78c7eb854f2096a232815ed7fb39aac9b51f752910109d5",
+      "relationship": {
+        "type": "compares_to"
+      },
+      "requirements": [
+        {
+          "current_text_digest": "1006a78a18b94aab50722f9a8f0331f71b19df2e1d38b1c23557bfc0696ea01a",
+          "prior_text_digest": null,
+          "requirement_id": "exits",
+          "review_status": "not_required",
+          "status": "added"
+        },
+        {
+          "current_text_digest": "14463c7ec16121e5663e62efe9026f5bec4cf0a69913f26f7cf268f70394e979",
+          "prior_text_digest": "d945bd584ac1d5db34822039db1e6c102ef11f2701f7806d93afbb94d247a940",
+          "requirement_id": "served",
+          "review_status": "required",
+          "status": "definition_changed"
+        }
+      ],
+      "schema_version": "1.0"
+    },
+    {
+      "approved_by": "Compatibility fixture reviewer",
+      "contract_digest": "0b818e7dc52aa79e396aea096666391f13e6d8a19dc9e2dfc0674d8c55e1344d",
+      "contract_id": "synthetic-contract",
+      "controlling_text": "Synthetic compatibility fixture section A.",
+      "kind": "contract_evidence",
+      "legal_determination": "not_made",
+      "milestones": [
+        {
+          "comparison": "gte",
+          "financial": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "amount"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Amount copied into the synthetic controlling field.",
+            "display": "$5,000",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "financial",
+            "row_count": 12,
+            "slice_hash": "6b4d33d03feeef298c7f8cba2ef7a29c0c63627903bda7dfeba9cb045636d560",
+            "unit": "money",
+            "value": 5000.0,
+            "value_sql": "SELECT MAX(CAST(amount AS INTEGER)) FROM data"
+          },
+          "milestone_id": "synthetic-milestone",
+          "observed": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "synthetic_key"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Synthetic people represented by one row.",
+            "display": "12",
+            "indicator": "",
+            "kind": "outcome",
+            "metric_id": "observed",
+            "row_count": 12,
+            "slice_hash": "9691ab7c9a94f163b01bd45348fd313cabd811875e0d2a72ed7c1afeab9e344c",
+            "unit": "count",
+            "value": 12.0,
+            "value_sql": "SELECT COUNT(*) FROM data"
+          },
+          "status": "met",
+          "threshold": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "threshold"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Threshold copied into the synthetic controlling field.",
+            "display": "11",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "threshold",
+            "row_count": 12,
+            "slice_hash": "5ede6c808e135c5574bcdff8b7127e8c929fbdd05f363095a3888b696791c8c8",
+            "unit": "count",
+            "value": 11.0,
+            "value_sql": "SELECT MAX(CAST(threshold AS INTEGER)) FROM data"
+          }
+        }
+      ],
+      "policy_citation": "Synthetic compatibility fixture section A.",
+      "relationship": {
+        "type": "supports_contract"
+      },
+      "schema_version": "1.0"
+    },
+    {
+      "approved_by": "Compatibility fixture reviewer",
+      "inputs": [
+        {
+          "bundle_digest": "3f5ff3bd8ba8a8ee3279514436aee987febe6ec08551885773db33a1321076d0",
+          "partner": "Partner A"
+        },
+        {
+          "bundle_digest": "98f67009bc79b259fc47a5ca07b490f1e0a9cb441e3247b17a37883d7b2673d5",
+          "partner": "Partner B"
+        }
+      ],
+      "kind": "federated_rollup",
+      "period": "2026-Q2",
+      "plan_digest": "74b3eb3d1067a89dfa1248f1159566814f7d95bc044c59425bd34368664903fa",
+      "population_overlap": "not_deduplicated",
+      "relationship": {
+        "type": "rolls_up"
+      },
+      "rollup_receipt": {
+        "computed_at": "1970-01-01T00:00:00+00:00",
+        "display": "25",
+        "input_digest": "1649859090459e91b6026112344633b5fff287baed35cba50cb5c27148d2c309",
+        "inputs": [
+          {
+            "metric_id": "served",
+            "receipt_digest": "702596c14f359647a2bb2fcec0f29e3e80ab6828b7c9afefedeb4afc2e280a08"
+          },
+          {
+            "metric_id": "served",
+            "receipt_digest": "d7f681a6d075585ce9c66b72d91113fe8cc1af90b8c518dce580079665cb46ee"
+          }
+        ],
+        "metric_id": "served__rollup",
+        "operation": "sum",
+        "provenance_type": "receipt_composed",
+        "query": "SELECT SUM(value) FROM receipt_inputs",
+        "unit": "count",
+        "value": 25.0
+      },
+      "schema_version": "1.0",
+      "suppression_policy_id": "cms-small-cell-v1"
+    },
+    {
+      "approved_by": "Compatibility fixture reviewer",
+      "category_provenance": "Generated compatibility fixture.",
+      "consent_basis": "Synthetic data; no people represented.",
+      "controlling_policy": "CMS-modeled small-cell test policy.",
+      "dimension": "synthetic operator-approved grouping",
+      "groups": [
+        {
+          "label": "Group A",
+          "receipt": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Synthetic records in operator-reviewed group A.",
+            "display": "[SUPPRESSED]",
+            "indicator": "",
+            "kind": "outcome",
+            "metric_id": "group_a",
+            "row_count": 0,
+            "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "unit": "count",
+            "value": 0.0,
+            "value_sql": "SELECT COUNT(*) FROM data WHERE category = 'A'"
+          }
+        },
+        {
+          "label": "Group B",
+          "receipt": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Synthetic records in operator-reviewed group B.",
+            "display": "[SUPPRESSED]",
+            "indicator": "",
+            "kind": "outcome",
+            "metric_id": "group_b",
+            "row_count": 0,
+            "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "unit": "count",
+            "value": 0.0,
+            "value_sql": "SELECT COUNT(*) FROM data WHERE category = 'B'"
+          }
+        }
+      ],
+      "interpretation_limits": [
+        "No group ranking is produced.",
+        "No causal or fairness conclusion is produced."
+      ],
+      "kind": "equity_review",
+      "plan_digest": "c942e3ca92e36a135488b7f7215a113dd30a9be77dc27ba4414853f90ce7ef76",
+      "purpose": "Compatibility testing without interpretation.",
+      "relationship": {
+        "type": "slices"
+      },
+      "schema_version": "1.0",
+      "spec_digest": "b6b5f1c7f7b1433bf0d34a13a092129adff97dc545dc429f7e37f1940ec6f3cf"
+    }
+  ],
+  "fixture_schema_version": "1.0"
+}

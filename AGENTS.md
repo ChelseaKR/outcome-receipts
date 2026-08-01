@@ -71,13 +71,12 @@ speaks only to nonprofit practitioners.
   value matches. Unbound or mismatched numbers are stripped and surfaced for
   review. A report cannot be exported while any numeric span is unbound.
 * **Small-cell suppression is a privacy invariant, not a setting.** Aggregate
-  outcome counts below the suppression threshold (default n < 11, the common
-  HUD/HMIS floor — confirm the exact rule from primary HUD guidance before
-  hard-coding it) are suppressed in every export, and complementary suppression
-  is applied so a suppressed cell cannot be recovered by subtraction. This will
-  be a merge-blocking test (`tests/test_suppression.py`, planned for v0.2 — not
-  yet present in the tree). Do not invent the threshold or the complementary
-  rule; cite the source.
+  outcome counts below the controlling threshold are suppressed in every export,
+  and complementary suppression is applied so a suppressed cell cannot be
+  recovered by subtraction. The CMS-modeled default suppresses 1 through 10;
+  HUD leaves the numeric rule to the applicable policy. This is merge-blocked by
+  `tests/test_suppression.py`. Do not invent a report-specific threshold or
+  complementary rule; cite the controlling source.
 * **Aggregate-only by default.** A report is aggregate statistics, not a client
   roster. The export path emits counts, rates, and the narrative; it never emits
   client-level rows. Emitting a client identifier in a report is a defect.
@@ -159,7 +158,7 @@ outcome-receipts/
 ├── Makefile                       # install / lint / type / test / eval / verify
 ├── src/outcome_receipts/          # flat module layout — no sub-packages yet
 │   ├── __init__.py                # package entry; the supported surface is the receipts CLI
-│   ├── cli.py                     # receipts run | audit | verify | eval
+│   ├── cli.py                     # report, audit, verification, mapping, and evidence-workflow commands
 │   ├── config.py                  # report-spec + metric-spec + policy loading from TOML
 │   ├── models.py                  # core data types: Receipt, Figure, MetricSpec, Report
 │   ├── clock.py                   # time source for receipts (injectable, deterministic in tests)
@@ -171,14 +170,22 @@ outcome-receipts/
 │   ├── provenance.py              # the provenance statement that travels with every export
 │   ├── trace.py                   # funder-facing trace view: static, accessible HTML of the receipts
 │   ├── verify.py                  # re-derivation check for a committed receipts manifest
+│   ├── workflows.py               # fail-closed restatement, migration, contract, rollup, and equity evidence
 │   ├── evaluate.py                # eval scoring: grounding rate, hallucinated-number rate, Wilson CIs, kappa
-│   └── report.py                  # rendering for the report, the receipts manifest, and the eval
-│   # PLANNED (v0.2, no source file yet): small-cell suppression, data-loading,
-│   # and the funder-template mapping/review surface — see the Roadmap below.
+│   ├── report.py                  # rendering for the report, the receipts manifest, and the eval
+│   ├── suppression.py             # primary, complementary, delta, and percentage disclosure controls
+│   ├── mapping.py                 # deterministic schema mapping and fail-closed review queue
+│   ├── model_draft.py             # optional policy-gated Bedrock prose seam
+│   ├── bundle.py                  # tamper-evident export bundle
+│   ├── ledger.py                  # hash-chained export history
+│   ├── diff.py                    # manifest comparison
+│   ├── scaffold.py                # fail-loud starter spec generation
+│   ├── cards.py                   # generated model/data cards
+│   └── copy.py                    # EN/ES reviewer-facing strings
 ├── tests/                         # one module per source module, plus grounded-section tests
 │   ├── test_grounding_gate.py     # MERGE-BLOCKING: no unbound number survives the gate
-│   └── test_*.py                  # engine, draft, comparison, charts, provenance, trace, verify, eval, config, definition
-│   # PLANNED merge-blocking tests (v0.2): test_suppression.py, test_no_model_numbers.py
+│   ├── test_suppression.py        # MERGE-BLOCKING: no small or recoverable cell survives
+│   └── test_*.py                  # engine, draft, mapping, bundle, ledger, schemas, container, and docs gates
 ├── eval/                          # committed eval report (report.md)
 ├── examples/                      # runnable example configs: board-report, grant-report, housing-demo
 ├── docs/
@@ -216,8 +223,10 @@ Decisions made now so they are not relitigated:
 
 ## Build plan
 
-Ship the differentiator first with the least-risky subsystems, then grow the
-chain outward. Phases are tracked in `docs/ROADMAP.md`.
+The sequence below is the historical delivery order. The repository-side work
+through the v1 implementation package is complete; release evidence and
+post-roadmap use cases are tracked in `docs/ROADMAP.md` and
+`docs/NOVEL-USE-CASES.md`.
 
 * **v0.1 — Receipts, no LLM.** Service-data CSV in, a TOML metric spec, the
   deterministic engine, receipts, the deterministic template drafter, and the
@@ -238,15 +247,16 @@ chain outward. Phases are tracked in `docs/ROADMAP.md`.
   manifest of its receipts and slice hashes; `receipts verify` re-checks that the
   figures still compute from the cited data. Reuses the portfolio hash-chain
   pattern.
-* **v1.0 — A second funder template, Docker self-host, committed audits, schema
-  stability guarantees.**
+* **v1 implementation package.** Multi-funder output, digest-pinned Docker
+  self-hosting, committed audits, and versioned report-spec/manifest contracts
+  are implemented. A v1 tag still requires real-organization, cross-release, and
+  manual assistive-technology evidence.
 
 ## Quality bar
 
 * Every step has a passing and a failing fixture. The privacy-and-trust
-  invariants ride on merge-blocking tests: `test_grounding_gate.py` (present and
-  green on `main`); `test_suppression.py` and `test_no_model_numbers.py` are
-  planned for v0.2, when suppression and the model-drafting seam land.
+  invariants ride on merge-blocking grounding, suppression, model-drafting,
+  bundle, schema, and artifact-boundary tests.
 * `ruff check`, `mypy --strict`, and `pytest` (branch coverage ≥ 90%) pass in CI
   before any feature work continues. No skipped tests on `main`. No bare
   `# type: ignore` or `# noqa` without an issue reference.
@@ -267,19 +277,18 @@ rule-of-three rhetorical constructions. No "simply," "just," "powerful,"
 what is true, where, and what the reviewer should do, in language a grant
 manager can act on. Write like a careful engineer, not a launch tweet.
 
-## Open questions to resolve early (do not guess)
+## Resolved early questions
 
-1. The metric engine backend: DuckDB versus pure-pandas versus stdlib `sqlite3`,
-   judged on determinism, packaging weight in a CI install, and how cleanly a
-   `MetricSpec` query expresses an "unduplicated count over a date window."
-2. The exact small-cell suppression threshold and complementary-suppression
-   rule, from primary HUD HMIS reporting guidance, expressed as tests. Do not
-   hard-code n < 11 without confirming it against the source for the report type.
-3. How a numeric span is parsed from narrative for the grounding gate
-   (percentages, ranges, money, written-out numbers) and how strict the
-   value-match is (exact, rounded, tolerance), recorded in an ADR.
-4. The report-spec and metric-spec shape, and how far to map toward HMIS CSV and
-   common funder templates without overreaching into being a reporting product.
-5. Whether the figure-approval and mapping-review surface is a CLI flow or a
-   local web UI for the first cut, judged on what a non-technical grant manager
-   can actually run.
+1. The engine uses stdlib `sqlite3`; ADR 0001 records why the zero-runtime-
+   dependency path won and when a larger backend may be reconsidered.
+2. The default suppresses CMS-modeled cells 1 through 10 with complementary,
+   delta, and percentage recovery controls. HUD leaves the numeric rule to the
+   controlling policy, so operators must confirm that policy per report.
+3. ADR 0007 requires exact normalized numeric matching, checks range endpoints,
+   canonicalizes supported locale decoration, and fails written-out numbers
+   closed.
+4. The versioned TOML spec stays bounded to report metrics and explicit
+   templates. HMIS aliases produce review-required mapping candidates; the tool
+   does not become a reporting product.
+5. Approval and mapping review use the CLI first. The trace is static accessible
+   HTML for recipients; there is no local web application or network ingress.

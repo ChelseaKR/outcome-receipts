@@ -16,18 +16,20 @@ waivers:
     locations:
       - src/outcome_receipts/copy.py (packaged gettext catalog loading)
     added: 2026-07-12
-    last_reviewed: 2026-07-12
+    last_reviewed: 2026-07-22
     tracking_issue: https://github.com/ChelseaKR/outcome-receipts/issues/53
     reason: >
       The rule protects Python versions below 3.7. This package requires Python
       3.12, and importlib.resources is the standard-library mechanism for loading
       packaged gettext catalogs without filesystem-path assumptions. A scan with
-      nosemgrep disabled confirmed that Semgrep 1.168.0's combined p/default and
-      p/python profile still reports this rule, so the waiver remains necessary.
+      nosemgrep disabled confirmed again on 2026-07-22 that Semgrep 1.168.0's
+      combined p/default and p/python profile still reports this rule, so the
+      waiver remains necessary.
   - rule_id: sqlalchemy-execute-raw-query
     locations:
       - src/outcome_receipts/engine.py (load_table, CREATE TABLE)
     added: 2026-07-10
+    last_reviewed: 2026-07-22
     tracking_issue: https://github.com/ChelseaKR/outcome-receipts/issues/52
     reason: >
       Same false positive already documented for ruff's S608 on this function: `table` defaults
@@ -37,4 +39,7 @@ waivers:
       the request-body sense the rule guards against. This is stdlib sqlite3, not SQLAlchemy —
       the rule's message is generic to any raw-SQL f-string, which is why it also fires here.
       (2026-07-11: the empty-rows branch no longer executes SQL — FIX-07 made it raise
-      LoaderError — so the waiver covers the single remaining CREATE TABLE call.)
+      LoaderError — so the waiver covers the single remaining CREATE TABLE call.
+      2026-07-22 review: every identifier still passes through _quote_ident, values
+      still use sqlite parameters, comparison SQL still composes author-reviewed
+      MetricSpec queries, and mapping SQL remains an unexecuted review candidate.)
