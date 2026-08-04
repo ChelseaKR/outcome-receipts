@@ -277,6 +277,12 @@ rollup remains suppressed.
 - Metric definitions, units, periods, and population overlap rules must match.
 - Duplicate-client risk across partners must be resolved by an operator-supplied
   non-client-level method or the metric is labeled non-deduplicated.
+- A plan declaring `disjoint` populations is rejected when two partner receipts
+  carry the same non-empty slice hash. Equal slice hashes mean the same rows
+  were counted twice, which a disjoint population cannot produce, so the lead
+  agency can falsify the declaration without holding a client row. A zero-row
+  slice hashes to the canonical empty value for every partner and is never read
+  as a collision. A plan already labeled `not_deduplicated` keeps its label.
 - The most protective input suppression policy controls unless a primary policy
   source establishes another rule.
 
@@ -286,6 +292,16 @@ Adversarial fixtures cover one forged bundle, incompatible definitions,
 recoverable partner cells, overlapping populations, and reordered inputs.
 Acceptance requires no path from the rollup artifacts to a partner's suppressed
 cell and deterministic output independent of input file order.
+
+`tests/test_rollup_adversarial.py` holds that fixture set: a re-sealed bundle
+with an inflated receipt and a bundle with a swapped narrative, mismatched
+definitions, periods and suppression policies, an undeclared overlap value, a
+suppressed partner cell, identical partner slices under both overlap
+declarations, two partners who both report a true zero, and every ordering of
+three partners. Two assertions carry the acceptance property: the artifact
+republishes no partner value, row count, or slice hash, and all six orderings
+produce the same artifact apart from the digest of the plan file itself.
+Independently rebuilt partner fixtures reproduce the artifact byte for byte.
 
 ## UC-6: Suppression-aware equity slice review
 
@@ -367,6 +383,14 @@ subrecipient-user review remain required before accepting real partner bundles.
 
 Exit gate: adversarial recovery tests pass, incompatible inputs fail closed, and
 at least two independent partner fixtures reproduce the same rollup.
+
+Status on 2026-08-04: the three testable conditions are met by
+`tests/test_rollup_adversarial.py`, which also closed the one hole the fixture
+set found. A plan could declare disjoint partner populations while two partners
+submitted identical rows, and the rollup summed them into a combined figure
+larger than the number of people served. The rollup now fails closed on that
+declaration. The privacy-specialist and subrecipient reviews are unchanged and
+still block a production claim; they need people, not tests.
 
 ### Wave 4: equity slices
 

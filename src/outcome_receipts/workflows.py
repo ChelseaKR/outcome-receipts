@@ -28,7 +28,7 @@ from outcome_receipts.comparison import compute_comparison, compute_reconciliati
 from outcome_receipts.config import load_spec
 from outcome_receipts.diff import diff_manifests
 from outcome_receipts.engine import compute_figures, read_csv_meta
-from outcome_receipts.models import Figure
+from outcome_receipts.models import EMPTY_SLICE_HASH, Figure
 from outcome_receipts.report import receipts_manifest
 from outcome_receipts.suppression import suppress_figures
 from outcome_receipts.verify import verify_bundle
@@ -944,6 +944,40 @@ def _rollup_input(
     return partner, verified.digest, receipt
 
 
+def _record_disjoint_slice(
+    slices: dict[str, str], *, partner: str, receipt: Mapping[str, Any]
+) -> None:
+    """Fail closed when two partners' receipts falsify a ``disjoint`` plan.
+
+    A slice hash is a content hash of the exact rows a figure was computed from,
+    so two partner receipts carrying the same non-empty slice hash counted the
+    same people. Summing both double counts them, and the plan declared the
+    populations disjoint, so the declaration is contradicted by evidence the
+    partners already published. The lead agency reaches that conclusion without
+    ever holding a client row: the hashes are enough.
+
+    This is the one duplicate-client case the tool can decide on its own. Every
+    other overlap stays what the plan says it is, an operator declaration, so a
+    plan labeled ``not_deduplicated`` is left alone: it has already told the
+    reader the combined figure counts some people more than once.
+
+    A slice with zero rows hashes to ``EMPTY_SLICE_HASH`` no matter whose data
+    produced it, so an empty slice is never read as a collision. Two partners can
+    both report a true zero and still be disjoint.
+    """
+
+    slice_hash = str(receipt.get("slice_hash", ""))
+    if not slice_hash or slice_hash == EMPTY_SLICE_HASH:
+        return
+    other = slices.get(slice_hash)
+    if other is not None:
+        first, second = sorted((other, partner))
+        raise WorkflowError(
+            f"{first} and {second}: identical data slices cannot be a disjoint population"
+        )
+    slices[slice_hash] = partner
+
+
 def build_rollup(*, plan_path: Path, approved_by: str, reproducible: bool) -> dict[str, Any]:
     """Compose count receipts from independently verified partner bundles."""
 
@@ -961,6 +995,7 @@ def build_rollup(*, plan_path: Path, approved_by: str, reproducible: bool) -> di
     grouped: dict[str, list[dict[str, Any]]] = {}
     bundle_refs: list[dict[str, str]] = []
     seen_digests: set[str] = set()
+    disjoint_slices: dict[str, str] = {}
     for position, item in enumerate(inputs):
         partner, digest, receipt = _rollup_input(
             plan_path,
@@ -973,6 +1008,8 @@ def build_rollup(*, plan_path: Path, approved_by: str, reproducible: bool) -> di
         if digest in seen_digests:
             raise WorkflowError(f"duplicate partner bundle digest: {digest}")
         seen_digests.add(digest)
+        if overlap == "disjoint":
+            _record_disjoint_slice(disjoint_slices, partner=partner, receipt=receipt)
         metric_id = str(receipt["metric_id"])
         grouped.setdefault(metric_id, []).append(receipt)
         bundle_refs.append({"partner": partner, "bundle_digest": digest})

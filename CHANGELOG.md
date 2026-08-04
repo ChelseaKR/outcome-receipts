@@ -62,6 +62,16 @@ release-hardening work completed before the first public tag.
   detector rejected the document as an unsupported format.
 - Release verification now pulls the published PyPI version and verifies the
   Sigstore-backed GitHub attestation after publication.
+- `receipts rollup` no longer accepts a plan that declares partner populations
+  `disjoint` when two partner receipts carry the same non-empty slice hash.
+  Identical slice hashes mean the same rows were counted twice, so the combined
+  figure overstated the people served while the artifact claimed no overlap. The
+  lead agency reaches that conclusion from the hashes partners already publish,
+  without holding a client row. A zero-row slice is shared by every partner
+  reporting a true zero and is not treated as a collision, and a plan labeled
+  `not_deduplicated` keeps its operator-supplied label. Added the wave 3
+  adversarial fixture set for the rollup workflow in
+  `tests/test_rollup_adversarial.py`.
 
 ## [0.1.0] - 2026-07-11
 
