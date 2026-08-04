@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -47,6 +48,23 @@ kind = "output"
 unit = "count"
 value_sql = "SELECT COUNT(*) FROM data"
 slice_sql = "SELECT client_id FROM data"
+""".lstrip()
+
+
+_HOLLOW_SLICE_SPEC = """
+schema_version = "1.0"
+[data]
+path = "data.csv"
+[report]
+title = "__NAME__ report"
+template = "People served: {served}."
+[metrics.served]
+description = "People served"
+definition = "Unduplicated people served in the period."
+kind = "output"
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data"
+slice_sql = "SELECT client_id FROM data WHERE client_id = 'no-such-client'"
 """.lstrip()
 
 
@@ -114,9 +132,16 @@ def _plan(
     *,
     overlap: str = "disjoint",
     metric_id: str = "served",
+    sources: list[str] | None = None,
 ) -> Path:
-    """Write a rollup plan whose paths are relative, so its bytes are portable."""
+    """Write a rollup plan whose paths are relative, so its bytes are portable.
 
+    ``sources`` names the fixture directory each input reads, defaulting to the
+    partner name. They differ only when a plan submits two bundles under one
+    partner name, which is a legitimate shape: one organization, two programs.
+    """
+
+    directories = partners if sources is None else sources
     path = root / name
     path.write_text(
         json.dumps(
@@ -127,13 +152,13 @@ def _plan(
                 "inputs": [
                     {
                         "partner": partner,
-                        "config": f"{partner}/report.toml",
-                        "bundle": f"bundle-{partner}",
+                        "config": f"{source}/report.toml",
+                        "bundle": f"bundle-{source}",
                         "metric_id": metric_id,
                         "period": PERIOD,
                         "suppression_policy_id": POLICY,
                     }
-                    for partner in partners
+                    for partner, source in zip(partners, directories, strict=True)
                 ],
             },
             indent=2,
@@ -317,6 +342,26 @@ def _same_rows_two_partners(root: Path) -> None:
     _bundle(_partner(root, "beta", shared), root / "bundle-beta")
 
 
+def _hollow_slice_partner(root: Path, name: str, client_ids: list[str]) -> Path:
+    """A partner whose count is real but whose slice query returns no rows.
+
+    The receipt this produces is the shape the disjoint gate must refuse: a
+    non-zero count carrying ``EMPTY_SLICE_HASH``. That sentinel is the same for
+    every empty slice, so it cannot be compared against any other partner's rows,
+    and the count it accompanies still enters the sum. Nothing here is forged;
+    the bundle verifies, because the spec is what it says it is.
+    """
+
+    directory = root / name
+    directory.mkdir(parents=True)
+    (directory / "data.csv").write_text(
+        "\n".join(["client_id", *client_ids]) + "\n", encoding="utf-8"
+    )
+    config = directory / "report.toml"
+    config.write_text(_HOLLOW_SLICE_SPEC.replace("__NAME__", name), encoding="utf-8")
+    return config
+
+
 def test_rollup_rejects_identical_partner_slices_declared_disjoint(tmp_path: Path) -> None:
     """The same rows submitted by two partners falsify a disjoint declaration.
 
@@ -350,6 +395,60 @@ def test_rollup_names_the_colliding_partners_in_plan_order_independently(
 
     assert messages[0] == messages[1]
     assert messages[0].startswith("alpha and beta:")
+
+
+def test_rollup_rejects_a_non_zero_count_over_an_empty_data_slice(tmp_path: Path) -> None:
+    """The empty-slice exemption must not be reachable by a non-zero count.
+
+    Both partners here count twelve people and both publish ``EMPTY_SLICE_HASH``,
+    because each spec's slice query returns no rows. Every bundle verifies. If the
+    exemption were keyed on the hash alone, both receipts would skip the disjoint
+    check and the rollup would publish twenty-four people served under a
+    ``disjoint`` declaration, in this fixture the same twelve people counted
+    twice: the exact silent pass this gate exists to prevent. An empty slice
+    exempts a receipt only when the receipt reports nothing counted.
+    """
+
+    shared = _ids("shared-", 12)
+    _bundle(_hollow_slice_partner(tmp_path, "alpha", shared), tmp_path / "bundle-alpha")
+    _bundle(_hollow_slice_partner(tmp_path, "beta", shared), tmp_path / "bundle-beta")
+
+    for name in ("alpha", "beta"):
+        manifest = json.loads(
+            (tmp_path / f"bundle-{name}" / "receipts.json").read_text(encoding="utf-8")
+        )
+        receipt = manifest["receipts"][0]
+        assert receipt["slice_hash"] == EMPTY_SLICE_HASH
+        assert receipt["value"] == 12.0
+
+    with pytest.raises(WorkflowError, match="empty data slice carries no evidence"):
+        build_rollup(
+            plan_path=_plan(tmp_path, "plan.json", ["alpha", "beta"]),
+            approved_by="Lead agency",
+            reproducible=True,
+        )
+
+
+def test_rollup_names_two_bundles_from_one_partner_by_digest(tmp_path: Path) -> None:
+    """One organization submitting the same rows twice is not "alpha and alpha".
+
+    A partner can legitimately appear twice in a plan under two bundles, one per
+    program. The bundle digests differ, so the duplicate-digest check does not
+    fire, and the collision message has to say which two submissions carry the
+    same rows. The partner name alone cannot.
+    """
+
+    _same_rows_two_partners(tmp_path)
+    plan_path = _plan(tmp_path, "plan.json", ["alpha", "alpha"], sources=["alpha", "beta"])
+
+    with pytest.raises(WorkflowError) as caught:
+        build_rollup(plan_path=plan_path, approved_by="Lead agency", reproducible=True)
+
+    message = str(caught.value)
+    assert "alpha and alpha" not in message
+    assert message.count("alpha (bundle ") == 2
+    digests = re.findall(r"alpha \(bundle ([0-9a-f]+)\)", message)
+    assert len(set(digests)) == 2
 
 
 def test_rollup_allows_identical_slices_when_declared_not_deduplicated(tmp_path: Path) -> None:
