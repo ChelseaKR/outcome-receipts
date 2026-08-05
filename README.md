@@ -453,3 +453,8 @@ for setup and design questions. Use the structured issue forms to
 [report a demo run](https://github.com/ChelseaKR/outcome-receipts/issues/new?template=demo-run.yml)
 or [describe a mapping question](https://github.com/ChelseaKR/outcome-receipts/issues/new?template=schema-mapping.yml).
 Never post client-level rows, identifiers, credentials, or real service exports.
+
+## Support
+
+This is independent, unpaid work. If it has been useful to you, you can
+<a href='https://ko-fi.com/T6T6GMYTU' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
