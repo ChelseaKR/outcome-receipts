@@ -28,7 +28,7 @@ from outcome_receipts.comparison import compute_comparison, compute_reconciliati
 from outcome_receipts.config import load_spec
 from outcome_receipts.diff import diff_manifests
 from outcome_receipts.engine import compute_figures, read_csv_meta
-from outcome_receipts.models import Figure
+from outcome_receipts.models import EMPTY_SLICE_HASH, Figure
 from outcome_receipts.report import receipts_manifest
 from outcome_receipts.suppression import suppress_figures
 from outcome_receipts.verify import verify_bundle
@@ -944,6 +944,75 @@ def _rollup_input(
     return partner, verified.digest, receipt
 
 
+def _slice_collision_names(first: tuple[str, str], second: tuple[str, str]) -> tuple[str, str]:
+    """Name the two colliding inputs, distinguishing one partner from itself.
+
+    One organization can appear twice in a plan under two different bundles (two
+    programs, one client list). The bundle digests differ, so the duplicate-digest
+    check does not fire, and naming the partner alone would report "alpha and
+    alpha", which tells the operator nothing about which two submissions to open.
+    The bundle digest is the identifier that separates them. Names are sorted so
+    the message does not depend on the order the plan lists the inputs.
+    """
+
+    if first[0] == second[0]:
+        labels = sorted(f"{name} (bundle {digest})" for name, digest in (first, second))
+    else:
+        labels = sorted((first[0], second[0]))
+    return labels[0], labels[1]
+
+
+def _record_disjoint_slice(
+    slices: dict[str, tuple[str, str]],
+    *,
+    partner: str,
+    digest: str,
+    receipt: Mapping[str, Any],
+) -> None:
+    """Fail closed when a partner receipt cannot support a ``disjoint`` plan.
+
+    A slice hash is a content hash of the exact rows a figure was computed from,
+    so two partner receipts carrying the same non-empty slice hash counted the
+    same people. Summing both double counts them, and the plan declared the
+    populations disjoint, so the declaration is contradicted by evidence the
+    partners already published. The lead agency reaches that conclusion without
+    ever holding a client row: the hashes are enough.
+
+    This is the one duplicate-client case the tool can decide on its own. Every
+    other overlap stays what the plan says it is, an operator declaration, so a
+    plan labeled ``not_deduplicated`` is left alone: it has already told the
+    reader the combined figure counts some people more than once.
+
+    The exemption for an empty slice is keyed on what the receipt reports, not on
+    the hash. A slice with zero rows hashes to ``EMPTY_SLICE_HASH`` no matter
+    whose data produced it, so two partners both reporting a true zero are not a
+    collision. But that sentinel is also what a receipt carries when its value was
+    computed over rows its slice query does not return, and such a receipt would
+    otherwise skip the gate while contributing a non-zero count to the sum: the
+    hash it publishes cannot be compared with any other partner's. A receipt that
+    reports a non-zero count over an empty slice is therefore refused rather than
+    exempted. See ``docs/adr/0004-fail-closed-disjoint-rollup-slice-check.md``.
+    """
+
+    slice_hash = str(receipt.get("slice_hash", ""))
+    value = float(receipt.get("value", 0.0))
+    row_count = int(receipt.get("row_count", 0))
+    if not slice_hash or slice_hash == EMPTY_SLICE_HASH:
+        if value != 0.0 or row_count != 0:
+            raise WorkflowError(
+                f"{partner}: a non-zero count over an empty data slice carries no evidence "
+                "of a disjoint population"
+            )
+        return
+    other = slices.get(slice_hash)
+    if other is not None:
+        first, second = _slice_collision_names(other, (partner, digest))
+        raise WorkflowError(
+            f"{first} and {second}: identical data slices cannot be a disjoint population"
+        )
+    slices[slice_hash] = (partner, digest)
+
+
 def build_rollup(*, plan_path: Path, approved_by: str, reproducible: bool) -> dict[str, Any]:
     """Compose count receipts from independently verified partner bundles."""
 
@@ -961,6 +1030,7 @@ def build_rollup(*, plan_path: Path, approved_by: str, reproducible: bool) -> di
     grouped: dict[str, list[dict[str, Any]]] = {}
     bundle_refs: list[dict[str, str]] = []
     seen_digests: set[str] = set()
+    disjoint_slices: dict[str, tuple[str, str]] = {}
     for position, item in enumerate(inputs):
         partner, digest, receipt = _rollup_input(
             plan_path,
@@ -973,6 +1043,8 @@ def build_rollup(*, plan_path: Path, approved_by: str, reproducible: bool) -> di
         if digest in seen_digests:
             raise WorkflowError(f"duplicate partner bundle digest: {digest}")
         seen_digests.add(digest)
+        if overlap == "disjoint":
+            _record_disjoint_slice(disjoint_slices, partner=partner, digest=digest, receipt=receipt)
         metric_id = str(receipt["metric_id"])
         grouped.setdefault(metric_id, []).append(receipt)
         bundle_refs.append({"partner": partner, "bundle_digest": digest})

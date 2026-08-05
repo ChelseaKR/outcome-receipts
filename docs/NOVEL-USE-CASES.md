@@ -277,6 +277,19 @@ rollup remains suppressed.
 - Metric definitions, units, periods, and population overlap rules must match.
 - Duplicate-client risk across partners must be resolved by an operator-supplied
   non-client-level method or the metric is labeled non-deduplicated.
+- A plan declaring `disjoint` populations is rejected when two partner receipts
+  carry the same non-empty slice hash. Equal slice hashes mean the same rows
+  were counted twice, which a disjoint population cannot produce, so the lead
+  agency can falsify the declaration without holding a client row. A zero-row
+  slice hashes to the canonical empty value for every partner, so two partners
+  both reporting a true zero are not a collision; a receipt that reports a
+  non-zero count while carrying that same empty value can be compared against
+  no one, so it is rejected rather than exempted. A plan already labeled
+  `not_deduplicated` keeps its label. Only a byte-identical slice is
+  falsifiable this way: the same people recorded under different identifiers or
+  columns, and every partial overlap, remain operator declarations. ADR
+  [`docs/adr/0004-fail-closed-disjoint-rollup-slice-check.md`](adr/0004-fail-closed-disjoint-rollup-slice-check.md)
+  records the decision and the residual risk.
 - The most protective input suppression policy controls unless a primary policy
   source establishes another rule.
 
@@ -286,6 +299,18 @@ Adversarial fixtures cover one forged bundle, incompatible definitions,
 recoverable partner cells, overlapping populations, and reordered inputs.
 Acceptance requires no path from the rollup artifacts to a partner's suppressed
 cell and deterministic output independent of input file order.
+
+`tests/test_rollup_adversarial.py` holds that fixture set: a re-sealed bundle
+with an inflated receipt and a bundle with a swapped narrative, mismatched
+definitions, periods and suppression policies, an undeclared overlap value, a
+suppressed partner cell, identical partner slices under both overlap
+declarations, two partners who both report a true zero, a partner whose non-zero
+count is computed over an empty slice, one partner submitting the same rows
+under two bundles, and every ordering of three partners. Two assertions carry
+the acceptance property: the artifact
+republishes no partner value, row count, or slice hash, and all six orderings
+produce the same artifact apart from the digest of the plan file itself.
+Independently rebuilt partner fixtures reproduce the artifact byte for byte.
 
 ## UC-6: Suppression-aware equity slice review
 
@@ -367,6 +392,19 @@ subrecipient-user review remain required before accepting real partner bundles.
 
 Exit gate: adversarial recovery tests pass, incompatible inputs fail closed, and
 at least two independent partner fixtures reproduce the same rollup.
+
+Status on 2026-08-04: the three testable conditions are met by
+`tests/test_rollup_adversarial.py`, which also closed the one hole the fixture
+set found. A plan could declare disjoint partner populations while two partners
+submitted identical rows, and the rollup summed them into a combined figure
+larger than the number of people served. The rollup now fails closed on that
+declaration. Review of the gate itself found a second way past it: a receipt
+whose non-zero count is computed over an empty slice carries the empty-slice
+hash every partner shares, and the exemption for that hash let it skip the check
+entirely. The exemption is now keyed on the receipt reporting nothing counted,
+and a non-zero count over an empty slice is refused. The privacy-specialist and
+subrecipient reviews are unchanged and still block a production claim; they need
+people, not tests.
 
 ### Wave 4: equity slices
 

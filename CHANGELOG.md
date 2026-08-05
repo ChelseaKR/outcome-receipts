@@ -35,6 +35,11 @@ release-hardening work completed before the first public tag.
   assessment, SoA, red-team report, and residual-risk register.
 - Definition of Done, canonical ADR log, incident and secret runbooks, operations
   recovery procedure, and per-source data-governance cards.
+- The wave 3 adversarial fixture set for the federated rollup workflow in
+  `tests/test_rollup_adversarial.py`: a forged bundle, a swapped narrative,
+  incompatible definitions, periods and suppression policies, a suppressed
+  partner cell, overlapping populations under both overlap declarations, and
+  every ordering of three partners.
 
 ### Changed
 - Reviewer-facing English and Spanish copy now ships as compiled gettext
@@ -62,6 +67,20 @@ release-hardening work completed before the first public tag.
   detector rejected the document as an unsupported format.
 - Release verification now pulls the published PyPI version and verifies the
   Sigstore-backed GitHub attestation after publication.
+- `receipts rollup` no longer accepts a plan that declares partner populations
+  `disjoint` when the partner receipts contradict that declaration or cannot
+  support it. Two receipts carrying the same non-empty slice hash counted the
+  same rows, so the combined figure overstated the people served while the
+  artifact claimed no overlap. A receipt reporting a non-zero count over an
+  empty data slice publishes the sentinel hash every empty slice shares, which
+  can be compared against no one, so it is refused rather than exempted. The
+  lead agency reaches both conclusions from the hashes partners already publish,
+  without holding a client row. Two partners both reporting a true zero are
+  still not a collision, and a plan labeled `not_deduplicated` keeps its
+  operator-supplied label. When one partner submits two bundles carrying the
+  same rows, the error identifies each submission by its bundle digest. ADR
+  [`docs/adr/0004-fail-closed-disjoint-rollup-slice-check.md`](docs/adr/0004-fail-closed-disjoint-rollup-slice-check.md)
+  records the decision and its residual risk.
 
 ## [0.1.0] - 2026-07-11
 
