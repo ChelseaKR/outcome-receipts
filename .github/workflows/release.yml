@@ -1,47 +1,71 @@
 # SPDX-License-Identifier: Apache-2.0
 name: release
 
+# Trusted-main release (RELEASE-AND-VERSIONING-STANDARD §4): after pushing a
+# signed annotated tag, the maintainer dispatches this workflow from `main` and
+# supplies the tag as an input. workflow_dispatch is deliberate: a tag-push
+# workflow executes the workflow definition stored at the tagged ref, while the
+# release authority must come from the reviewed workflow on trusted `main`.
+#   git tag -s vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
+#   gh workflow run release.yml --ref main -f tag=vX.Y.Z
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to (re)build and attest"
+        description: "Existing signed stable SemVer tag (vX.Y.Z)"
         required: true
+        type: string
 
 # Least-privilege default token. Elevated scopes are granted per job below.
 permissions:
   contents: read
 
-# Serialize releases of the same tag so a re-run (workflow_dispatch) can't race
-# a concurrent build/publish of that tag.
+# One global concurrency group: two versions can never build or publish
+# concurrently, and a re-run queues instead of racing a live publish.
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: release
   cancel-in-progress: false
 
 # Single source of truth for which tag this run builds, signs, and publishes.
 # Referenced as "$RELEASE_TAG" in run: steps (never interpolated via ${{ }}
 # into a shell body — tag names are attacker-influenced for a tag-pusher and
 # ${{ }} interpolation directly into `run:` is a template-injection vector).
+# The authorize job proves this exact tag is signed, annotated, and on main
+# before anything downstream runs.
 env:
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ github.event.inputs.tag }}
 
 jobs:
+  # Step 0, trust (REL §4.1, shared authorization): the standards-owned
+  # reusable workflow checks out this repo's reviewed `main`, rejects
+  # non-stable or lightweight tags, verifies the SSH signer against the
+  # committed .github/allowed_signers, proves the tagged commit is reachable
+  # from current origin/main, and returns immutable identifiers. Pinned to a
+  # full 40-char commit SHA; a branch or moving-tag pin is non-conformant.
+  authorize:
+    uses: ChelseaKR/portfolio-standards/.github/workflows/release-authorize.yml@3692aa5270d673f91f8571b4fc0ce1c622bf67e5
+    permissions:
+      contents: read
+    with:
+      tag: ${{ github.event.inputs.tag }}
+
   # Gate: nothing downstream signs, attests, or publishes anything unless this
-  # job passes at the exact commit the tag points to. Closes the gap where an
-  # untested commit could be tagged and shipped with a Sigstore attestation.
+  # job passes at the exact commit the verified tag points to. Closes the gap
+  # where an untested commit could be tagged and shipped with a Sigstore
+  # attestation. Tag authenticity (annotated, signed, on main) is owned by the
+  # authorize job above; this job owns the product gates.
   verify:
     name: verify at tagged commit
+    needs: authorize
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout tagged commit
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Checkout the authorized release commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.authorize.outputs.release-commit }}
           persist-credentials: false
       - name: Install uv (pinned)
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.11.19"
           enable-cache: false # signing/publish path: no cache poisoning surface
@@ -49,43 +73,6 @@ jobs:
         with:
           node-version: "22"
           package-manager-cache: false
-      # REL-08: fail closed unless the tag is an annotated tag object that
-      # carries a signature and points at the exact commit this job verifies.
-      # The tag object is read through the GitHub API because the checkout
-      # above fetches only the dereferenced commit and persist-credentials:
-      # false rules out a later authenticated `git fetch`. GitHub's own
-      # `verification.verified` result is printed for the audit trail; the
-      # hard gate is annotated + signature present + target == HEAD, since
-      # `verified: true` additionally requires the maintainer's key to be
-      # registered with the GitHub account.
-      - name: Tag is annotated, signed, and points at HEAD (fail closed)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          ref_json=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")
-          obj_type=$(jq -r '.object.type' <<<"$ref_json")
-          if [ "$obj_type" != "tag" ]; then
-            echo "::error::$RELEASE_TAG is a lightweight tag (points straight at a $obj_type); release tags must be signed annotated tags (git tag -s)."
-            exit 1
-          fi
-          tag_sha=$(jq -r '.object.sha' <<<"$ref_json")
-          tag_json=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha")
-          sig=$(jq -r '.verification.signature // empty' <<<"$tag_json")
-          if [ -z "$sig" ]; then
-            echo "::error::$RELEASE_TAG is annotated but carries no signature; release tags must be signed (git tag -s)."
-            exit 1
-          fi
-          target_type=$(jq -r '.object.type' <<<"$tag_json")
-          target_sha=$(jq -r '.object.sha' <<<"$tag_json")
-          head_sha=$(git rev-parse HEAD)
-          if [ "$target_type" != "commit" ] || [ "$target_sha" != "$head_sha" ]; then
-            echo "::error::$RELEASE_TAG points at $target_type $target_sha, not the verified commit $head_sha."
-            exit 1
-          fi
-          verified=$(jq -r '.verification.verified' <<<"$tag_json")
-          reason=$(jq -r '.verification.reason' <<<"$tag_json")
-          echo "Tag $RELEASE_TAG: annotated, signed, points at $head_sha (GitHub signature check: verified=$verified reason=$reason)."
       - name: Install and smoke-check the complete toolchain
         run: make install-smoke
       - name: Verify (ruff, mypy --strict, pytest)
@@ -100,22 +87,22 @@ jobs:
             exit 1
           }
 
-  release:
-    name: build · provenance · SBOM · GitHub release
-    needs: verify
+  build:
+    name: build · provenance · SBOM
+    needs: [authorize, verify]
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create/edit the GitHub release
+      contents: read
       id-token: write # Sigstore signing for provenance and SBOM attestations
       attestations: write # build-provenance and SBOM attestations
     steps:
-      - name: Checkout tagged commit
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Checkout the authorized release commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.authorize.outputs.release-commit }}
           persist-credentials: false
       - name: Install uv (pinned)
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.11.19"
           enable-cache: false # signing/publish path: no cache poisoning surface
@@ -179,14 +166,26 @@ jobs:
           name: sbom-cyclonedx
           path: dist/outcome-receipts.cdx.json
           if-no-files-found: error
+      # REL-10/§6: the matching CHANGELOG section becomes the release notes.
+      # Extracted here because this job holds the checkout; the publication job
+      # below is checkout-free by design.
+      - name: Extract the CHANGELOG section as release notes
+        run: |
+          set -euo pipefail
+          awk -v ver="${RELEASE_TAG#v}" '
+            index($0, "## [" ver "]") == 1 { found=1; print; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
       # Release integrity (BUG-2/REL-16 half 1): hand the exact bytes that were
-      # Sigstore-attested above to the publish job. pypi-publish must never
-      # rebuild — a second build's output is not covered by the attestation.
+      # Sigstore-attested above to the publish jobs. Neither publisher may
+      # rebuild, because a second build's output is not covered by the attestation.
       - name: Record attested artifact digests
         run: |
           set -euo pipefail
           (cd dist && sha256sum ./*.whl ./*.tar.gz | tee SHA256SUMS)
-      - name: Upload attested dist for the publish job
+      - name: Upload attested dist for the PyPI publish job
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-attested
@@ -195,30 +194,65 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
           if-no-files-found: error
-      - name: Publish artifacts to the GitHub release
+      - name: Upload the complete release asset set
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-assets
+          path: |
+            dist/
+            release-notes.md
+          if-no-files-found: error
+
+  # Split authority (REL §4): verification and build execute repository code
+  # with contents: read; this dependent publication job receives contents:
+  # write but never checks out or executes repository code, and it re-compares
+  # the live tag object with the authorizer's immutable identifier immediately
+  # before publishing.
+  github-release:
+    name: publish GitHub release (checkout-free)
+    needs: [authorize, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create/edit the GitHub release and upload its assets
+    steps:
+      - name: Download the attested release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-assets
+      - name: Recheck the immutable tag object before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_OBJECT_SHA: ${{ needs.authorize.outputs.tag-object-sha }}
+        run: |
+          set -euo pipefail
+          LIVE_TAG_OBJECT="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq .object.sha)"
+          test "${LIVE_TAG_OBJECT}" = "${TAG_OBJECT_SHA}"
+      - name: Publish the GitHub release with the CHANGELOG section as notes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
-            || gh release create "$RELEASE_TAG" --title "outcome-receipts $RELEASE_TAG" --generate-notes
+            || gh release create "$RELEASE_TAG" --title "outcome-receipts $RELEASE_TAG" \
+                 --notes-file release-notes.md --verify-tag
           gh release upload "$RELEASE_TAG" dist/* --clobber
 
   pypi-publish:
     name: publish to PyPI (Trusted Publishing)
-    needs: release
+    needs: [authorize, build, github-release]
     runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/outcome-receipts
     permissions:
+      contents: read
       id-token: write # OIDC token for PyPI Trusted Publishing (no long-lived secret)
     steps:
-      # Release integrity (BUG-2): publish the exact bytes the release job
+      # Release integrity (BUG-2): publish the exact bytes the build job
       # built and Sigstore-attested. No checkout, no toolchain, no rebuild in
       # this job — a rebuilt wheel/sdist would not be covered by the
       # attestations, so the only inputs here are the attested artifacts.
-      - name: Download attested dist from the release job
+      - name: Download attested dist from the build job
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: dist-attested
@@ -229,6 +263,14 @@ jobs:
           cd dist
           sha256sum -c SHA256SUMS
           rm SHA256SUMS # not a distribution file; PyPI upload takes dist/ wholesale
+      - name: Recheck the immutable tag object before PyPI publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_OBJECT_SHA: ${{ needs.authorize.outputs.tag-object-sha }}
+        run: |
+          set -euo pipefail
+          LIVE_TAG_OBJECT="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq .object.sha)"
+          test "${LIVE_TAG_OBJECT}" = "${TAG_OBJECT_SHA}"
       # Trusted Publishing: requires a one-time PyPI "pending publisher" for project
       # "outcome-receipts" (repo ChelseaKR/outcome-receipts, workflow release.yml,
       # environment pypi). No API token needed once configured.
@@ -237,7 +279,7 @@ jobs:
 
   verify-published:
     name: verify published package and attestations
-    needs: [release, pypi-publish]
+    needs: [build, pypi-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -247,7 +289,7 @@ jobs:
         with:
           name: dist-attested
           path: dist
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with:
           version: "0.11.19"
           enable-cache: false
