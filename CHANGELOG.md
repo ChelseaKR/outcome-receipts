@@ -52,6 +52,18 @@ release-hardening work completed before the first public tag.
   is an explicit solo-maintainer ADR, not a silent missing rule.
 
 ### Fixed
+- The comparison and reconciliation tables' `direction`/`arrow` no longer
+  survive redaction when the row's own figures do not. `direction` is a word
+  computed from the sign of the raw delta, not a `Figure`, so
+  `suppress_figures`'s figure-only search never saw it and `redact_comparison`
+  only rebuilt `prior`/`current`/`delta`; a fully suppressed row could still
+  print a real "no change" (an exact equality claim about two hidden numbers)
+  or a real "increase"/"decrease" beside three `[SUPPRESSED]` cells.
+  `redact_comparison` and `redact_reconciliation` now redact a row's direction
+  to the same `[SUPPRESSED]` sentinel whenever any of its three figures was
+  actually redacted. ADR
+  [`docs/decisions/0008-non-figure-presentation-fields-are-in-scope.md`](docs/decisions/0008-non-figure-presentation-fields-are-in-scope.md)
+  records the decision.
 - The required CodeQL job now fails closed when SARIF output is missing or
   contains any finding, while retaining the SARIF artifact for diagnosis.
 - Compiled English and Spanish gettext catalogs now have explicit, deterministic

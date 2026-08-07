@@ -79,7 +79,12 @@ def test_cli_run_writes_report_charts_and_manifest(tmp_path: Path) -> None:
     # reader that recovery. Q2's 14 stays: once the disclosure check reaches
     # its fixed point, no combination of the figures still visible anywhere in
     # the report reconstructs any suppressed cell.
-    assert "| [SUPPRESSED] | 14 | [SUPPRESSED] | increase |" in report
+    # The row's prior is suppressed, so its direction is redacted with it (see
+    # suppression.redact_comparison / issue #75): the word "increase" would
+    # otherwise survive beside two [SUPPRESSED] cells, asserting a real fact
+    # about the hidden Q1 count that the report just declined to publish.
+    assert "| [SUPPRESSED] | 14 | [SUPPRESSED] | [SUPPRESSED] |" in report
+    assert "| [SUPPRESSED] | 14 | [SUPPRESSED] | increase |" not in report
     # The accessible data table carries the chart's grounded numbers.
     assert "| Permanent | 13 |" in report
     # The provenance statement is embedded, and the trace view ships alongside.

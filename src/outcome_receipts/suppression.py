@@ -51,6 +51,21 @@ Two relationships need rules of their own, because they are not plain +/- sums:
   cannot be traced from the data model, and guessing it from SQL text is the
   name-matching heuristic this module already rejected once.
 
+The disclosure boundary is not limited to ``Figure``s. A ``ComparisonRow``'s
+``direction`` (and its derived ``arrow``) is a word computed from the sign of
+the raw, unredacted delta, not a ``Figure`` with its own value or receipt --
+so the exhaustive same-unit search above, which ranges only over ``Figure``
+values, cannot see it, redact it, or use it as a candidate. Left alone, it
+asserts a real fact about a cell the report declined to publish: "no change"
+certifies prior == current *exactly*. ``redact_comparison`` and
+``redact_reconciliation`` close this by direct rule rather than by search --
+whenever a row's ``prior``, ``current``, or ``delta`` ends up redacted, that
+row's ``direction`` is redacted with it, to the same sentinel a redacted
+``Figure`` displays. See ``_redact_row_direction``. Any future presentation
+field derived from a figure's raw value, rather than carried as a ``Figure``
+itself, needs the same treatment: it is inside this boundary by default, not
+outside it by omission.
+
 The guarantee, stated precisely: after suppression reaches its fixed point, no
 suppressed figure's exact value is certified to a reader by the figures still
 visible -- not by any single +/- combination of same-unit visible figures, not
@@ -464,6 +479,44 @@ def suppress_figures(
     return redacted, result
 
 
+def _figure_is_redacted(figure: Figure) -> bool:
+    """True if ``figure`` is already in the redacted state ``_redact`` produces.
+
+    Checked against the same ``_REDACTED_DISPLAY`` sentinel ``_redact`` writes,
+    rather than against ``suppress_figures``'s ``suppressed``/
+    ``complementary_suppressed`` id sets: ``redact_comparison`` and
+    ``redact_reconciliation`` only ever see the already-redacted ``Figure``
+    objects (via ``suppressed_figures``), never those sets, so this is the one
+    signal available to them that agrees by construction with what a reader
+    would actually see rendered.
+    """
+
+    return figure.display == _REDACTED_DISPLAY
+
+
+def _redact_row_direction(row: ComparisonRow, prior: Figure, current: Figure, delta: Figure) -> str:
+    """The row's direction, redacted alongside ``prior``/``current``/``delta``.
+
+    ``direction`` (and the ``arrow`` property derived from it) is computed by
+    ``compute_comparison``/``compute_reconciliation`` from the raw, unredacted
+    delta -- it asserts a real fact about the sign of that delta ("no change" is
+    an exact equality claim: prior == current) even when the delta itself, and
+    the two period figures, render as ``[SUPPRESSED]``. It is not a ``Figure``,
+    so nothing in ``suppress_figures``'s figure-only search ever sees it or
+    redacts it on its own. The rule applied here mirrors the delta's own rule
+    (a delta is redacted whenever either of its periods is; see the module
+    docstring): if any of this row's three post-redaction figures is in the
+    redacted state, the direction is too, using the exact sentinel a redacted
+    ``Figure`` displays, so a row never shows three ``[SUPPRESSED]`` cells beside
+    a still-informative word. A row with nothing suppressed keeps its real,
+    computed direction untouched.
+    """
+
+    if any(_figure_is_redacted(figure) for figure in (prior, current, delta)):
+        return _REDACTED_DISPLAY
+    return row.direction
+
+
 def redact_comparison(
     comparison: ComparisonResult, suppressed_figures: Sequence[Figure]
 ) -> ComparisonResult:
@@ -480,35 +533,58 @@ def redact_comparison(
     ``suppressed_figures``, so the comparison table renders the same redaction
     the report, manifest, and trace view do; a caller applies this once, right
     after ``suppress_figures``, before any rendering happens.
+
+    A row's ``direction`` (and its derived ``arrow``) is rebuilt too, redacted
+    to the same sentinel whenever ``prior``, ``current``, or ``delta`` ended up
+    redacted: ``direction`` is computed from the raw delta value, not from a
+    ``Figure``, so it is outside the figure-only search in ``suppress_figures``
+    and would otherwise survive as a real word -- "no change", exactly -- beside
+    three ``[SUPPRESSED]`` cells. See ``_redact_row_direction``.
     """
 
     by_id = {figure.metric_id: figure for figure in suppressed_figures}
-    rows = tuple(
-        replace(
-            row,
-            prior=by_id.get(row.prior.metric_id, row.prior),
-            current=by_id.get(row.current.metric_id, row.current),
-            delta=by_id.get(row.delta.metric_id, row.delta),
+    rows = []
+    for row in comparison.rows:
+        prior = by_id.get(row.prior.metric_id, row.prior)
+        current = by_id.get(row.current.metric_id, row.current)
+        delta = by_id.get(row.delta.metric_id, row.delta)
+        rows.append(
+            replace(
+                row,
+                prior=prior,
+                current=current,
+                delta=delta,
+                direction=_redact_row_direction(row, prior, current, delta),
+            )
         )
-        for row in comparison.rows
-    )
     redacted_figures = tuple(by_id.get(figure.metric_id, figure) for figure in comparison.figures)
-    return replace(comparison, rows=rows, figures=redacted_figures)
+    return replace(comparison, rows=tuple(rows), figures=redacted_figures)
 
 
 def redact_reconciliation(
     reconciliation: ReconciliationResult, suppressed_figures: Sequence[Figure]
 ) -> ReconciliationResult:
-    """Rebuild reconciliation rows from the publishable figure set."""
+    """Rebuild reconciliation rows from the publishable figure set.
+
+    Same shape as ``redact_comparison``, applied to both the ``outcome`` and
+    ``financial`` sides of each reconciliation row: each side's ``prior``,
+    ``current``, and ``delta`` are rebuilt from ``suppressed_figures``, and each
+    side's ``direction``/``arrow`` is redacted alongside them when any of that
+    side's three figures ended up redacted. See ``_redact_row_direction``.
+    """
 
     by_id = {figure.metric_id: figure for figure in suppressed_figures}
 
     def redact_row(row: ComparisonRow) -> ComparisonRow:
+        prior = by_id.get(row.prior.metric_id, row.prior)
+        current = by_id.get(row.current.metric_id, row.current)
+        delta = by_id.get(row.delta.metric_id, row.delta)
         return replace(
             row,
-            prior=by_id.get(row.prior.metric_id, row.prior),
-            current=by_id.get(row.current.metric_id, row.current),
-            delta=by_id.get(row.delta.metric_id, row.delta),
+            prior=prior,
+            current=current,
+            delta=delta,
+            direction=_redact_row_direction(row, prior, current, delta),
         )
 
     rows = tuple(
