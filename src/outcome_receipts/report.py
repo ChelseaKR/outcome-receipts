@@ -32,6 +32,13 @@ def render_comparison_table(result: ComparisonResult, *, locale: Locale = "en") 
     change. Direction is a word, derived from the sign of the change, so the table
     asserts no number that is not a receipt. The change for a rate metric is in
     percentage points, noted under the table.
+
+    A row whose prior, current, or delta was suppressed also has its direction
+    replaced by ``suppression.redact_comparison`` with the same redaction
+    sentinel (e.g. ``"[SUPPRESSED]"``) those figures display; ``directions.get``
+    falls back to printing that sentinel as-is (never translated -- it is a
+    redaction marker, not narrative copy) instead of raising on an unrecognized
+    key.
     """
 
     copy = get_copy(locale)
@@ -55,7 +62,7 @@ def render_comparison_table(result: ComparisonResult, *, locale: Locale = "en") 
         name = row.description or row.base_metric_id
         lines.append(
             f"| {name} | {row.prior.display} | {row.current.display} | "
-            f"{row.delta.display} | {directions[row.direction]} |"
+            f"{row.delta.display} | {directions.get(row.direction, row.direction)} |"
         )
     lines.append("")
     lines.append(copy.rate_metric_note)
@@ -70,6 +77,11 @@ def render_reconciliation_table(result: ReconciliationResult, *, locale: Locale 
     direction word, the same display convention as the comparison table. Every
     number is a figure display, so the section asserts nothing that is not a
     receipt, and the change is itself one query, not arithmetic over the page.
+
+    As with the comparison table, a suppressed side's direction is replaced by
+    ``suppression.redact_reconciliation`` with the redaction sentinel its
+    figures display; ``directions.get`` prints that sentinel unchanged instead
+    of raising.
     """
 
     copy = get_copy(locale)
@@ -98,11 +110,13 @@ def render_reconciliation_table(result: ReconciliationResult, *, locale: Locale 
                 "|------|------|------|--------|-----------|",
                 f"| {outcome.description or outcome.base_metric_id} ({copy.outcome_suffix}) | "
                 f"{outcome.prior.display} | {outcome.current.display} | "
-                f"{outcome.delta.display} | {directions[outcome.direction]} |",
+                f"{outcome.delta.display} | "
+                f"{directions.get(outcome.direction, outcome.direction)} |",
                 f"| {financial.description or financial.base_metric_id} "
                 f"({copy.financial_suffix}) | "
                 f"{financial.prior.display} | {financial.current.display} | "
-                f"{financial.delta.display} | {directions[financial.direction]} |",
+                f"{financial.delta.display} | "
+                f"{directions.get(financial.direction, financial.direction)} |",
                 "",
             ]
         )
