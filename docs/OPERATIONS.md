@@ -44,4 +44,8 @@ the restored artifact is trusted.
 A released version is immutable. Yank a defective PyPI version when necessary,
 record the reason in CHANGELOG, and ship a new patch. Never move or reuse a tag.
 
-*Last verified: 2026-07-12 · Recheck: after any incident or release-process change.*
+A release starts from the reviewed workflow on `main`, never from a tag push:
+push the signed tag, then `gh workflow run release.yml --ref main -f tag=vX.Y.Z`
+(see `docs/adr/0005-adopt-shared-release-authorization.md`).
+
+*Last verified: 2026-08-07 · Recheck: after any incident or release-process change.*

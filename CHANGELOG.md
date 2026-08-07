@@ -42,6 +42,20 @@ release-hardening work completed before the first public tag.
   every ordering of three partners.
 
 ### Changed
+- The release workflow now follows the portfolio trusted-main shape: it is
+  dispatched from `main` with the signed tag as an input and delegates the
+  trust step to the standards-owned reusable `release-authorize` workflow
+  (pinned by full commit SHA), which verifies the annotated tag's SSH signer
+  against the new committed `.github/allowed_signers` file and proves the
+  tagged commit is reachable from `origin/main`. GitHub release publication
+  moved into a checkout-free `contents: write` job that re-compares the live
+  tag object against the authorizer's immutable identifier immediately before
+  publishing, the PyPI job performs the same recheck, and the release notes
+  are now the tag's own CHANGELOG section rather than generated notes. The
+  build, Sigstore attestation, SBOM, artifact hand-off, and post-publication
+  verification stages are unchanged.
+- Every SHA-pinned Action comment now names the exact release the SHA
+  resolves to (`# vX.Y.Z`), replacing the imprecise `# v4` and `# v6` labels.
 - Reviewer-facing English and Spanish copy now ships as compiled gettext
   catalogs with extraction, compilation, BCP 47, key, and placeholder gates.
   The trace view is fully localized instead of always rendering English.
@@ -173,7 +187,6 @@ release-hardening work completed before the first public tag.
     claiming branch protection and a released `v0.1.0` that don't exist yet
     (see the 2026-07-05 remediation log for the evidence).
 
-### Added
 - **SAST (2026-07-10, SEC-07).** `ci.yml`'s `security` job gains a Semgrep step
   (`p/default` + `p/python`, pinned scanner version, `--severity ERROR --error`)
   that blocks the build on any ERROR-severity finding. The two findings it
@@ -181,13 +194,6 @@ release-hardening work completed before the first public tag.
   already-triaged `load_table` identifiers the `S608` waiver below covers) are
   suppressed with inline `# nosemgrep:` comments tracked in the new
   `.semgrep-waivers.yml` ledger, per SEC-10 waiver hygiene.
-
-### Fixed
-- Two `S608` ruff findings in `comparison.py` and `engine.py` triaged as false
-  positives (spec SQL and internal table/column identifiers are author-trusted,
-  not user-supplied, per `SECURITY.md`'s Scope section) and suppressed per-line
-  with justification; `S101` (assert) is ignored under `tests/*` only, since
-  pytest's own idiom relies on it.
 
 - **Reusable CI action** (`action.yml`). The `receipts verify` gate is packaged as
   a composite GitHub Action, so a downstream repo can gate CI on receipt drift with
@@ -250,6 +256,23 @@ release-hardening work completed before the first public tag.
   (tampered manifest is drift, escaped HTML, unbound count marks the gate failed).
 - ADR `docs/decisions/0003-definitions-provenance-trace-verify.md` records these
   decisions and why small-cell suppression is held for v0.2.
+- The deterministic core, with no language model in any path:
+  - **Metric engine** (`engine.py`): loads service data into in-memory SQLite and
+    runs each metric as a SQL query; the value comes from the query.
+  - **Receipts** (`models.Receipt`): every figure carries the exact query, the row
+    count of its slice, a BLAKE2b hash of that slice, the value, and a timestamp
+    from an injected clock so a committed run is reproducible.
+  - **Deterministic drafter** (`draft.py`): fills a report template's
+    `{metric_id}` placeholders with figures' display strings; an unknown
+    placeholder fails loudly.
+  - **Fail-closed grounding gate** (`grounding.py`): binds every number in the
+    narrative to a figure display; an unbound number blocks export. The
+    merge-blocking invariant, covered by `tests/test_grounding_gate.py`.
+  - **Eval** (`evaluate.py`, `report.py`): the gated grounding rate with Wilson
+    confidence intervals; committed at `eval/report.md`.
+- `receipts run`, `receipts audit`, and `receipts eval` commands.
+- A seeded synthetic housing-program fixture (`examples/housing-demo/`), zero real
+  personal data.
 
 ### Changed
 - `receipts run` now computes the comparison figures, renders the charts, grounds
@@ -269,6 +292,11 @@ release-hardening work completed before the first public tag.
   `engine.py` and `comparison.py`.
 
 ### Fixed
+- Two `S608` ruff findings in `comparison.py` and `engine.py` triaged as false
+  positives (spec SQL and internal table/column identifiers are author-trusted,
+  not user-supplied, per `SECURITY.md`'s Scope section) and suppressed per-line
+  with justification; `S101` (assert) is ignored under `tests/*` only, since
+  pytest's own idiom relies on it.
 - **Small-cell suppression did not suppress.** Code review of the v0.2
   suppression work (`9deb8cf`) found the drafted narrative, the rendered charts,
   and the comparison table were all built from the pre-suppression figures, so a
@@ -324,21 +352,5 @@ release-hardening work completed before the first public tag.
   suppressed, every percent figure is suppressed with it, documented as such in
   the module docstring.
 
-### Initial core
-- The deterministic core, with no language model in any path:
-  - **Metric engine** (`engine.py`): loads service data into in-memory SQLite and
-    runs each metric as a SQL query; the value comes from the query.
-  - **Receipts** (`models.Receipt`): every figure carries the exact query, the row
-    count of its slice, a BLAKE2b hash of that slice, the value, and a timestamp
-    from an injected clock so a committed run is reproducible.
-  - **Deterministic drafter** (`draft.py`): fills a report template's
-    `{metric_id}` placeholders with figures' display strings; an unknown
-    placeholder fails loudly.
-  - **Fail-closed grounding gate** (`grounding.py`): binds every number in the
-    narrative to a figure display; an unbound number blocks export. The
-    merge-blocking invariant, covered by `tests/test_grounding_gate.py`.
-  - **Eval** (`evaluate.py`, `report.py`): the gated grounding rate with Wilson
-    confidence intervals; committed at `eval/report.md`.
-- `receipts run`, `receipts audit`, and `receipts eval` commands.
-- A seeded synthetic housing-program fixture (`examples/housing-demo/`), zero real
-  personal data.
+[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ChelseaKR/outcome-receipts/releases/tag/v0.1.0

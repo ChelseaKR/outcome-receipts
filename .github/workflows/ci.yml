@@ -20,10 +20,10 @@ jobs:
     steps:
       # Actions are pinned to commit SHAs per the supply-chain standard; the
       # trailing comment names the tag the SHA corresponds to, for readability.
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with:
           version: "0.11.19"
           enable-cache: true
@@ -44,12 +44,12 @@ jobs:
     name: security (pip-audit · osv-scanner · gitleaks · zizmor)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           persist-credentials: false
           fetch-depth: 0 # gitleaks scans full commit history, not just the tip
 
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with:
           version: "0.11.19"
 
@@ -65,10 +65,10 @@ jobs:
     name: accessibility (pa11y, WCAG2AA, trace.html)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with:
           version: "0.11.19"
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
@@ -86,7 +86,7 @@ jobs:
     name: dogfood-action
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
       - name: Verify the example receipts via the local action
@@ -94,13 +94,16 @@ jobs:
         with:
           config: examples/housing-demo/report.toml
           receipts: examples/housing-demo/receipts.json
-          version: ${{ github.event.pull_request.head.sha || github.sha }}
+          # github.sha is the PR merge commit on pull_request events, so the
+          # dogfood run installs the merged state rather than the raw head --
+          # and CodeQL's untrusted-checkout query stays satisfied.
+          version: ${{ github.sha }}
 
   container:
     name: container (build · smoke · trivy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
       - name: Build, smoke-test, and scan through the local verification target

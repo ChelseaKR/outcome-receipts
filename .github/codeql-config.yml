@@ -1,0 +1,16 @@
+# CodeQL configuration. One documented exclusion; everything else in the
+# security-and-quality suite stays active for both python and actions.
+#
+# `actions/untrusted-checkout/medium` is excluded because it flags
+# release.yml's checkout of `needs.authorize.outputs.release-commit`. That
+# ref is not an untrusted PR head: the `authorize` job (the standards-owned
+# release-authorize reusable workflow, pinned by full 40-char commit SHA)
+# has already proven the tag is annotated, SSH-signed by a key in the
+# committed .github/allowed_signers, and reachable from origin/main before
+# this output exists. The query cannot see cross-workflow verification, so
+# it reports the most-verified checkout in the repository as untrusted.
+# Removing the exclusion is correct the moment release.yml stops deriving
+# its checkout ref from the authorize job's verified output.
+query-filters:
+  - exclude:
+      id: actions/untrusted-checkout/medium

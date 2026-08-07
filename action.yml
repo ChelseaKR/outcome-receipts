@@ -35,7 +35,7 @@ runs:
   steps:
     # Third-party actions are pinned to a commit SHA with a version comment,
     # matching the supply-chain convention in .github/workflows/ci.yml.
-    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
     # Install into a dedicated venv rather than the runner's system Python,
     # which is externally managed (PEP 668) on current ubuntu images. The env
     # indirection keeps the ref out of shell-template interpolation.
