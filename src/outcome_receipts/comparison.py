@@ -103,6 +103,16 @@ class ComparisonRow:
     ``prior`` and ``current`` are the period figures; ``delta`` is the change
     figure. ``direction`` is ``"increase"``, ``"decrease"``, or ``"no change"``,
     derived from the sign of the delta value, not from any number in prose.
+
+    ``direction`` is not a ``Figure``, so it carries no receipt of its own -- but
+    it is computed from the same raw delta a suppressed row hides, so it sits
+    inside the disclosure boundary exactly as ``prior``/``current``/``delta`` do.
+    ``suppression.redact_comparison`` and ``redact_reconciliation`` overwrite it
+    with the same redaction sentinel a suppressed ``Figure`` displays whenever
+    any of this row's three figures was actually redacted; see those functions
+    for the rule. A row built directly by ``compute_comparison`` or
+    ``compute_reconciliation`` (before suppression runs) always carries a real
+    direction.
     """
 
     base_metric_id: str
@@ -114,7 +124,15 @@ class ComparisonRow:
 
     @property
     def arrow(self) -> str:
-        return {"increase": "up", "decrease": "down", "no change": "flat"}[self.direction]
+        """The direction's short glyph name, or the direction itself if unknown.
+
+        Falls back to ``self.direction`` instead of raising, so a redacted
+        ``direction`` (a sentinel like ``"[SUPPRESSED]"``, not one of the three
+        real values) renders as the same sentinel rather than a ``KeyError``.
+        """
+
+        arrows = {"increase": "up", "decrease": "down", "no change": "flat"}
+        return arrows.get(self.direction, self.direction)
 
 
 @dataclass(frozen=True)

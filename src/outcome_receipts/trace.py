@@ -119,14 +119,28 @@ def _summary_table(figures: Sequence[Figure], copy: ReportCopy) -> list[str]:
     return lines
 
 
+_KNOWN_DIRECTIONS = frozenset({"increase", "decrease", "no change"})
+
+
 def _change_label(row: ComparisonRow, figure: Figure, copy: ReportCopy) -> str:
     """A plain-language direction+magnitude label for a delta figure.
 
     Direction is ``row.direction`` and the magnitude is ``figure.display`` (the
     delta figure's already-formatted magnitude); neither is recomputed here, so no
     new number is introduced. "No change" carries no magnitude.
+
+    When ``row.prior``, ``row.current``, or ``row.delta`` was suppressed,
+    ``suppression.redact_comparison`` has already overwritten ``row.direction``
+    with a redaction sentinel (not one of the three known values), so this
+    label must be checked for that case first: falling through to the
+    increase/decrease branch would pick one of those two templates by an
+    unrelated ``==`` miss and assert a direction that was never computed for
+    this row. Echoing the sentinel back keeps this label consistent with the
+    delta figure's own display, which is the same sentinel.
     """
 
+    if row.direction not in _KNOWN_DIRECTIONS:
+        return row.direction
     if row.direction == "no change":
         return copy.direction_no_change.capitalize()
     template = (

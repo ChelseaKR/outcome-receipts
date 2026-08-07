@@ -23,13 +23,24 @@ from pathlib import Path
 
 from outcome_receipts.cli import main
 from outcome_receipts.clock import FixedClock
+from outcome_receipts.comparison import compute_comparison, compute_reconciliation
 from outcome_receipts.config import load_spec
 from outcome_receipts.engine import compute_figures, read_csv
 from outcome_receipts.grounding import find_numbers
-from outcome_receipts.models import Figure, Receipt
+from outcome_receipts.models import (
+    ComparisonSpec,
+    Figure,
+    MetricSpec,
+    PeriodSpec,
+    Receipt,
+    ReconciliationRow,
+    ReconciliationSpec,
+)
 from outcome_receipts.suppression import (
     SuppressionResult,
     filter_for_aggregate_only,
+    redact_comparison,
+    redact_reconciliation,
     suppress_figures,
 )
 
@@ -796,3 +807,311 @@ class TestPercentTriangulation:
         # clients_served (12) is above threshold, in no recovering relationship,
         # and not a percent: it stays visible.
         assert by_id["clients_served"]["display"] == "12"
+
+
+# Two quarters of 8 permanent-housing exits each, both below the suppression
+# threshold of 11. The delta is exactly 0 -- a true zero on its own, but pulled
+# down anyway once either sibling period is suppressed (see
+# `_suppress_sibling_deltas`). The 16-client headline stays visible: it is well
+# above threshold and, on its own, cannot reconstruct either hidden quarter.
+_Q1 = PeriodSpec(
+    period_id="q1",
+    label="Q1 2025",
+    predicate="enrolled_date >= '2025-01-01' AND enrolled_date < '2025-04-01'",
+)
+_Q2 = PeriodSpec(
+    period_id="q2",
+    label="Q2 2025",
+    predicate="enrolled_date >= '2025-04-01' AND enrolled_date < '2025-07-01'",
+)
+_EXITS_PERMANENT_BY_QUARTER = MetricSpec(
+    metric_id="exits_permanent",
+    description="Permanent-housing exits by quarter",
+    value_sql="SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent' AND ({period})",
+    slice_sql="SELECT * FROM data WHERE exit_destination = 'permanent' AND ({period})",
+)
+
+
+def _eight_and_eight_rows(*, cost: str | None = None) -> list[dict[str, str]]:
+    """16 clients: 8 exit permanent in Q1, 8 in Q2. Optionally carries a cost column."""
+
+    def row(index: int, month: str) -> dict[str, str]:
+        record = {
+            "client_id": f"C{index:03d}",
+            "enrolled_date": f"2025-{month}-{(index % 28) + 1:02d}",
+            "exit_destination": "permanent",
+        }
+        if cost is not None:
+            record["cost"] = cost
+        return record
+
+    return [row(i, "02") for i in range(8)] + [row(i, "05") for i in range(8, 16)]
+
+
+class TestComparisonDirectionSuppression:
+    """Merge-blocking (issue #75): a redacted comparison row must not keep its
+    real direction/arrow.
+
+    ``ComparisonRow.direction`` (and the ``arrow`` property derived from it) is
+    a plain ``str`` computed once, from the raw unredacted delta, at
+    ``compute_comparison`` time. It is not a ``Figure``, so
+    ``suppress_figures``'s exhaustive same-unit search never sees or redacts
+    it. Closing this is specifically ``redact_comparison``'s job: it rebuilds
+    ``prior``/``current``/``delta`` from the suppressed figure set but, before
+    this fix, left ``direction`` untouched, so a row could render three
+    "[SUPPRESSED]" cells beside a real "no change" -- an exact equality claim
+    about two numbers the report just declined to publish.
+    """
+
+    def test_fully_suppressed_no_change_row_hides_direction_and_arrow(self) -> None:
+        """The sharpest case: Q1 == Q2 == 8, both suppressed, delta suppressed too.
+
+        Reproduces the exact leak from issue #75: before the fix, this row's
+        redacted form was ``prior=[SUPPRESSED], current=[SUPPRESSED],
+        delta=[SUPPRESSED], direction="no change"`` -- asserting prior ==
+        current exactly, for two hidden numbers.
+        """
+        spec = ComparisonSpec(
+            current="q2", prior="q1", periods=(_Q1, _Q2), metrics=(_EXITS_PERMANENT_BY_QUARTER,)
+        )
+        result = compute_comparison(_eight_and_eight_rows(), spec, clock=FixedClock())
+        [row] = result.rows
+        # Sanity check on the un-redacted computation, before this test's real
+        # subject (redact_comparison) is even invoked.
+        assert row.prior.value == 8.0
+        assert row.current.value == 8.0
+        assert row.delta.value == 0.0
+        assert row.direction == "no change"
+        assert row.arrow == "flat"
+
+        suppressed_figures, suppression = suppress_figures(list(result.figures))
+        # Confirms the fixture actually exercises suppression as intended,
+        # rather than accidentally passing because nothing was hidden.
+        assert set(suppression.suppressed) == {"exits_permanent__q1", "exits_permanent__q2"}
+        assert "exits_permanent__delta" in suppression.complementary_suppressed
+
+        redacted = redact_comparison(result, suppressed_figures)
+        [redacted_row] = redacted.rows
+
+        assert redacted_row.prior.display == "[SUPPRESSED]"
+        assert redacted_row.current.display == "[SUPPRESSED]"
+        assert redacted_row.delta.display == "[SUPPRESSED]"
+        # The bug this closes: direction/arrow must not still assert the real,
+        # unredacted relationship next to those three suppressed cells.
+        assert redacted_row.direction not in ("increase", "decrease", "no change")
+        assert redacted_row.direction == "[SUPPRESSED]"
+        assert redacted_row.arrow == "[SUPPRESSED]"
+
+    def test_not_suppressed_row_keeps_its_real_direction_and_arrow(self) -> None:
+        """Control: a row with nothing suppressed must render completely unaffected.
+
+        30 exits in Q1, 15 in Q2: both periods comfortably above threshold, and
+        the delta's own magnitude (15) is too, so the delta is not primarily
+        suppressed either. With nothing else in the figure set, there is no
+        recoverable identity, so complementary suppression finds nothing.
+        """
+        rows = [
+            {
+                "client_id": f"C{i:03d}",
+                "enrolled_date": f"2025-{'02' if i < 30 else '05'}-{(i % 28) + 1:02d}",
+                "exit_destination": "permanent",
+            }
+            for i in range(45)
+        ]
+        spec = ComparisonSpec(
+            current="q2", prior="q1", periods=(_Q1, _Q2), metrics=(_EXITS_PERMANENT_BY_QUARTER,)
+        )
+        result = compute_comparison(rows, spec, clock=FixedClock())
+        [row] = result.rows
+        assert row.prior.value == 30.0
+        assert row.current.value == 15.0
+        assert row.delta.value == -15.0
+        assert row.direction == "decrease"
+        assert row.arrow == "down"
+
+        suppressed_figures, suppression = suppress_figures(list(result.figures))
+        assert suppression.suppressed == ()
+        assert suppression.complementary_suppressed == ()
+
+        redacted = redact_comparison(result, suppressed_figures)
+        [redacted_row] = redacted.rows
+
+        assert redacted_row.prior.display == row.prior.display
+        assert redacted_row.current.display == row.current.display
+        assert redacted_row.delta.display == row.delta.display
+        assert redacted_row.direction == "decrease"
+        assert redacted_row.arrow == "down"
+
+
+class TestReconciliationDirectionSuppression:
+    """Merge-blocking (issue #75): the identical bug in ``redact_reconciliation``.
+
+    ``ReconciledRow`` carries an ``outcome`` and a ``financial``
+    ``ComparisonRow`` side by side; each has its own ``direction``/``arrow``,
+    computed and redacted independently, exactly like a standalone comparison
+    row.
+    """
+
+    def test_suppressed_side_hides_direction_unsuppressed_side_keeps_it(self) -> None:
+        """One side redacted, the other not: proves the check is per-side, per-row.
+
+        The outcome (permanent exits) is 8 and 8 -- suppressed. The financial
+        line (a flat $500/client spend) is $4,000 and $4,000 -- comfortably
+        above threshold, so it is never suppressed at all: both sides compute
+        to "no change", but only the outcome side's word should be redacted.
+        """
+        financial_metric = MetricSpec(
+            metric_id="row_financial",
+            description="program spend in the quarter",
+            value_sql=(
+                "SELECT CAST(COALESCE(SUM(CAST(cost AS REAL)), 0) AS INTEGER) "
+                "FROM data WHERE ({period})"
+            ),
+            slice_sql="SELECT * FROM data WHERE ({period})",
+        )
+        spec = ReconciliationSpec(
+            current="q2",
+            prior="q1",
+            periods=(_Q1, _Q2),
+            rows=(
+                ReconciliationRow(
+                    label="Permanent exits vs. spend",
+                    outcome=_EXITS_PERMANENT_BY_QUARTER,
+                    financial=financial_metric,
+                ),
+            ),
+        )
+        result = compute_reconciliation(_eight_and_eight_rows(cost="500"), spec, clock=FixedClock())
+        [row] = result.rows
+        assert row.outcome.prior.value == 8.0
+        assert row.outcome.direction == "no change"
+        assert row.financial.prior.value == 4000.0
+        assert row.financial.current.value == 4000.0
+        assert row.financial.direction == "no change"
+
+        suppressed_figures, suppression = suppress_figures(list(result.figures))
+        # The outcome MetricSpec's own metric_id ("exits_permanent") names the
+        # suppressed figures, not the ReconciliationRow field name ("outcome").
+        assert set(suppression.suppressed) == {
+            "exits_permanent__q1",
+            "exits_permanent__q2",
+        }
+        assert "row_financial__q1" not in suppression.suppressed
+        assert "row_financial__q1" not in suppression.complementary_suppressed
+
+        redacted = redact_reconciliation(result, suppressed_figures)
+        [redacted_row] = redacted.rows
+
+        # The suppressed side: figures and direction/arrow all redacted.
+        assert redacted_row.outcome.prior.display == "[SUPPRESSED]"
+        assert redacted_row.outcome.current.display == "[SUPPRESSED]"
+        assert redacted_row.outcome.delta.display == "[SUPPRESSED]"
+        assert redacted_row.outcome.direction == "[SUPPRESSED]"
+        assert redacted_row.outcome.arrow == "[SUPPRESSED]"
+
+        # The untouched side: nothing was redacted, so direction/arrow are the
+        # same real values computed from the raw delta -- proving the fix does
+        # not blanket-redact a row's other side just because its sibling was.
+        assert redacted_row.financial.prior.display == "4,000"
+        assert redacted_row.financial.direction == "no change"
+        assert redacted_row.financial.arrow == "flat"
+
+
+# The exact end-to-end reproduction from issue #75: a report whose only
+# section besides the narrative is a comparison of two equally-small quarters.
+_NO_CHANGE_COMPARISON_TOML = """
+[data]
+path = "services.csv"
+
+[report]
+title = "No-change reproduction"
+template = "Total permanent-housing exits: {exits_permanent}."
+
+[metrics.exits_permanent]
+description = "Exits whose destination was permanent housing."
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent'"
+
+[comparison]
+current = "q2"
+prior = "q1"
+
+[[comparison.periods]]
+id = "q1"
+label = "Q1 2025"
+predicate = "enrolled_date >= '2025-01-01' AND enrolled_date < '2025-04-01'"
+
+[[comparison.periods]]
+id = "q2"
+label = "Q2 2025"
+predicate = "enrolled_date >= '2025-04-01' AND enrolled_date < '2025-07-01'"
+
+[comparison.metrics.exits_permanent]
+description = "Permanent-housing exits by quarter"
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent' AND ({period})"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent' AND ({period})"
+"""
+
+
+class TestDirectionSuppressionEndToEnd:
+    """Merge-blocking (issue #75): the leak reproduced through the real CLI.
+
+    16 clients, 8 exiting to permanent housing each quarter. The headline (16)
+    is well above threshold and stays visible; both quarters are individually
+    below threshold and suppressed; the delta goes with them by the sibling-
+    delta rule. Before the fix, ``report.md`` and ``trace.html`` both still
+    printed the real "no change" beside the three suppressed cells.
+    """
+
+    def test_report_and_trace_do_not_print_a_direction_word_on_the_redacted_row(
+        self, tmp_path: Path
+    ) -> None:
+        rows = ["client_id,enrolled_date,exit_destination"]
+        rows.extend(
+            f"{r['client_id']},{r['enrolled_date']},{r['exit_destination']}"
+            for r in _eight_and_eight_rows()
+        )
+        (tmp_path / "services.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+        config = tmp_path / "report.toml"
+        config.write_text(_NO_CHANGE_COMPARISON_TOML, encoding="utf-8")
+
+        out = tmp_path / "out"
+        code = main(
+            [
+                "run",
+                "--config",
+                str(config),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+            ]
+        )
+        assert code == 0
+
+        report_md = (out / "report.md").read_text(encoding="utf-8")
+        trace_html = (out / "trace.html").read_text(encoding="utf-8")
+
+        # The headline is unaffected: 16 is above threshold and not part of any
+        # recoverable identity with only one suppressed pair behind it.
+        assert "Total permanent-housing exits: 16." in report_md
+
+        # The comparison row: all three figures suppressed, and now the
+        # direction word is too, instead of surviving as "no change".
+        assert (
+            "| Permanent-housing exits by quarter | [SUPPRESSED] | [SUPPRESSED] "
+            "| [SUPPRESSED] | [SUPPRESSED] |" in report_md
+        )
+        assert (
+            "| Permanent-housing exits by quarter | [SUPPRESSED] | [SUPPRESSED] "
+            "| [SUPPRESSED] | no change |" not in report_md
+        )
+        assert "no change" not in report_md
+
+        # The trace view's plain-language change label is redacted the same way.
+        assert '<p class="change">[SUPPRESSED]</p>' in trace_html
+        assert '<p class="change">No change</p>' not in trace_html
+        assert "No change" not in trace_html
