@@ -230,11 +230,12 @@ jobs:
       - name: Publish the GitHub release with the CHANGELOG section as notes
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
             || gh release create "$RELEASE_TAG" --title "outcome-receipts $RELEASE_TAG" \
-                 --notes-file release-notes.md --verify-tag
+                 --notes-file release-notes.md
           gh release upload "$RELEASE_TAG" dist/* --clobber
 
   pypi-publish:
