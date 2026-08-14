@@ -8,6 +8,7 @@ from pathlib import Path
 from outcome_receipts.clock import FixedClock
 from outcome_receipts.config import SPEC_SCHEMA_VERSION, load_spec
 from outcome_receipts.engine import compute_figures, read_csv
+from outcome_receipts.models import SCHEMA_VERSION
 from outcome_receipts.suppression import suppress_figures
 from outcome_receipts.verify import verify_manifest
 
@@ -31,6 +32,16 @@ def test_current_code_rederives_signed_v010_receipt_manifest() -> None:
     assert spec.schema_version == SPEC_SCHEMA_VERSION
     assert suppression.ok
     assert result.ok
+    # The baseline is a manifest-schema 1.0 document, which is no longer what
+    # this package writes: 2.0 withholds a suppressed receipt's numerics as null
+    # where 1.0 wrote zeros. Assert the older shape is really what was read, so
+    # this cannot start passing vacuously if the fixture is ever regenerated.
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["schema_version"] != SCHEMA_VERSION
+    withheld = [record for record in manifest["receipts"] if record["value"] == 0.0]
+    assert withheld, "the baseline no longer exercises the 1.0 suppressed rendering"
+    assert all("suppressed" not in record for record in manifest["receipts"])
+    assert any(figure.receipt.suppressed for figure in publishable)
 
 
 def test_v010_baseline_names_immutable_source_commit() -> None:

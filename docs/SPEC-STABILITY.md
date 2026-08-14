@@ -9,8 +9,52 @@ Outcome Receipts has three public data contracts:
 - evidence-workflow artifacts, described by
   [`schema/workflow-artifact.schema.json`](schema/workflow-artifact.schema.json).
 
-Both contracts use a `MAJOR.MINOR` schema version independent of the package
-version. The current version is `1.0`.
+Each contract uses a `MAJOR.MINOR` schema version independent of the package
+version. The report spec is at `1.0`, the receipts manifest at `2.0`, and the
+workflow artifact at `1.0`.
+
+## Receipts manifest 2.0: a withheld cell is not a zero
+
+Manifest `1.0` wrote a suppressed figure's numeric fields as zeros: `value:
+0.0`, `row_count: 0`, and the all-zero `slice_hash` sentinel. A figure that is
+genuinely zero produces the same three values, so nothing in the schema
+distinguished "we withhold this count to protect the people in it" from "we
+served nobody". The only surviving signal was the human-readable string
+`[SUPPRESSED]` in `display`, which the schema did not describe, and which no
+machine consumer reads.
+
+`2.0` makes the three states three distinct renderings:
+
+| State | `suppressed` | `value` | `row_count` | `slice_hash` | `column_names` |
+|---|---|---|---|---|---|
+| Published, including a genuine zero | `false` | number (`0` when zero) | integer (`0` when the slice is empty) | hex digest (all-zero sentinel when empty) | array |
+| Withheld by suppression | `true` | `null` | `null` | `null` | `null` |
+| Absent | no entry in `receipts` for that `metric_id` | — | — | — | — |
+
+This is a **breaking** change: `value`, `row_count`, `slice_hash`, and
+`column_names` widen to a union with `null`, and the new `suppressed` field is
+required. A consumer that reads the numeric field without branching on
+`suppressed` now sees `null` and fails, which is the intended direction — it
+used to see `0` and silently believe it.
+
+**Field mapping, 1.0 to 2.0.** For a receipt with `display` equal to
+`[SUPPRESSED]`, set `suppressed: true` and replace `value`, `row_count`,
+`slice_hash`, and `column_names` with `null`. For every other receipt, set
+`suppressed: false` and leave the fields as they are. The mapping is
+deterministic and needs no data access, because `1.0` wrote a fixed rendering
+for every suppressed receipt.
+
+`receipts verify` reads both `1.0` and `2.0`. For a `1.0` manifest it
+reconstructs that manifest's rendering from the current figures before
+comparing, so the schema change is not reported as data drift and the frozen
+`v0.1.0` baseline still re-derives. Nothing writes `1.0` any more.
+
+The workflow artifact version is unchanged at `1.0`. Its envelope did not
+change; what changed is inside the receipts it embeds, and those are governed by
+the receipts-manifest contract. `receipts verify-workflow` gained a check that
+fails any artifact in which an object declaring `suppressed: true` still carries
+a number in `value`, `row_count`, or `slice_hash`, and a check that an equity
+review with a withheld group states suppression in its interpretation limits.
 
 ## Compatibility rules
 
@@ -59,7 +103,7 @@ with the next two tags; it cannot be manufactured from a single release.
 | Producer | Contract | Current consumer | Result |
 |---|---|---|---|
 | Signed `v0.1.0` tag, commit `51d18fc4cdd9f9dcd91dd4588ededc80a6b6bb7d` | Unversioned beta report spec, interpreted as report-spec `1.0` | Current loader | PASS |
-| Signed `v0.1.0` tag, same commit | Receipts manifest `1.0` | Current re-derivation verifier | PASS |
+| Signed `v0.1.0` tag, same commit | Receipts manifest `1.0` | Current re-derivation verifier (reads `1.0`, writes `2.0`) | PASS |
 | Current implementation package | Workflow artifact `1.0`, all six kinds | `receipts verify-workflow` | PASS |
 | Next tagged release | All supported contracts | Next tagged verifier | Pending issue 65 |
 

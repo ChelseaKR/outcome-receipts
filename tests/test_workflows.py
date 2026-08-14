@@ -423,8 +423,76 @@ def test_equity_review_carries_suppressed_receipts_and_interpretation_limits(
 
     by_label = {item["label"]: item["receipt"] for item in artifact["groups"]}
     assert by_label["Group A"]["display"] == "[SUPPRESSED]"
-    assert by_label["Group A"]["value"] == 0.0
+    # A withheld group must not read as a group of nobody. This artifact exists
+    # to let a reviewer look at small groups, so it is the one most likely to be
+    # plotted or summed straight out of the JSON.
+    assert by_label["Group A"]["suppressed"] is True
+    assert by_label["Group A"]["value"] is None
+    assert by_label["Group A"]["row_count"] is None
     assert artifact["interpretation_limits"]
+    # And the artifact has to say so in words, not only in a field.
+    assert any("suppression" in limit.lower() for limit in artifact["interpretation_limits"]), (
+        artifact["interpretation_limits"]
+    )
+    assert verify_workflow_artifact(artifact).ok
+
+
+def test_equity_review_without_the_suppression_limit_fails_verification(
+    tmp_path: Path,
+) -> None:
+    """A withheld group with no stated limit must not verify.
+
+    The check has to be on the artifact, not on the builder: an artifact reaches
+    a consumer as a file, and a file can be edited. Dropping the limit while
+    keeping the withheld group is exactly the edit that makes the group look
+    empty, so `verify-workflow` must refuse it.
+    """
+
+    artifact = build_equity_review(
+        config_path=_equity_report(tmp_path),
+        plan_path=_equity_plan(tmp_path / "equity.json"),
+        approved_by="Privacy reviewer",
+        reproducible=True,
+    )
+    assert verify_workflow_artifact(artifact).ok
+
+    artifact["interpretation_limits"] = ["No group ranking is produced."]
+    result = verify_workflow_artifact(artifact)
+
+    assert not result.ok
+    assert any(
+        check.scope == "interpretation_limits" and not check.ok for check in result.checks
+    ), [check for check in result.checks if not check.ok]
+
+
+def test_a_withheld_receipt_that_still_carries_a_number_fails_verification(
+    tmp_path: Path,
+) -> None:
+    """The unsafe outcome, asserted as an absence, at the artifact boundary.
+
+    ``suppressed: true`` beside ``value: 4`` is worse than either state alone:
+    it publishes the protected cell and labels it as protected in the same
+    object. Nothing this package builds can reach that shape; a hand-edited
+    artifact, or one from a build that zeroed the fields instead of withholding
+    them, can.
+    """
+
+    artifact = build_equity_review(
+        config_path=_equity_report(tmp_path),
+        plan_path=_equity_plan(tmp_path / "equity.json"),
+        approved_by="Privacy reviewer",
+        reproducible=True,
+    )
+    withheld = next(item["receipt"] for item in artifact["groups"] if item["receipt"]["suppressed"])
+
+    for field, leaked in (("value", 4.0), ("row_count", 4), ("slice_hash", "ab" * 32)):
+        restore = withheld[field]
+        withheld[field] = leaked
+        result = verify_workflow_artifact(artifact)
+        assert not result.ok, field
+        assert any(check.scope == "suppression" and not check.ok for check in result.checks), field
+        withheld[field] = restore
+
     assert verify_workflow_artifact(artifact).ok
 
 

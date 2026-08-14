@@ -28,17 +28,41 @@ from outcome_receipts.comparison import compute_comparison, compute_reconciliati
 from outcome_receipts.config import load_spec
 from outcome_receipts.diff import diff_manifests
 from outcome_receipts.engine import compute_figures, read_csv_meta
-from outcome_receipts.models import EMPTY_SLICE_HASH, Figure
+from outcome_receipts.models import EMPTY_SLICE_HASH, REDACTED_DISPLAY, Figure
 from outcome_receipts.report import receipts_manifest
 from outcome_receipts.suppression import suppress_figures
 from outcome_receipts.verify import verify_bundle
 
 WORKFLOW_SCHEMA_VERSION = "1.0"
-_SUPPRESSED = "[SUPPRESSED]"
+_SUPPRESSED = REDACTED_DISPLAY
+
+# The interpretation limit added to an equity review whose groups include a
+# withheld cell. This artifact exists to let a reviewer look at small groups, so
+# it is the artifact most likely to be read by someone who will otherwise take a
+# withheld group for an empty one.
+_SUPPRESSION_LIMIT = (
+    "One or more groups are withheld under the small-cell suppression policy. "
+    "A withheld group carries suppressed: true and a null value; it is not a "
+    "count of zero and must not be read, plotted, or summed as one."
+)
 
 
 class WorkflowError(ValueError):
     """A workflow input or trust gate failed and no artifact may be written."""
+
+
+def _is_suppressed(receipt: Mapping[str, Any]) -> bool:
+    """True if a manifest receipt is a withheld cell.
+
+    Either signal is sufficient. ``suppressed`` is the field a schema-2.0
+    manifest declares; the ``display`` sentinel is what a 1.0 manifest carried
+    and is still what a reader sees. Accepting either is the fail-closed
+    direction: a workflow that composes, rolls up, or scores a withheld cell is
+    the failure this guards, so a receipt that looks withheld by any signal is
+    treated as withheld.
+    """
+
+    return receipt.get("suppressed") is True or receipt.get("display") == _SUPPRESSED
 
 
 @dataclass(frozen=True)
@@ -271,6 +295,44 @@ def _privacy_checks(artifact: Mapping[str, Any]) -> list[WorkflowCheck]:
     ]
 
 
+# The receipt fields a withheld cell must not carry a number in. ``value`` is
+# the one a consumer plots or sums; ``row_count`` is the same number again for an
+# ordinary count metric; ``slice_hash`` is a content hash of the exact withheld
+# rows, comparable against a guessed row set to confirm a guess.
+_WITHHELD_RECEIPT_FIELDS = ("value", "row_count", "slice_hash")
+
+
+def _suppression_checks(artifact: Mapping[str, Any]) -> list[WorkflowCheck]:
+    """No embedded receipt may declare itself withheld and still carry the number.
+
+    A workflow artifact embeds manifest receipts verbatim, so this is the last
+    gate before a consumer interprets one. It asserts the absence of the unsafe
+    outcome rather than the presence of a label: a receipt with
+    ``suppressed: true`` whose ``value``, ``row_count``, or ``slice_hash`` is not
+    ``null`` is a protected cell published beside its own redaction marker, which
+    is worse than either state alone. An artifact produced by this package cannot
+    reach that shape; one that was hand-edited, or produced by a build that
+    zeroed the fields instead of withholding them, can.
+    """
+
+    offenders: list[str] = []
+    for path, value in _walk(artifact):
+        if not isinstance(value, dict) or value.get("suppressed") is not True:
+            continue
+        published = [field for field in _WITHHELD_RECEIPT_FIELDS if value.get(field) is not None]
+        if published:
+            offenders.append(f"{path} ({', '.join(published)})")
+    return [
+        WorkflowCheck(
+            "suppression",
+            not offenders,
+            "no withheld receipt carries a number"
+            if not offenders
+            else f"withheld receipts still carry numbers at {offenders}",
+        )
+    ]
+
+
 def _composed_check(path: str, receipt: Mapping[str, Any]) -> WorkflowCheck:
     required = {
         "metric_id",
@@ -471,7 +533,39 @@ def _semantic_checks(artifact: Mapping[str, Any]) -> list[WorkflowCheck]:
                 required=frozenset({"label", "receipt"}),
             )
         )
+        checks.append(_equity_suppression_limit_check(artifact, groups))
     return checks
+
+
+def _equity_suppression_limit_check(artifact: Mapping[str, Any], groups: object) -> WorkflowCheck:
+    """An equity review with a withheld group must say so in its limits.
+
+    This artifact is read by people looking for exactly the small groups
+    suppression hides, so an unlabelled withheld group is the one most likely to
+    be read as an empty one. If any group's receipt is withheld, the artifact has
+    to carry the suppression interpretation limit; a reader must not have to
+    notice it themselves.
+    """
+
+    if not isinstance(groups, list):
+        return WorkflowCheck("interpretation_limits", False, "groups are not a list")
+    withheld = [
+        group
+        for group in groups
+        if isinstance(group, dict)
+        and isinstance(group.get("receipt"), dict)
+        and _is_suppressed(group["receipt"])
+    ]
+    limits = artifact.get("interpretation_limits")
+    stated = isinstance(limits, list) and _SUPPRESSION_LIMIT in limits
+    ok = not withheld or stated
+    return WorkflowCheck(
+        "interpretation_limits",
+        ok,
+        "suppression is stated as an interpretation limit"
+        if ok
+        else "a group is withheld but no suppression interpretation limit is stated",
+    )
 
 
 def verify_workflow_artifact(artifact: Mapping[str, Any]) -> WorkflowVerifyResult:
@@ -489,6 +583,7 @@ def verify_workflow_artifact(artifact: Mapping[str, Any]) -> WorkflowVerifyResul
         *_envelope_checks(artifact),
         *_digest_checks(artifact),
         *_privacy_checks(artifact),
+        *_suppression_checks(artifact),
         *_composed_checks(artifact),
         *_semantic_checks(artifact),
     ]
@@ -616,7 +711,7 @@ def _composed_receipt(
     units = {_required_text(item.get("unit"), field=f"{metric_id} input unit") for item in inputs}
     if len(units) != 1:
         raise WorkflowError(f"{metric_id}: composed receipt units do not match")
-    if any(item.get("display") == _SUPPRESSED for item in inputs):
+    if any(_is_suppressed(item) for item in inputs):
         raise WorkflowError(f"{metric_id}: a suppressed input cannot be composed")
 
     values = [float(item["value"]) for item in inputs]
@@ -685,7 +780,7 @@ def build_restatement(
             "current": item.current,
             "reasons": list(item.reasons),
         }
-        if item.prior.get("display") != _SUPPRESSED and item.current.get("display") != _SUPPRESSED:
+        if not _is_suppressed(item.prior) and not _is_suppressed(item.current):
             record["delta_receipt"] = _composed_receipt(
                 metric_id=f"{item.metric_id}__restatement_delta",
                 operation="delta",
@@ -875,7 +970,7 @@ def build_contract_evidence(
             ("financial", financial),
         ):
             _required_text(receipt.get("definition"), field=f"{milestone_id} {label} definition")
-        if _SUPPRESSED in {observed["display"], threshold["display"], financial["display"]}:
+        if any(_is_suppressed(receipt) for receipt in (observed, threshold, financial)):
             status = "indeterminate"
         else:
             comparison = operators[operator](float(observed["value"]), float(threshold["value"]))
@@ -939,7 +1034,7 @@ def _rollup_input(
         raise WorkflowError(f"{partner}: metric {metric_id!r} is missing")
     if receipt.get("unit") != "count":
         raise WorkflowError(f"{partner}: only count metrics can be rolled up")
-    if receipt.get("display") == _SUPPRESSED:
+    if _is_suppressed(receipt):
         raise WorkflowError(f"{partner}: suppressed metrics cannot be rolled up")
     return partner, verified.digest, receipt
 
@@ -1124,6 +1219,13 @@ def build_equity_review(
     if len(units) != 1:
         raise WorkflowError("equity group units do not match")
 
+    limits = [
+        "No group ranking is produced.",
+        "No causal or fairness conclusion is produced.",
+    ]
+    if any(_is_suppressed(record["receipt"]) for record in records):
+        limits.append(_SUPPRESSION_LIMIT)
+
     return {
         "schema_version": WORKFLOW_SCHEMA_VERSION,
         "kind": "equity_review",
@@ -1137,10 +1239,7 @@ def build_equity_review(
         "category_provenance": provenance,
         "approved_by": approved_by,
         "groups": records,
-        "interpretation_limits": [
-            "No group ranking is produced.",
-            "No causal or fairness conclusion is produced.",
-        ],
+        "interpretation_limits": limits,
     }
 
 

@@ -85,19 +85,28 @@ _JSON_TYPES: dict[str, type | tuple[type, ...]] = {
     "integer": int,
     "number": (int, float),
     "boolean": bool,
+    "null": type(None),
 }
 
 
-def _validate_type(instance: Any, expected: str, path: str) -> list[str]:
-    """Check ``instance`` against a JSON Schema ``type``; empty list on match."""
-
-    py = _JSON_TYPES[expected]
+def _matches_type(instance: Any, expected: str) -> bool:
     # bool is a subclass of int; reject it where a number/integer is wanted.
     if expected in ("integer", "number") and isinstance(instance, bool):
-        return [f"{path}: expected {expected}, got boolean"]
-    if not isinstance(instance, py):
-        return [f"{path}: expected {expected}, got {type(instance).__name__}"]
-    return []
+        return False
+    return isinstance(instance, _JSON_TYPES[expected])
+
+
+def _validate_type(instance: Any, expected: str | list[str], path: str) -> list[str]:
+    """Check ``instance`` against a JSON Schema ``type``; empty list on match.
+
+    ``type`` may be a list, which is how the manifest schema declares a withheld
+    figure's numerics as ``["number", "null"]``. Any member matching is a match.
+    """
+
+    options = [expected] if isinstance(expected, str) else list(expected)
+    if any(_matches_type(instance, option) for option in options):
+        return []
+    return [f"{path}: expected {options}, got {type(instance).__name__}"]
 
 
 def _validate_object(instance: dict[str, Any], schema: dict[str, Any], path: str) -> list[str]:
@@ -126,6 +135,24 @@ def _validate_array(instance: list[Any], schema: dict[str, Any], path: str) -> l
     return errors
 
 
+def _applies(instance: Any, condition: dict[str, Any]) -> bool:
+    """Whether an ``if`` subschema matches, for the ``allOf``/``if``/``then`` form.
+
+    Only the shape the manifest schema actually uses is supported: required keys
+    plus ``const`` on a property. Anything richer would be a second JSON Schema
+    implementation, which is not what this file is for.
+    """
+
+    if not isinstance(instance, dict):
+        return False
+    if any(key not in instance for key in condition.get("required", [])):
+        return False
+    for key, subschema in condition.get("properties", {}).items():
+        if "const" in subschema and instance.get(key) != subschema["const"]:
+            return False
+    return True
+
+
 def _validate(instance: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
     expected = schema.get("type")
     if expected is not None:
@@ -135,10 +162,20 @@ def _validate(instance: Any, schema: dict[str, Any], path: str = "$") -> list[st
     errors: list[str] = []
     if "const" in schema and instance != schema["const"]:
         errors.append(f"{path}: expected const {schema['const']!r}, got {instance!r}")
-    if expected == "object":
+    # An untyped subschema carrying `properties` is how the `then` branch of a
+    # conditional constrains a few fields of an already-typed object.
+    if isinstance(instance, dict) and (
+        expected == "object" or (expected is None and {"properties", "required"} & schema.keys())
+    ):
         errors.extend(_validate_object(instance, schema, path))
     if expected == "array":
         errors.extend(_validate_array(instance, schema, path))
+    for clause in schema.get("allOf", []):
+        if "if" in clause:
+            if _applies(instance, clause["if"]):
+                errors.extend(_validate(instance, clause.get("then", {}), path))
+        else:
+            errors.extend(_validate(instance, clause, path))
     return errors
 
 
@@ -158,6 +195,56 @@ def test_manifest_with_artifacts_validates_against_published_schema() -> None:
     assert "artifacts" in schema["properties"]
     errors = _validate(manifest, schema)
     assert errors == [], errors
+
+
+def _suppressed_manifest() -> dict[str, Any]:
+    """A manifest whose figures include a withheld cell and a true zero."""
+
+    from outcome_receipts.suppression import suppress_figures
+
+    publishable, result = suppress_figures(_figures())
+    assert result.suppressed, "the housing demo must still contain a small cell"
+    manifest: dict[str, Any] = json.loads(receipts_manifest(publishable))
+    return manifest
+
+
+def test_a_withheld_receipt_validates_only_while_it_carries_no_number() -> None:
+    """The schema must actively reject the shape this issue is about.
+
+    A validator that merely tolerates ``null`` proves nothing; the point is that
+    ``suppressed: true`` beside a real number is invalid. Each field is restored
+    afterwards so the test also shows the manifest is otherwise valid, and so a
+    later failure cannot be blamed on the previous mutation.
+    """
+
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    manifest = _suppressed_manifest()
+    assert _validate(manifest, schema) == []
+
+    withheld = next(record for record in manifest["receipts"] if record["suppressed"])
+    for field, leaked in (("value", 0.0), ("row_count", 0), ("slice_hash", "0" * 64)):
+        restore = withheld[field]
+        withheld[field] = leaked
+        assert _validate(manifest, schema) != [], field
+        withheld[field] = restore
+
+    assert _validate(manifest, schema) == []
+
+
+def test_a_published_receipt_validates_only_while_it_carries_a_number() -> None:
+    """The other direction: ``suppressed: false`` with a null value is invalid.
+
+    Without this the conditional could be satisfied by nulling everything, which
+    would make every figure indistinguishable in the opposite direction.
+    """
+
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    manifest = _suppressed_manifest()
+    published = next(record for record in manifest["receipts"] if not record["suppressed"])
+
+    published["value"] = None
+
+    assert _validate(manifest, schema) != []
 
 
 def test_wrong_schema_version_is_a_named_failure() -> None:

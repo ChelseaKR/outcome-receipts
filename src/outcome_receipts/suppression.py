@@ -97,7 +97,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
-from outcome_receipts.models import EMPTY_SLICE_HASH, Figure
+from outcome_receipts.models import REDACTED_DISPLAY, Figure
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -109,7 +109,7 @@ if TYPE_CHECKING:
 SUPPRESSION_THRESHOLD = 11
 
 # The redacted placeholder shown in place of a suppressed figure's value.
-_REDACTED_DISPLAY = "[SUPPRESSED]"
+_REDACTED_DISPLAY = REDACTED_DISPLAY
 
 # Tolerance for treating a candidate combination's sum as equal to the target.
 # Figures are counts (or percents computed to fixed decimals), so exact-match
@@ -177,27 +177,48 @@ def _is_below_threshold(value: float, threshold: int) -> bool:
 
 
 def _redact(figure: Figure) -> Figure:
-    """A copy of ``figure`` with every raw-count-bearing field scrubbed.
+    """A copy of ``figure`` with every raw-count-bearing field withheld.
 
     Redacting only ``Figure.value``/``display`` and leaving ``figure.receipt``
     attached unchanged is not suppression: ``report.py`` and ``trace.py`` read
     ``receipt.row_count`` directly, and both render it right next to the
     "[SUPPRESSED]" label if the receipt is not also redacted. So every field on
-    the receipt that carries the raw count is replaced here: ``value`` and
-    ``row_count`` are zeroed, and ``slice_hash`` -- a content hash of the exact
-    suppressed rows -- is replaced with the canonical empty-slice hash, since a
-    hash of a guessed row set could otherwise be compared against a real one to
-    confirm a guess. ``value_sql``, ``unit``, ``computed_at``, and ``definition``
-    are not data; they describe the query and are kept for audit purposes.
+    the receipt that carries the raw count is replaced here.
+
+    They are replaced with ``None``, not with zero, and the receipt is stamped
+    ``suppressed=True``. Zeroing them was the earlier behaviour and it made a
+    withheld cell byte-identical to a true zero in every field the manifest
+    schema constrains: ``value: 0.0``, ``row_count: 0``, and the all-zero
+    ``EMPTY_SLICE_HASH`` are exactly what a figure of genuinely zero produces.
+    The prose said ``[SUPPRESSED]``; the numbers said nobody. Every machine
+    consumer -- the manifest, the trace view, the six evidence workflows -- read
+    the numbers. ``None`` serialises as JSON ``null``, so a consumer that sums or
+    plots the field fails loudly instead of silently counting a withheld group as
+    zero, and ``suppressed`` gives it a field to branch on.
+
+    The row count is withheld rather than kept, even though it is the one honest
+    fact a redacted receipt could still carry ("a query ran and matched rows"),
+    because for an ordinary count metric the row count *is* the suppressed value.
+    ``suppressed: true`` already tells a reader, under the documented policy,
+    that a query ran; publishing the count would tell them what it returned.
+
+    ``value_sql``, ``unit``, ``computed_at``, and ``definition`` are not data;
+    they describe the query and are kept for audit purposes.
     """
 
     redacted_receipt = replace(
         figure.receipt,
-        row_count=0,
-        slice_hash=EMPTY_SLICE_HASH,
-        value=0.0,
-        column_names=(),
+        row_count=None,
+        slice_hash=None,
+        value=None,
+        column_names=None,
+        suppressed=True,
     )
+    # ``Figure.value`` is still 0.0 here, and that is still wrong: it is what
+    # the chart renderer reads for geometry, so a suppressed bar draws at the
+    # axis baseline and a line interpolates through it. That is issue #78 and is
+    # fixed there; nothing in this module's serialised output reads it, because
+    # the manifest, the report appendix, and the trace view all read the receipt.
     return Figure(
         metric_id=figure.metric_id,
         value=0.0,
@@ -440,6 +461,19 @@ def suppress_figures(
     ADR.
     """
 
+    # Suppression reads raw values, so it must be given raw figures. An already
+    # redacted figure has no value to check or to search with: run twice, the
+    # second pass would see ``value=0.0`` on a withheld cell, read it as a true
+    # zero, and pass it through as "unsuppressed" in the result -- a false
+    # all-clear on exactly the invariant this function exists to assert. Fail
+    # closed and say which figures.
+    already = sorted(figure.metric_id for figure in figures if figure.receipt.suppressed)
+    if already:
+        raise ValueError(
+            "suppress_figures needs unredacted figures; these are already "
+            f"suppressed: {', '.join(already)}"
+        )
+
     suppressed_ids: set[str] = set()
     unsuppressed_ids: set[str] = set()
 
@@ -482,16 +516,18 @@ def suppress_figures(
 def _figure_is_redacted(figure: Figure) -> bool:
     """True if ``figure`` is already in the redacted state ``_redact`` produces.
 
-    Checked against the same ``_REDACTED_DISPLAY`` sentinel ``_redact`` writes,
-    rather than against ``suppress_figures``'s ``suppressed``/
-    ``complementary_suppressed`` id sets: ``redact_comparison`` and
-    ``redact_reconciliation`` only ever see the already-redacted ``Figure``
-    objects (via ``suppressed_figures``), never those sets, so this is the one
-    signal available to them that agrees by construction with what a reader
-    would actually see rendered.
+    Checked against the receipt's ``suppressed`` flag *or* the same
+    ``_REDACTED_DISPLAY`` sentinel ``_redact`` writes, rather than against
+    ``suppress_figures``'s ``suppressed``/``complementary_suppressed`` id sets:
+    ``redact_comparison`` and ``redact_reconciliation`` only ever see the
+    already-redacted ``Figure`` objects (via ``suppressed_figures``), never those
+    sets, so these are the signals available to them that agree by construction
+    with what a reader would actually see rendered. Either signal alone is
+    sufficient, which is the fail-closed direction: a figure hand-built with one
+    and not the other is treated as withheld.
     """
 
-    return figure.display == _REDACTED_DISPLAY
+    return figure.receipt.suppressed or figure.display == _REDACTED_DISPLAY
 
 
 def _redact_row_direction(row: ComparisonRow, prior: Figure, current: Figure, delta: Figure) -> str:

@@ -23,7 +23,7 @@ from collections.abc import Sequence
 
 from outcome_receipts.comparison import ComparisonResult, ComparisonRow
 from outcome_receipts.copy import ReportCopy, get_copy, normalize_locale
-from outcome_receipts.models import Figure
+from outcome_receipts.models import REDACTED_DISPLAY, Figure
 from outcome_receipts.provenance import Provenance
 
 _STYLE = """
@@ -87,6 +87,20 @@ def _anchor(metric_id: str) -> str:
     return f"metric-{metric_id}"
 
 
+def _withheld(value: object) -> str:
+    """A receipt field, or the redaction marker when suppression withheld it.
+
+    The summary table's "Rows" column and the detail block's row count and slice
+    hash are read straight off the receipt. A suppressed receipt now carries
+    ``None`` there, so this renders the same ``[SUPPRESSED]`` marker the figure
+    shows. Before, those fields held zeros, and a grant manager read "0 rows"
+    beside the redaction label -- the page said "we cannot report this" in one
+    column and "nobody" in the next.
+    """
+
+    return REDACTED_DISPLAY if value is None else str(value)
+
+
 def _summary_table(figures: Sequence[Figure], copy: ReportCopy) -> list[str]:
     lines = [
         "<table>",
@@ -112,7 +126,7 @@ def _summary_table(figures: Sequence[Figure], copy: ReportCopy) -> list[str]:
             f'<td class="value">{_esc(figure.display)}</td>'
             f"<td>{_esc(definition)}</td>"
             f"<td>{_esc(caveat)}</td>"
-            f"<td>{receipt.row_count}</td>"
+            f"<td>{_esc(_withheld(receipt.row_count))}</td>"
             "</tr>"
         )
     lines.extend(["</tbody>", "</table>"])
@@ -185,9 +199,10 @@ def _figure_detail(figure: Figure, copy: ReportCopy, row: ComparisonRow | None =
         [
             f"<dt>{_esc(copy.receipt_query_label.capitalize())}</dt>"
             f"<dd><code>{_esc(receipt.value_sql)}</code></dd>",
-            f"<dt>{_esc(copy.receipt_rows_label.capitalize())}</dt><dd>{receipt.row_count}</dd>",
+            f"<dt>{_esc(copy.receipt_rows_label.capitalize())}</dt>"
+            f"<dd>{_esc(_withheld(receipt.row_count))}</dd>",
             f"<dt>{_esc(copy.receipt_slice_hash_label.capitalize())}</dt>"
-            f'<dd class="hash">{_esc(receipt.slice_hash)}</dd>',
+            f'<dd class="hash">{_esc(_withheld(receipt.slice_hash))}</dd>',
             f"<dt>{_esc(copy.receipt_computed_at_label.capitalize())}</dt>"
             f"<dd>{_esc(receipt.computed_at)}</dd>",
         ]

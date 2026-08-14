@@ -42,6 +42,17 @@ release-hardening work completed before the first public tag.
   every ordering of three partners.
 
 ### Changed
+- **Breaking (receipts manifest schema `1.0` → `2.0`).** Every receipt gains a
+  required `suppressed` boolean, and `value`, `row_count`, `slice_hash`, and
+  `column_names` widen to a union with `null`. A consumer that reads a numeric
+  field without branching on `suppressed` now sees `null` where it used to see a
+  `0` it had no way to question. `receipts verify` reads both versions and
+  compares a `1.0` manifest against that manifest's own rendering, so the frozen
+  `v0.1.0` baseline still re-derives; nothing writes `1.0` any more. The
+  deterministic field mapping is in
+  [`docs/SPEC-STABILITY.md`](docs/SPEC-STABILITY.md). The workflow-artifact
+  schema version is unchanged at `1.0`: its envelope did not change, only the
+  receipts it embeds, which are governed by the manifest contract.
 - The release workflow now follows the portfolio trusted-main shape: it is
   dispatched from `main` with the signed tag as an input and delegates the
   trust step to the standards-owned reusable `release-authorize` workflow
@@ -82,6 +93,24 @@ release-hardening work completed before the first public tag.
   package, and severity together, so a new advisory, a second advisory in
   `extract-zip`, or the same advisory escalated in severity all still fail;
   `tests/test_npm_audit_gate.py` pins that boundary.
+- A suppressed cell serialised as a zero. `_redact` wrote `value: 0.0`,
+  `row_count: 0`, and the all-zero slice-hash sentinel — byte-identical, in
+  every field the manifest schema constrains, to a figure that is genuinely
+  zero. The prose said `[SUPPRESSED]`; the numbers said nobody, and every
+  machine consumer (`receipts.json`, the trace view's Rows column, the report's
+  receipts appendix, the six evidence workflows) read the numbers. A withheld
+  receipt now carries `suppressed: true` with `null` for `value`, `row_count`,
+  `slice_hash`, and `column_names`, so a consumer that sums or plots the field
+  fails loudly instead of silently counting a protected group as zero. The
+  report appendix and trace view render `[SUPPRESSED]` in place of the row count
+  and slice hash. An equity review containing a withheld group now states
+  suppression in its `interpretation_limits`, and `receipts verify-workflow`
+  fails an artifact whose withheld receipt still carries a number, or whose
+  equity review withholds a group without saying so.
+  ([#77](https://github.com/ChelseaKR/outcome-receipts/issues/77))
+- `suppress_figures` now refuses an already-redacted figure set instead of
+  reading a redacted `value` as a true zero and reporting the cell as
+  unsuppressed — a false all-clear on the invariant it exists to assert.
 - `receipts audit` grounded a narrative against the **unsuppressed** figures, so
   a draft stating the protected small cells bound every one of them and exited
   `0` — the command the README offers for checking a hand-written draft
