@@ -362,3 +362,56 @@ class GroundingResult:
     @property
     def total(self) -> int:
         return len(self.bound) + len(self.unbound)
+
+
+@dataclass(frozen=True)
+class SuppressedSpan:
+    """A number in prose that states a cell the report refuses to publish.
+
+    This is not an unbound span, and reporting it as one would send the author
+    looking for a missing metric. The number is real and fully receipted; it is
+    the raw value of a figure small-cell suppression redacted, so writing it into
+    a narrative discloses a protected cell. ``metric_ids`` names every suppressed
+    figure whose pre-suppression display canonicalizes to this number.
+
+    ``publishable_metric_ids`` names any *publishable* figure that canonicalizes
+    to the same number. When it is non-empty the span is genuinely ambiguous: the
+    prose could be stating either figure, and nothing in the text says which. The
+    span is still classified as a disclosure -- resolving the ambiguity toward
+    "they must have meant the publishable one" is the unsafe direction -- but the
+    ambiguity is reported rather than hidden, so the author can see that the
+    number they wrote is also the exact value of a cell the report withholds.
+    """
+
+    span: NumericSpan
+    metric_ids: tuple[str, ...]
+    publishable_metric_ids: tuple[str, ...] = ()
+
+    @property
+    def ambiguous(self) -> bool:
+        return bool(self.publishable_metric_ids)
+
+
+@dataclass(frozen=True)
+class AuditResult:
+    """The outcome of auditing a narrative against the publishable figure set.
+
+    Three outcomes, not two. ``bound`` spans match a figure the report will
+    actually publish. ``suppressed`` spans match a figure suppression redacted,
+    so the narrative would publish a protected cell. ``unbound`` spans match
+    nothing at all. ``ok`` requires both failing categories to be empty, so a
+    narrative that discloses a protected cell fails exactly as hard as one that
+    invents a number.
+    """
+
+    bound: tuple[NumericSpan, ...]
+    suppressed: tuple[SuppressedSpan, ...]
+    unbound: tuple[NumericSpan, ...]
+
+    @property
+    def ok(self) -> bool:
+        return not self.suppressed and not self.unbound
+
+    @property
+    def total(self) -> int:
+        return len(self.bound) + len(self.suppressed) + len(self.unbound)

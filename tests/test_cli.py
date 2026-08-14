@@ -95,25 +95,33 @@ def test_run_human_output_still_prints_the_existing_lines(
         json.loads(captured)
 
 
-def _drafted_narrative() -> str:
-    """The housing demo's drafted narrative, fully grounded by construction."""
+def _exported_narrative() -> str:
+    """The housing demo's narrative exactly as ``run`` exports it.
+
+    Drafted from the *publishable* figures, so the suppressed cells appear as
+    the redaction sentinel and not as their raw counts. Drafting from the raw
+    figures instead would produce a narrative the pipeline never writes, and
+    auditing that is expected to fail (it states three protected cells).
+    """
 
     from outcome_receipts.clock import FixedClock
     from outcome_receipts.config import load_spec
     from outcome_receipts.draft import draft
     from outcome_receipts.engine import compute_figures, read_csv
+    from outcome_receipts.suppression import suppress_figures
 
     spec = load_spec(HOUSING)
     rows = read_csv(spec.data_path)
     figures = compute_figures(rows, spec.report.metrics, clock=FixedClock())
-    return draft(spec.report, figures)
+    publishable, _result = suppress_figures(figures)
+    return draft(spec.report, publishable)
 
 
 def test_audit_of_a_grounded_narrative_exits_ok(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     narrative = tmp_path / "narrative.md"
-    narrative.write_text(_drafted_narrative(), encoding="utf-8")
+    narrative.write_text(_exported_narrative(), encoding="utf-8")
 
     code = main(["audit", "--config", HOUSING, "--narrative", str(narrative), "--json"])
     assert code == EXIT_OK
@@ -122,6 +130,7 @@ def test_audit_of_a_grounded_narrative_exits_ok(
     assert payload["ok"] is True
     assert payload["bound"] == payload["total"]
     assert payload["unbound"] == []
+    assert payload["suppressed"] == []
 
 
 def test_audit_of_an_ungrounded_narrative_fails_closed(
@@ -137,6 +146,46 @@ def test_audit_of_an_ungrounded_narrative_fails_closed(
     assert {span["text"] for span in payload["unbound"]} == {"2024", "42"}
     # Each unbound span is a plain dict, not a dumped dataclass.
     assert set(payload["unbound"][0]) == {"text", "start", "end"}
+    # An invented number is not a suppressed cell; the categories stay separate.
+    assert payload["suppressed"] == []
+
+
+def test_audit_json_reports_a_suppressed_cell_in_its_own_category(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A disclosed protected cell is never reported as 'unbound' or as bound.
+
+    Reporting it as unbound would send the author looking for a missing metric.
+    Reporting it as bound is the defect this test exists for. It has to be its
+    own key, carrying the metric it discloses.
+    """
+
+    narrative = tmp_path / "draft.md"
+    narrative.write_text(
+        "Of the 10 who exited, 6 moved into permanent housing, a rate of 60%.",
+        encoding="utf-8",
+    )
+
+    code = main(["audit", "--config", HOUSING, "--narrative", str(narrative), "--json"])
+    assert code == EXIT_VERIFY_FAIL
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["bound"] == 0
+    assert payload["unbound"] == []
+    disclosed = {item["text"]: item for item in payload["suppressed"]}
+    assert set(disclosed) == {"10", "6", "60%"}
+    assert disclosed["10"]["metric_ids"] == ["exits"]
+    assert disclosed["6"]["metric_ids"] == ["exits_permanent"]
+    assert disclosed["60%"]["metric_ids"] == ["pct_permanent"]
+    assert all(item["ambiguous"] is False for item in disclosed.values())
+    assert set(disclosed["10"]) == {
+        "text",
+        "start",
+        "end",
+        "metric_ids",
+        "publishable_metric_ids",
+        "ambiguous",
+    }
 
 
 def test_verify_of_a_fresh_manifest_exits_ok(
