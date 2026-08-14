@@ -93,6 +93,20 @@ release-hardening work completed before the first public tag.
   package, and severity together, so a new advisory, a second advisory in
   `extract-zip`, or the same advisory escalated in severity all still fail;
   `tests/test_npm_audit_gate.py` pins that boundary.
+- `receipts migrate-check` aborted on any suppressed metric, so it failed on all
+  four shipped example specs compared against themselves. `build_migration_check`
+  composed a delta receipt for every metric unconditionally and `_composed_receipt`
+  refuses a suppressed input, so one small cell anywhere in a spec reported
+  nothing about the metrics that could have been compared — and any real
+  human-services export has one. A metric withheld on either side is now
+  classified `indeterminate` with `delta_status: "suppressed"` and no delta
+  receipt, matching `contract-check`'s vocabulary and the sibling `restate`
+  workflow. `receipts verify-workflow` gained a check that a metric carries a
+  delta receipt exactly when its status says it can. The status vocabulary is
+  published in `docs/schema/workflow-artifact.schema.json`, described in
+  `docs/NOVEL-USE-CASES.md` UC-2 (which promised a third status the code never
+  produced), and pinned by a test that fails if the three disagree.
+  ([#79](https://github.com/ChelseaKR/outcome-receipts/issues/79))
 - The grounding gate's canonicalization was lossy in exactly the shape where
   losing information is worst: `1.234` and `1,234` reduced to the same token, so
   a narrative could state a number a thousand times its receipt, or a thousandth

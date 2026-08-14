@@ -166,8 +166,18 @@ figures under the same definitions.
 
 `receipts migrate-check` takes one reviewed report spec for each source.
 It computes each metric twice and emits a paired receipt plus a SQL-grounded delta. The
-report classifies each metric as equivalent, changed, or blocked; it does not
-assert that a changed value is wrong.
+report classifies each metric as `equivalent`, `changed`, or `indeterminate`; it
+does not assert that a changed value is wrong.
+
+`indeterminate` is the classification for a metric small-cell suppression
+withholds on either side. Neither side publishes its value, so neither
+equivalence nor change can be asserted about it, and the record carries
+`delta_status: "suppressed"` in place of a delta receipt rather than a composed
+number derived from a cell the report declines to state. It is the same word
+`receipts contract-check` uses for the same reason. Classifying is what lets the
+command answer the question for the metrics it *can* compare; any real
+human-services export has at least one small cell, so aborting the artifact
+meant reporting nothing at all.
 
 Reuse the mapping queue to propose field aliases, but require approval of every
 source-specific query before execution. Record source labels and spec hashes in
