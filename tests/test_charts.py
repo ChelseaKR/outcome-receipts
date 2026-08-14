@@ -8,9 +8,11 @@ These tests pin that, plus the accessible data table and the SVG's image role.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
-from outcome_receipts.charts import render_chart, render_charts
+from outcome_receipts.charts import _scale_max, render_chart, render_charts
 from outcome_receipts.grounding import ground
 from outcome_receipts.models import ChartSpec, Figure, Receipt
 
@@ -108,3 +110,181 @@ def test_unknown_kind_raises() -> None:
 def test_render_charts_handles_several() -> None:
     charts = render_charts([BAR, BAR], FIGURES)
     assert len(charts) == 2
+
+
+# --- Withheld cells: a bar height and a line slope are both claims. ---
+#
+# Merge-blocking (issue #78). A suppressed figure used to arrive here carrying
+# ``value = 0.0``, so the bar drew flat on the axis baseline and the polyline
+# ran straight through the floor and back up. The label said "[SUPPRESSED]" and
+# the picture said "we housed nobody this quarter". These tests assert on the
+# geometry, never on the label, because the label was always right.
+
+_RECT = re.compile(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"([^>]*)')
+_POLYLINE = re.compile(r'<polyline[^>]*points="([^"]+)"')
+
+
+def _bars(svg: str) -> list[tuple[str, str, str, str, str]]:
+    """Every plotted rectangle except the white canvas background."""
+
+    return [match for match in _RECT.findall(svg) if "#ffffff" not in match[4]]
+
+
+def _withheld_figure(metric_id: str) -> Figure:
+    """A figure in the state ``suppress_figures`` leaves a withheld cell in."""
+
+    from outcome_receipts.suppression import suppress_figures
+
+    publishable, result = suppress_figures([_figure(metric_id, 4.0, "4")])
+    assert result.suppressed == (metric_id,)
+    return publishable[0]
+
+
+def _mixed_figures() -> list[Figure]:
+    """One healthy value, one genuine zero, one withheld cell."""
+
+    return [
+        _figure("visible", 40.0, "40"),
+        _figure("true_zero", 0.0, "0"),
+        _withheld_figure("withheld"),
+    ]
+
+
+def test_a_withheld_bar_and_a_true_zero_bar_are_not_the_same_shape() -> None:
+    """The exact comparison from the issue: identical geometry, before."""
+
+    spec = ChartSpec(
+        chart_id="mixed",
+        title="Mixed",
+        kind="bar",
+        metric_ids=("visible", "true_zero", "withheld"),
+        labels=("Visible", "Zero", "Withheld"),
+    )
+    svg = render_chart(spec, _mixed_figures()).svg
+    _visible, zero, withheld = _bars(svg)
+
+    assert (zero[1], zero[3]) != (withheld[1], withheld[3])
+    # The true zero keeps the old, correct rendering: nothing above the axis.
+    assert float(zero[3]) == 0.0
+    # The withheld slot occupies the full plot height, so it cannot be read as
+    # a small value either.
+    assert float(withheld[3]) > 0.0
+    assert float(withheld[1]) < float(zero[1])
+    # And it is visibly not a bar: not the data colour, and outlined dashed.
+    assert "#2b6cb0" not in withheld[4]
+    assert "stroke-dasharray" in withheld[4]
+    assert "url(#mixed-withheld)" in withheld[4]
+
+
+def test_a_withheld_bar_is_announced_not_only_drawn() -> None:
+    spec = ChartSpec(
+        chart_id="mixed",
+        title="Mixed",
+        kind="bar",
+        metric_ids=("visible", "withheld"),
+        labels=("Visible", "Withheld"),
+    )
+    svg = render_chart(spec, _mixed_figures()).svg
+
+    assert "withheld under the small-cell suppression policy" in svg
+    assert "not a value of zero" in svg
+    assert "<desc" in svg and "1 category is withheld" in svg
+
+
+def test_a_line_chart_does_not_interpolate_through_a_withheld_point() -> None:
+    """40, withheld, 36. The old chart drew a collapse and a recovery."""
+
+    figures = [
+        _figure("q1", 40.0, "40"),
+        _withheld_figure("q2"),
+        _figure("q3", 36.0, "36"),
+    ]
+    spec = ChartSpec(
+        chart_id="trend",
+        title="Trend",
+        kind="line",
+        metric_ids=("q1", "q2", "q3"),
+        labels=("Q1", "Q2", "Q3"),
+    )
+    svg = render_chart(spec, figures).svg
+
+    # No segment may span the gap. With a withheld point between the only two
+    # drawable ones, that leaves no polyline at all.
+    assert _POLYLINE.findall(svg) == []
+    # And no point is plotted on the axis floor at the withheld x position.
+    assert "<circle" in svg  # the two real points are still drawn
+    assert 'cy="296.0"' not in svg
+
+
+def test_a_line_chart_still_joins_the_points_on_either_side_of_a_gap() -> None:
+    """The break must be exactly at the gap, not a refusal to draw anything."""
+
+    figures = [
+        _figure("q1", 40.0, "40"),
+        _figure("q2", 38.0, "38"),
+        _withheld_figure("q3"),
+        _figure("q4", 30.0, "30"),
+        _figure("q5", 36.0, "36"),
+    ]
+    spec = ChartSpec(
+        chart_id="trend",
+        title="Trend",
+        kind="line",
+        metric_ids=("q1", "q2", "q3", "q4", "q5"),
+    )
+    svg = render_chart(spec, figures).svg
+
+    segments = _POLYLINE.findall(svg)
+    assert len(segments) == 2
+    assert all(len(segment.split()) == 2 for segment in segments)
+    # The withheld x (the midpoint of the plot) appears in neither segment.
+    assert not any("332.0," in segment for segment in segments)
+
+
+def test_a_withheld_cell_does_not_participate_in_the_axis_scale() -> None:
+    """A hidden cell must take no part in scaling the bars that are drawn.
+
+    Note this was latent rather than observable: `_scale_max` is a `max`, and a
+    withheld cell arriving as `0.0` could only have raised the maximum if every
+    real value were already at or below zero, which cannot change the clamped
+    result either. The test asserts the property directly, both on the scale
+    function and end to end, so it stays true if the scaling rule ever becomes
+    something other than a maximum.
+    """
+
+    figures = _mixed_figures()
+    points = render_chart(
+        ChartSpec(
+            chart_id="c", title="t", kind="bar", metric_ids=("visible", "true_zero", "withheld")
+        ),
+        figures,
+    ).points
+    drawable = tuple(point for point in points if not point.withheld)
+
+    assert _scale_max(points) == _scale_max(drawable)
+
+    with_withheld = ChartSpec(
+        chart_id="c",
+        title="t",
+        kind="bar",
+        metric_ids=("visible", "withheld"),
+    )
+    without = ChartSpec(chart_id="c", title="t", kind="bar", metric_ids=("visible",))
+    drawn = _bars(render_chart(with_withheld, figures).svg)[0]
+    alone = _bars(render_chart(without, figures).svg)[0]
+    assert drawn[3] == alone[3]
+
+    # A chart of nothing but withheld cells must not divide by zero.
+    only = ChartSpec(chart_id="c", title="t", kind="bar", metric_ids=("withheld",))
+    assert render_chart(only, figures).svg
+    assert _scale_max(render_chart(only, figures).points) == 1.0
+
+
+def test_a_withheld_point_carries_no_value_into_the_chart_data() -> None:
+    spec = ChartSpec(chart_id="c", title="t", kind="bar", metric_ids=("withheld",))
+    chart = render_chart(spec, _mixed_figures())
+
+    assert chart.points[0].value is None
+    assert chart.points[0].suppressed is True
+    assert chart.points[0].withheld is True
+    assert chart.data_table.endswith("| withheld | [SUPPRESSED] |")

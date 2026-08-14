@@ -93,6 +93,19 @@ release-hardening work completed before the first public tag.
   package, and severity together, so a new advisory, a second advisory in
   `extract-zip`, or the same advisory escalated in severity all still fail;
   `tests/test_npm_audit_gate.py` pins that boundary.
+- Charts drew a suppressed cell as a zero. A bar rendered `height="0.0"` on the
+  axis baseline, geometry identical to a figure that is genuinely zero; a line
+  chart put the point on the axis floor and ran the polyline straight through
+  it, inventing a collapse and a recovery across data withheld on purpose; and
+  `_scale_max` let the hidden cell scale the bars that were drawn, as a zero.
+  `Figure.value` is now `None` for a withheld figure, a withheld bar is a
+  hatched dashed full-height slot in the axis grey, a line breaks rather than
+  interpolating, and withheld figures take no part in the axis scale. The
+  absence is announced as well as drawn, in the marker's `<title>` and the
+  chart's `<desc>`. The end-to-end artifact search now covers the chart SVGs,
+  closing the gap ADR 0004's consequences left. Recorded in
+  [ADR 0010](docs/decisions/0010-withheld-cells-are-drawn-as-an-absence.md).
+  ([#78](https://github.com/ChelseaKR/outcome-receipts/issues/78))
 - A suppressed cell serialised as a zero. `_redact` wrote `value: 0.0`,
   `row_count: 0`, and the all-zero slice-hash sentinel — byte-identical, in
   every field the manifest schema constrains, to a figure that is genuinely

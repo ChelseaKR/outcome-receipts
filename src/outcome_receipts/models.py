@@ -177,10 +177,18 @@ class Receipt:
 
 @dataclass(frozen=True)
 class Figure:
-    """A computed value, its display string, and the receipt that backs it."""
+    """A computed value, its display string, and the receipt that backs it.
+
+    ``value`` is ``None`` when small-cell suppression withheld the figure, for
+    the same reason its receipt's numerics are: it is the field renderers read
+    for geometry, and a suppressed figure carrying ``0.0`` drew a bar of height
+    zero and a line straight through the axis floor. There is no value here to
+    draw. A renderer must check ``receipt.suppressed`` (or ``value is None``)
+    and draw an absence, not a quantity.
+    """
 
     metric_id: str
-    value: float
+    value: float | None
     display: str
     receipt: Receipt
 
