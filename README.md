@@ -309,7 +309,21 @@ applications are in [the roadmap](docs/ROADMAP.md) and
 
 Public report copy, approval language, reconciliation labels, chart alternative
 text, receipt metadata labels, and trace-view content are available in English
-and Spanish. Figures, SQL, hashes, and source data do not change across locales.
+and Spanish. Figures, SQL, hashes, and source data do not change across locales:
+a figure display is written the same way in every locale, with `,` grouping
+thousands and `.` marking the decimal, so a Spanish-reading funder sees `1,234`
+for one thousand two hundred and thirty-four.
+
+The grounding gate reads prose in either convention, and its canonicalization
+preserves magnitude. `12.345,67` and `12,345.67` both bind a display of
+`$12,345.67`; `3,5` binds `3.5`; NBSP-grouped `1 234` binds `1,234`. One shape
+cannot be resolved from the text and is therefore refused rather than guessed
+at: a single separator with 1–3 digits before it and exactly 3 after (`1.234`)
+is a thousands group under one convention and a decimal point under the other,
+and the two readings are a factor of a thousand apart. A span in that shape
+binds only a display written the same way, so a narrative cannot state a number
+1,000x its receipt and bind. See
+[ADR 0011](docs/decisions/0011-canonicalization-preserves-magnitude.md).
 
 ```sh
 receipts run --config examples/housing-demo/report.toml --out out/es \

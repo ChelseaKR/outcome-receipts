@@ -41,14 +41,75 @@ def _figure(display: str, *, value: float = 0.0, metric_id: str = "m") -> Figure
 
 
 def test_thousands_grouped_figure_binds_across_locale_separators() -> None:
-    # US comma grouping, European dot grouping, and the two no-break-space forms
-    # real localized output uses for thousands all denote the same 1234 and bind.
+    # The receipt's own spelling and the two no-break-space forms real localized
+    # output uses for thousands all denote the same 1234 and bind. European dot
+    # grouping is deliberately not in this list: see
+    # test_a_dot_grouped_span_does_not_bind_a_comma_grouped_figure.
     figures = [_figure("1,234", value=1234.0)]
-    for prose in ("1,234", "1.234", f"1{NBSP}234", f"1{NNBSP}234"):
+    for prose in ("1,234", f"1{NBSP}234", f"1{NNBSP}234"):
         result = ground(f"We served {prose} people.", figures)
         assert result.ok, f"{prose!r} should bind to figure display '1,234'"
         assert len(result.bound) == 1
         assert not result.unbound
+
+
+def test_a_dot_grouped_span_does_not_bind_a_comma_grouped_figure() -> None:
+    """The magnitude collision, stated as the absence of the bind (issue #80).
+
+    "1.234" is one thousand two hundred and thirty-four under one convention and
+    one-point-two-three-four under the other. Both readings used to canonicalize
+    to the same token, so this prose bound a receipt a thousand times its size
+    and the report exported with the gate reporting PASS. In a funder report that
+    is a cost per outcome or a length of stay wrong by three orders of magnitude,
+    carrying a receipt that appears to back it.
+
+    This test previously asserted the opposite: it listed "1.234" among the
+    spellings that must bind a display of "1,234".
+    """
+
+    figures = [_figure("1,234", value=1234.0)]
+    result = ground("Our cost per outcome ratio is 1.234 dollars per client.", figures)
+
+    assert not result.ok
+    assert result.bound == ()
+    assert [span.text for span in result.unbound] == ["1.234"]
+
+
+def test_a_comma_grouped_span_does_not_bind_a_decimal_figure() -> None:
+    """The same collision in the other direction, which is equally reachable."""
+
+    figures = [_figure("1.234", value=1.234)]
+    result = ground("The cost ratio moved to 1,234 this quarter.", figures)
+
+    assert not result.ok
+    assert [span.text for span in result.unbound] == ["1,234"]
+
+
+def test_the_ambiguous_shape_still_binds_the_receipt_it_is_written_like() -> None:
+    """Refusing the ambiguous reading must not refuse the ordinary case.
+
+    Any count between 1,000 and 999,999 has this shape. The gate has to keep
+    binding a narrative that writes the number the way the receipt does, or the
+    fix would make the tool unusable on ordinary reports.
+    """
+
+    assert ground("We served 1,234 people.", [_figure("1,234", value=1234.0)]).ok
+    assert ground("The ratio is 1.234.", [_figure("1.234", value=1.234)]).ok
+
+
+def test_the_collision_is_refused_for_every_unit() -> None:
+    """Percent, money, duration, and rate are all exposed to the same shape."""
+
+    cases = (
+        ("Rate was 12,345%.", "12.345%"),
+        ("We spent $1,234.", "$1.234"),
+        ("Average stay was 1,234 days.", "1.234 days"),
+        ("The cost ratio moved to 1,234 this quarter.", "1.234"),
+    )
+    for prose, display in cases:
+        result = ground(prose, [_figure(display)])
+        assert not result.ok, f"{prose!r} must not bind a display of {display!r}"
+        assert result.bound == (), f"{prose!r} bound {display!r}"
 
 
 def test_ascii_space_is_a_delimiter_not_a_thousands_separator() -> None:
@@ -98,10 +159,10 @@ def test_percent_figure_binds_percent_span() -> None:
 
 def test_stray_year_stays_unbound() -> None:
     figures = [_figure("1,234", value=1234.0)]
-    result = ground("In 2024 we served 1.234 people.", figures)
+    result = ground("In 2024 we served 1,234 people.", figures)
     assert not result.ok
     assert [span.text for span in result.unbound] == ["2024"]
-    assert any(span.text == "1.234" for span in result.bound)
+    assert any(span.text == "1,234" for span in result.bound)
 
 
 def test_different_value_stays_unbound() -> None:

@@ -93,6 +93,24 @@ release-hardening work completed before the first public tag.
   package, and severity together, so a new advisory, a second advisory in
   `extract-zip`, or the same advisory escalated in severity all still fail;
   `tests/test_npm_audit_gate.py` pins that boundary.
+- The grounding gate's canonicalization was lossy in exactly the shape where
+  losing information is worst: `1.234` and `1,234` reduced to the same token, so
+  a narrative could state a number a thousand times its receipt, or a thousandth
+  of it, and bind. `ground("Our cost per outcome ratio is 1.234 …", [count
+  1,234])` returned `ok=True`. Every unit was exposed — any count in the
+  1,000–999,999 range, and any `rate`, `duration`, `money`, or `percent` with
+  three decimals. Canonicalization now preserves magnitude: a figure display is
+  read by the one rule the engine writes it with, and a prose span in the
+  ambiguous shape (one separator, 1–3 digits then exactly 3) binds only a
+  display it matches character for character. Every other shape still binds
+  across conventions. `eval/grounding-benchmark.jsonl` gains a formatting family
+  covering separators in both conventions, NBSP grouping, percent, currency,
+  unit suffixes, and the ambiguous shape, with the Spanish half written in
+  Spanish number convention; the previous 100 cases were bare integers and could
+  not fail for any locale-related reason. Recorded in
+  [ADR 0011](docs/decisions/0011-canonicalization-preserves-magnitude.md), which
+  amends ADR 0007.
+  ([#80](https://github.com/ChelseaKR/outcome-receipts/issues/80))
 - Charts drew a suppressed cell as a zero. A bar rendered `height="0.0"` on the
   axis baseline, geometry identical to a figure that is genuinely zero; a line
   chart put the point on the axis floor and ran the polyline straight through
