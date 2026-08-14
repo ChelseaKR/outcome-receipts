@@ -219,6 +219,8 @@ distinguishable renderings, so a consumer reading the manifest cannot mistake "w
 cannot report this figure" for "we served nobody". The report appendix and the
 trace view show `[SUPPRESSED]` in place of the row count and slice hash for the
 same reason. See
+[ADR 0009](docs/decisions/0009-withheld-cells-are-null-not-zero.md) for the
+reasoning and
 [Specification and manifest stability](docs/SPEC-STABILITY.md) for the manifest
 schema `2.0` change and the field mapping from `1.0`.
 

@@ -106,7 +106,8 @@ release-hardening work completed before the first public tag.
   and slice hash. An equity review containing a withheld group now states
   suppression in its `interpretation_limits`, and `receipts verify-workflow`
   fails an artifact whose withheld receipt still carries a number, or whose
-  equity review withholds a group without saying so.
+  equity review withholds a group without saying so. Recorded in
+  [ADR 0009](docs/decisions/0009-withheld-cells-are-null-not-zero.md).
   ([#77](https://github.com/ChelseaKR/outcome-receipts/issues/77))
 - `suppress_figures` now refuses an already-redacted figure set instead of
   reading a redacted `value` as a true zero and reporting the cell as

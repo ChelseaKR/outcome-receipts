@@ -15,6 +15,9 @@ workflow artifact at `1.0`.
 
 ## Receipts manifest 2.0: a withheld cell is not a zero
 
+The reasoning is recorded in
+[ADR 0009](decisions/0009-withheld-cells-are-null-not-zero.md).
+
 Manifest `1.0` wrote a suppressed figure's numeric fields as zeros: `value:
 0.0`, `row_count: 0`, and the all-zero `slice_hash` sentinel. A figure that is
 genuinely zero produces the same three values, so nothing in the schema
