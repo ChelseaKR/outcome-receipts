@@ -12,6 +12,8 @@ Supported v0.x surface:
   :func:`load_table`
 - Grounding gate: :func:`ground`, :func:`redact_unbound`,
   :class:`GroundingResult`
+- Publishable-set audit: :func:`audit_narrative`, :class:`AuditResult`,
+  :class:`SuppressedSpan`
 - Narrative: :func:`draft`
 - Verification: :func:`verify_manifest`, :class:`VerifyResult`, :class:`Check`
 - Reporting: :func:`render_report`, :func:`receipts_manifest`
@@ -45,20 +47,23 @@ from outcome_receipts.engine import (
     load_table,
     read_csv,
 )
-from outcome_receipts.grounding import ground, redact_unbound
+from outcome_receipts.grounding import audit_narrative, ground, redact_unbound
 from outcome_receipts.models import (
+    AuditResult,
     DraftingSpec,
     Figure,
     GroundingResult,
     MetricSpec,
     Receipt,
     ReportSpec,
+    SuppressedSpan,
 )
 from outcome_receipts.report import receipts_manifest, render_report
 from outcome_receipts.verify import Check, VerifyResult, verify_manifest
 
 __all__ = [
     "SPEC_SCHEMA_VERSION",
+    "AuditResult",
     "Check",
     # Clocks
     "Clock",
@@ -74,9 +79,12 @@ __all__ = [
     "Receipt",
     "ReportSpec",
     "Spec",
+    "SuppressedSpan",
     "SystemClock",
     "VerifyResult",
     "__version__",
+    # Publishable-set audit
+    "audit_narrative",
     # Comparison
     "compute_comparison",
     "compute_figure",

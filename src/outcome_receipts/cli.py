@@ -8,8 +8,9 @@ Commands:
   run     compute figures, draft the narrative, run the grounding gate, and write
           the report, receipts manifest, and trace view (export blocked if any
           number is unbound)
-  audit   run the grounding gate over an existing narrative file and report unbound
-          numbers
+  audit   run the grounding gate over an existing narrative file, against the
+          figures the report may publish, and report both unbound numbers and
+          numbers that state a cell small-cell suppression withholds
   verify  re-derive every receipt in a manifest from the spec and data, and fail
           on any drift
   verify-ledger
@@ -32,7 +33,8 @@ Commands:
           package allowlisted subgroup receipts after whole-report suppression
   verify-workflow
           validate a versioned evidence-workflow artifact before interpreting it
-  eval    score the drafted narrative's grounding and write the eval report
+  eval    score the exported (post-suppression) narrative's grounding and write
+          the eval report
 
 Every command exits with a code from the contract below, and ``--json`` makes any
 command emit one machine-readable object instead of the human-readable lines. The
@@ -67,7 +69,7 @@ from outcome_receipts.diff import diff_manifests
 from outcome_receipts.draft import draft, draft_template
 from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import EvalReport, evaluate
-from outcome_receipts.grounding import ground
+from outcome_receipts.grounding import audit_narrative, ground
 from outcome_receipts.ledger import LedgerEntry, append_export, verify_chain
 from outcome_receipts.mapping import build_mapping_queue
 from outcome_receipts.model_draft import (
@@ -75,7 +77,13 @@ from outcome_receipts.model_draft import (
     NarrativeDrafter,
     build_narrative_drafter,
 )
-from outcome_receipts.models import Figure, GroundingResult, NumericSpan, TemplateSpec
+from outcome_receipts.models import (
+    Figure,
+    GroundingResult,
+    NumericSpan,
+    SuppressedSpan,
+    TemplateSpec,
+)
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
     receipts_manifest,
@@ -663,12 +671,45 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _publishable_and_hidden(
+    figures: Sequence[Figure],
+) -> tuple[list[Figure], list[Figure]]:
+    """Split a computed figure set into what may be published and what may not.
+
+    The second list is the *pre*-suppression form of every redacted figure, so a
+    caller can recognize a raw protected value in prose. It is never rendered
+    into an artifact; it exists so the tool can say "that number is a suppressed
+    cell" instead of "that number is unbound".
+    """
+
+    redacted, suppression = suppress_figures(list(figures))
+    hidden_ids = {*suppression.suppressed, *suppression.complementary_suppressed}
+    publishable = filter_for_aggregate_only(redacted)
+    hidden = [figure for figure in figures if figure.metric_id in hidden_ids]
+    return publishable, hidden
+
+
+def _suppressed_span_payload(disclosure: SuppressedSpan) -> dict[str, object]:
+    """A disclosed protected cell as JSON, distinct from an unbound span."""
+
+    return {
+        **_span_payload(disclosure.span),
+        "metric_ids": list(disclosure.metric_ids),
+        "publishable_metric_ids": list(disclosure.publishable_metric_ids),
+        "ambiguous": disclosure.ambiguous,
+    }
+
+
 def _cmd_audit(args: argparse.Namespace) -> int:
-    _spec, _rows, figures = _load_and_compute(
+    # The full figure set, not just the narrative metrics: complementary
+    # suppression is computed over every figure in the report, so auditing
+    # against a subset would leave a cell visible here that `run` redacts.
+    _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
     )
+    publishable, hidden = _publishable_and_hidden(figures)
     narrative = Path(args.narrative).read_text(encoding="utf-8")
-    result = ground(narrative, figures)
+    result = audit_narrative(narrative, publishable, hidden)
 
     if args.json:
         _emit_json(
@@ -677,14 +718,32 @@ def _cmd_audit(args: argparse.Namespace) -> int:
                 "ok": result.ok,
                 "total": result.total,
                 "bound": len(result.bound),
+                "suppressed": [_suppressed_span_payload(item) for item in result.suppressed],
                 "unbound": [_span_payload(span) for span in result.unbound],
             }
         )
         return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
-    print(f"numbers: {result.total}, bound: {len(result.bound)}, unbound: {len(result.unbound)}")
+    print(
+        f"numbers: {result.total}, bound: {len(result.bound)}, "
+        f"suppressed cells: {len(result.suppressed)}, unbound: {len(result.unbound)}"
+    )
+    for disclosure in result.suppressed:
+        names = ", ".join(disclosure.metric_ids)
+        print(
+            f"  suppressed cell: {disclosure.span.text!r} at offset {disclosure.span.start} "
+            f"is the withheld value of {names}; this report does not publish it"
+        )
+        if disclosure.ambiguous:
+            also = ", ".join(disclosure.publishable_metric_ids)
+            print(f"    (it is also the published value of {also}; rephrase so the two differ)")
     for span in result.unbound:
         print(f"  unverifiable: {span.text!r} at offset {span.start}")
+    if result.suppressed:
+        print(
+            "\naudit: FAIL — the narrative states a cell suppression withholds",
+            file=sys.stderr,
+        )
     return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
 
@@ -916,9 +975,15 @@ def _cmd_verify_bundle(args: argparse.Namespace) -> int:
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
-    spec, _rows, figures = _load_and_compute(args.config, reproducible=True, quiet=args.json)
-    narrative = draft(spec.report, figures)
-    result = ground(narrative, figures)
+    # Score the artifact the pipeline actually exports. Drafting and grounding
+    # against the raw figures measured a narrative `run` would never produce:
+    # one whose numbers include the cells suppression withholds.
+    spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+        args.config, reproducible=True, quiet=args.json
+    )
+    publishable, _hidden = _publishable_and_hidden(figures)
+    narrative = draft(spec.report, publishable)
+    result = ground(narrative, publishable)
     report = evaluate(result)
     markdown = render_eval_markdown(report, dataset=Path(args.config).parent.name)
     if args.out:
@@ -1161,7 +1226,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.set_defaults(func=_cmd_run)
 
     audit_parser = sub.add_parser(
-        "audit", help="run the grounding gate over a narrative file", parents=[json_parent]
+        "audit",
+        help="check a narrative against the figures the report may publish",
+        parents=[json_parent],
     )
     audit_parser.add_argument("--config", required=True, help="path to the report spec TOML")
     audit_parser.add_argument("--narrative", required=True, help="narrative text to check")

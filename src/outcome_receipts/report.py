@@ -364,6 +364,20 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
             )
         ),
         "",
+        "## What was scored",
+        "",
+        "".join(
+            (
+                "The **publishable** figure set: the narrative is drafted and grounded ",
+                "after small-cell suppression, so this scores the artifact `receipts run` ",
+                "exports rather than a pre-suppression draft the pipeline would never ",
+                "produce. A suppressed cell renders as `[SUPPRESSED]` and carries no ",
+                "number, so it contributes no span to the denominator. The denominator ",
+                "is therefore the count of numbers that survive suppression, which is ",
+                "smaller than the spec's metric count whenever a report has a small cell.",
+            )
+        ),
+        "",
         "## Results",
         "",
         "| Metric | Value | 95% CI |",

@@ -82,6 +82,20 @@ release-hardening work completed before the first public tag.
   package, and severity together, so a new advisory, a second advisory in
   `extract-zip`, or the same advisory escalated in severity all still fail;
   `tests/test_npm_audit_gate.py` pins that boundary.
+- `receipts audit` grounded a narrative against the **unsuppressed** figures, so
+  a draft stating the protected small cells bound every one of them and exited
+  `0` — the command the README offers for checking a hand-written draft
+  certified a disclosure. `audit` now grounds against the publishable
+  (post-suppression) figure set, computed over the whole report rather than the
+  narrative metrics alone, and reports a span that states a redacted figure as
+  its own category, naming the metric it discloses instead of calling it
+  "unbound". `--json` gains a `suppressed` array distinct from `unbound`. A
+  number that is simultaneously a published figure and a protected cell's raw
+  value is reported as a disclosure and flagged `ambiguous`, not silently
+  resolved to the convenient reading. `receipts eval` likewise drafts and scores
+  the exported narrative rather than a pre-suppression draft the pipeline never
+  produces; `eval/report.md` now states which figure set it scored.
+  ([#76](https://github.com/ChelseaKR/outcome-receipts/issues/76))
 - The comparison and reconciliation tables' `direction`/`arrow` no longer
   survive redaction when the row's own figures do not. `direction` is a word
   computed from the sign of the raw delta, not a `Figure`, so

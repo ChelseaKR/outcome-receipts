@@ -18,6 +18,14 @@ numerals ("twelve", "doce") are detected but never canonicalized or bound: they
 are always unbound so a model cannot evade the gate by spelling a number.
 Localized (E9) report output relies on this canonicalization so the
 same receipted figure binds in either language's number formatting.
+
+``ground`` answers "does this number trace to a receipt". That is the right
+question for the export path, which grounds against the already-suppressed
+figures. It is the wrong question on its own for a hand-written draft, where a
+number can trace to a perfectly real receipt for a cell small-cell suppression
+redacted -- fully receipted and still a disclosure. ``audit_narrative`` is the
+gate for that path: it binds against the publishable set and reports a span that
+states a redacted figure as its own category. See ``suppression``.
 """
 
 from __future__ import annotations
@@ -25,7 +33,13 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from outcome_receipts.models import Figure, GroundingResult, NumericSpan
+from outcome_receipts.models import (
+    AuditResult,
+    Figure,
+    GroundingResult,
+    NumericSpan,
+    SuppressedSpan,
+)
 
 # A number as it appears in prose, tolerant of locale formatting, in three forms
 # tried in order, each with an optional leading currency symbol:
@@ -161,6 +175,68 @@ def ground(text: str, figures: Sequence[Figure]) -> GroundingResult:
         else:
             unbound.append(span)
     return GroundingResult(bound=tuple(bound), unbound=tuple(unbound))
+
+
+def audit_narrative(
+    text: str,
+    publishable: Sequence[Figure],
+    suppressed: Sequence[Figure],
+) -> AuditResult:
+    """Ground ``text`` against what the report may publish, not against raw figures.
+
+    ``publishable`` is the post-suppression figure set -- exactly what
+    ``receipts run`` exports. ``suppressed`` is the *pre*-suppression form of the
+    figures suppression redacted, carrying their raw displays; it is the only
+    thing here that knows what a protected cell actually says, and it exists so a
+    number matching one can be named as a disclosure instead of silently binding.
+
+    Grounding against ``publishable`` alone would report a protected cell as
+    merely "unbound", which reads as a missing metric and sends the author
+    looking for a spec change rather than telling them they are about to publish
+    a count of six people. So a span is tested against the suppressed set first:
+    if it states a redacted figure it is a disclosure, whatever else it also
+    matches. That ordering is deliberate and is the fail-closed direction -- a
+    number that is simultaneously a publishable figure and a protected cell's raw
+    value cannot be resolved from the text, so it is reported as a disclosure and
+    flagged ambiguous rather than quietly counted as bound.
+
+    Written-out numerals are unbound here exactly as in ``ground``; the gate
+    never converts a word into a value, so "six" cannot be checked against a
+    suppressed cell either. It blocks export on its own account.
+    """
+
+    allowed: dict[str, list[str]] = {}
+    for figure in publishable:
+        allowed.setdefault(_normalize(figure.display), []).append(figure.metric_id)
+    hidden: dict[str, list[str]] = {}
+    for figure in suppressed:
+        hidden.setdefault(_normalize(figure.display), []).append(figure.metric_id)
+
+    bound: list[NumericSpan] = []
+    disclosed: list[SuppressedSpan] = []
+    unbound: list[NumericSpan] = []
+    for span in find_numbers(text):
+        if _NUMBER_WORD.fullmatch(span.text):
+            unbound.append(span)
+            continue
+        token = _normalize(span.text)
+        if token in hidden:
+            disclosed.append(
+                SuppressedSpan(
+                    span=span,
+                    metric_ids=tuple(sorted(hidden[token])),
+                    publishable_metric_ids=tuple(sorted(allowed.get(token, ()))),
+                )
+            )
+        elif token in allowed:
+            bound.append(span)
+        else:
+            unbound.append(span)
+    return AuditResult(
+        bound=tuple(bound),
+        suppressed=tuple(disclosed),
+        unbound=tuple(unbound),
+    )
 
 
 def redact_unbound(text: str, result: GroundingResult, *, marker: str = "[UNVERIFIED]") -> str:

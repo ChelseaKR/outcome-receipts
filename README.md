@@ -217,8 +217,17 @@ Check a narrative against the receipts at any time:
 receipts audit --config examples/housing-demo/report.toml --narrative some-draft.md
 ```
 
-If the narrative contains a number that no figure backs, `audit` reports it and
-exits non-zero, and `run` refuses to export.
+`audit` grounds against the figures the report may actually **publish** — the set
+`run` exports, after suppression — not against the raw computed figures. So it
+reports two distinct failures, and exits non-zero on either:
+
+* a number that no figure backs (unbound); and
+* a number that is the withheld value of a suppressed cell. That number does
+  trace to a real receipt, which is exactly why grounding against the raw figures
+  used to pass it. Writing it into a report publishes a protected count, so
+  `audit` names the metric it discloses rather than calling it unbound.
+
+`run` refuses to export in either case.
 
 ### Templates, charts, comparison, and reconciliation
 
@@ -264,10 +273,14 @@ Score the gate on the committed fixtures:
 receipts eval --config examples/housing-demo/report.toml
 ```
 
-The committed result is in [eval/report.md](eval/report.md): the drafted
-narrative grounds 100% of its numbers, so the gate passes. That the gate catches
-an injected unverifiable number is shown by the merge-blocking test
-`tests/test_grounding_gate.py`.
+The committed result is in [eval/report.md](eval/report.md). It scores the
+**exported** narrative — drafted and grounded after suppression, so it measures
+the artifact the pipeline actually writes rather than a pre-suppression draft it
+would never produce. That narrative grounds 100% of its numbers, so the gate
+passes. Because suppressed cells render as `[SUPPRESSED]` and carry no number,
+the denominator is the count of numbers that survive suppression, which the
+report states. That the gate catches an injected unverifiable number is shown by
+the merge-blocking test `tests/test_grounding_gate.py`.
 
 The authoritative product roadmap has no remaining repository-side
 implementation items. Evidence gates for a v1 tag and the implemented bounded
@@ -351,7 +364,7 @@ pinning guidance.
 | `receipts init` | Inspect a CSV header and create an empty, fail-loud starter spec. |
 | `receipts map` | Map explicit funder requirements to candidate SQL and emit a mandatory human review queue; see [metric mapping](docs/metric-mapping.md). |
 | `receipts run` | Compute, ground, suppress, approve, export, seal, and append to the ledger. |
-| `receipts audit` | Check an existing narrative for numeric spans that do not bind to receipts. |
+| `receipts audit` | Check an existing narrative against the publishable figures: report spans that bind to no receipt, and spans that state a suppressed cell. |
 | `receipts eval` | Score grounding behavior on a configured fixture. |
 | `receipts verify` | Recompute receipt values and hashes, or verify an entire exported bundle with `--bundle`. |
 | `receipts verify-bundle` | Recompute `bundle.json` member digests and an optional keyed signature. |

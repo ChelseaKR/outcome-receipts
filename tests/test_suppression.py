@@ -21,12 +21,14 @@ import json
 from itertools import product
 from pathlib import Path
 
+import pytest
+
 from outcome_receipts.cli import main
 from outcome_receipts.clock import FixedClock
 from outcome_receipts.comparison import compute_comparison, compute_reconciliation
 from outcome_receipts.config import load_spec
 from outcome_receipts.engine import compute_figures, read_csv
-from outcome_receipts.grounding import find_numbers
+from outcome_receipts.grounding import audit_narrative, find_numbers
 from outcome_receipts.models import (
     ComparisonSpec,
     Figure,
@@ -43,6 +45,8 @@ from outcome_receipts.suppression import (
     redact_reconciliation,
     suppress_figures,
 )
+
+EXAMPLES_ROOT = Path(__file__).resolve().parents[1] / "examples"
 
 
 def _make_figure(
@@ -1115,3 +1119,159 @@ class TestDirectionSuppressionEndToEnd:
         assert '<p class="change">[SUPPRESSED]</p>' in trace_html
         assert '<p class="change">No change</p>' not in trace_html
         assert "No change" not in trace_html
+
+
+def _full_figure_set(config: Path) -> list[Figure]:
+    """Every figure a report can claim: narrative, comparison, reconciliation.
+
+    Suppression is computed over the whole report, so an audit that saw only the
+    narrative metrics could leave a cell visible that ``run`` redacts. This
+    mirrors what ``run`` computes, which is the set suppression must see.
+    """
+
+    spec = load_spec(config)
+    rows = read_csv(spec.data_path)
+    figures = compute_figures(
+        rows,
+        spec.report.metrics,
+        clock=FixedClock(),
+        data_checks=spec.report.data_checks,
+    )
+    if spec.report.comparison is not None:
+        figures.extend(compute_comparison(rows, spec.report.comparison, clock=FixedClock()).figures)
+    if spec.report.reconciliation is not None:
+        figures.extend(
+            compute_reconciliation(rows, spec.report.reconciliation, clock=FixedClock()).figures
+        )
+    return figures
+
+
+def _hidden_figures(figures: list[Figure]) -> list[Figure]:
+    """The pre-suppression form of every figure suppression redacts."""
+
+    _redacted, result = suppress_figures(figures)
+    hidden_ids = {*result.suppressed, *result.complementary_suppressed}
+    return [figure for figure in figures if figure.metric_id in hidden_ids]
+
+
+def _sole_span_displays(figures: list[Figure]) -> list[str]:
+    """Displays that are exactly one numeric span, so classification is the test."""
+
+    values = set()
+    for figure in figures:
+        spans = find_numbers(figure.display)
+        if len(spans) == 1 and spans[0].text == figure.display:
+            values.add(figure.display)
+    return sorted(values)
+
+
+class TestAuditGroundsAgainstThePublishableSet:
+    """Merge-blocking (issue #76): ``receipts audit`` must not certify a disclosure.
+
+    ``audit`` is the only check a hand-written draft gets before it goes to a
+    funder. It used to ground against the *unsuppressed* figures, so a draft
+    stating the protected small cells bound every one of them and exited 0.
+    Each assertion below is the absence of that outcome: no raw value of a
+    suppressed figure may be counted as bound, for any shipped spec.
+    """
+
+    @pytest.mark.parametrize(
+        "example",
+        ["housing-demo", "grant-report", "board-report", "multi-funder"],
+    )
+    def test_no_suppressed_cell_is_ever_reported_as_bound(
+        self, example: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        config = EXAMPLES_ROOT / example / "report.toml"
+        raw = _sole_span_displays(_hidden_figures(_full_figure_set(config)))
+        assert raw, f"{example}: fixture no longer contains a suppressed cell"
+
+        narrative = tmp_path / "draft.md"
+        narrative.write_text(" ".join(f"We report {value}." for value in raw), encoding="utf-8")
+        code = main(["audit", "--config", str(config), "--narrative", str(narrative), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert code != 0, f"{example}: audit certified a narrative of protected cells"
+        assert payload["ok"] is False
+        # The unsafe outcome, stated directly: none of these counted as bound.
+        assert payload["bound"] == 0
+        # And none were demoted to "unbound", which reads as a missing metric.
+        assert payload["unbound"] == []
+        assert {item["text"] for item in payload["suppressed"]} == set(raw)
+        for item in payload["suppressed"]:
+            assert item["metric_ids"], "a disclosed cell must name the metric it discloses"
+
+    def test_the_human_readable_path_names_the_metric_not_just_the_number(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        narrative = tmp_path / "draft.md"
+        narrative.write_text("Of the 10 who exited, 6 found housing.", encoding="utf-8")
+        config = EXAMPLES_ROOT / "housing-demo" / "report.toml"
+
+        code = main(["audit", "--config", str(config), "--narrative", str(narrative)])
+        captured = capsys.readouterr()
+
+        assert code != 0
+        assert "suppressed cell: '10'" in captured.out
+        assert "exits" in captured.out
+        assert "suppressed cell: '6'" in captured.out
+        assert "exits_permanent" in captured.out
+        # The old wording called every failure "unverifiable"; a protected cell
+        # is verifiable, which was exactly the problem.
+        assert "unverifiable: '10'" not in captured.out
+        assert "audit: FAIL" in captured.err
+
+    def test_the_exported_narrative_still_audits_clean(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The fix must not make the tool's own output fail its own check."""
+
+        config = EXAMPLES_ROOT / "housing-demo" / "report.toml"
+        out = tmp_path / "out"
+        run_args = ["run", "--config", str(config), "--out", str(out)]
+        run_args += ["--reproducible", "--approved-by", "CI"]
+        assert main(run_args) == 0
+        capsys.readouterr()
+
+        report = (out / "report.md").read_text(encoding="utf-8")
+        narrative = tmp_path / "narrative.md"
+        narrative.write_text(report.split("## ")[0], encoding="utf-8")
+        code = main(["audit", "--config", str(config), "--narrative", str(narrative), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0, payload
+        assert payload["suppressed"] == []
+        assert payload["unbound"] == []
+
+
+class TestAuditAmbiguityIsReportedNotResolved:
+    """A number that is both a published figure and a protected cell is ambiguous.
+
+    Nothing in the prose says which figure the author meant, and the tool cannot
+    know. Choosing "they meant the published one" is the convenient answer and
+    the unsafe one, so the span is classified as a disclosure and the collision
+    is named rather than silently resolved.
+    """
+
+    def test_a_collision_fails_closed_and_says_it_is_ambiguous(self) -> None:
+        publishable = [_make_figure("visible_total", 12.0)]
+        hidden = [_make_figure("protected_group", 12.0)]
+
+        result = audit_narrative("We served 12 people.", publishable, hidden)
+
+        assert result.ok is False
+        assert result.bound == ()
+        assert len(result.suppressed) == 1
+        disclosure = result.suppressed[0]
+        assert disclosure.metric_ids == ("protected_group",)
+        assert disclosure.publishable_metric_ids == ("visible_total",)
+        assert disclosure.ambiguous is True
+
+    def test_a_written_numeral_is_still_unbound_not_a_disclosure(self) -> None:
+        publishable = [_make_figure("visible_total", 12.0)]
+        hidden = [_make_figure("protected_group", 6.0)]
+
+        result = audit_narrative("We served six people.", publishable, hidden)
+
+        assert result.ok is False
+        assert result.suppressed == ()
+        assert [span.text for span in result.unbound] == ["six"]
