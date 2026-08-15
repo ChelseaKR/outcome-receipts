@@ -1,0 +1,253 @@
+{
+  "checks": [
+    {
+      "details": null,
+      "documentation": {
+        "short": "Determines if the project requires human code review before pull requests (aka merge requests) are merged.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#code-review"
+      },
+      "name": "Code-Review",
+      "reason": "Found 0/25 approved changesets -- score normalized to 0",
+      "score": 0
+    },
+    {
+      "details": [
+        "Info: detected update tool: RenovateBot: renovate.json:1"
+      ],
+      "documentation": {
+        "short": "Determines if the project uses a dependency update tool.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#dependency-update-tool"
+      },
+      "name": "Dependency-Update-Tool",
+      "reason": "update tool detected",
+      "score": 10
+    },
+    {
+      "details": null,
+      "documentation": {
+        "short": "Determines if the project's GitHub Action workflows avoid dangerous patterns.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#dangerous-workflow"
+      },
+      "name": "Dangerous-Workflow",
+      "reason": "no dangerous workflow patterns detected",
+      "score": 10
+    },
+    {
+      "details": [
+        "Warn: Repository was created within the last 90 days."
+      ],
+      "documentation": {
+        "short": "Determines if the project is \"actively maintained\".",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#maintained"
+      },
+      "name": "Maintained",
+      "reason": "project was created within the last 90 days. Please review its contents carefully",
+      "score": 0
+    },
+    {
+      "details": [
+        "Info: security policy file detected: SECURITY.md:1",
+        "Info: Found linked content: SECURITY.md:1",
+        "Info: Found disclosure, vulnerability, and/or timelines in security policy: SECURITY.md:1",
+        "Info: Found text in security policy: SECURITY.md:1"
+      ],
+      "documentation": {
+        "short": "Determines if the project has published a security policy.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#security-policy"
+      },
+      "name": "Security-Policy",
+      "reason": "security policy file detected",
+      "score": 10
+    },
+    {
+      "details": null,
+      "documentation": {
+        "short": "Determines if the project has generated executable (binary) artifacts in the source repository.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#binary-artifacts"
+      },
+      "name": "Binary-Artifacts",
+      "reason": "no binaries found in the repo",
+      "score": 10
+    },
+    {
+      "details": [
+        "Info: jobLevel 'contents' permission set to 'read': .github/workflows/codeql.yml:24",
+        "Info: jobLevel 'actions' permission set to 'read': .github/workflows/codeql.yml:25",
+        "Info: jobLevel 'contents' permission set to 'read': .github/workflows/release.yml:48",
+        "Info: jobLevel 'contents' permission set to 'read': .github/workflows/release.yml:95",
+        "Warn: jobLevel 'contents' permission set to 'write': .github/workflows/release.yml:216",
+        "Info: jobLevel 'contents' permission set to 'read': .github/workflows/release.yml:249",
+        "Info: jobLevel 'contents' permission set to 'read': .github/workflows/release.yml:286",
+        "Info: jobLevel 'attestations' permission set to 'read': .github/workflows/release.yml:287",
+        "Info: jobLevel 'contents' permission set to 'read': .github/workflows/scorecard.yml:22",
+        "Info: jobLevel 'issues' permission set to 'read': .github/workflows/scorecard.yml:23",
+        "Info: jobLevel 'pull-requests' permission set to 'read': .github/workflows/scorecard.yml:24",
+        "Info: jobLevel 'checks' permission set to 'read': .github/workflows/scorecard.yml:25",
+        "Info: topLevel 'contents' permission set to 'read': .github/workflows/ci.yml:10",
+        "Info: topLevel 'contents' permission set to 'read': .github/workflows/codeql.yml:13",
+        "Info: topLevel 'contents' permission set to 'read': .github/workflows/release.yml:21",
+        "Info: topLevel 'contents' permission set to 'read': .github/workflows/scorecard.yml:11",
+        "Info: topLevel 'contents' permission set to 'read': .github/workflows/standards.yml:12"
+      ],
+      "documentation": {
+        "short": "Determines if the project's workflows follow the principle of least privilege.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#token-permissions"
+      },
+      "name": "Token-Permissions",
+      "reason": "GitHub workflow tokens follow principle of least privilege",
+      "score": 10
+    },
+    {
+      "details": [
+        "Info:  27 out of  27 GitHub-owned GitHubAction dependencies pinned",
+        "Info:   9 out of   9 third-party GitHubAction dependencies pinned",
+        "Info:   3 out of   3 containerImage dependencies pinned"
+      ],
+      "documentation": {
+        "short": "Determines if the project has declared and pinned the dependencies of its build process.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#pinned-dependencies"
+      },
+      "name": "Pinned-Dependencies",
+      "reason": "all dependencies are pinned",
+      "score": 10
+    },
+    {
+      "details": null,
+      "documentation": {
+        "short": "Determines if the project has an OpenSSF (formerly CII) Best Practices Badge.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#cii-best-practices"
+      },
+      "name": "CII-Best-Practices",
+      "reason": "no effort to earn an OpenSSF best practices badge detected",
+      "score": 0
+    },
+    {
+      "details": [
+        "Info: project has a license file: LICENSE:0",
+        "Info: FSF or OSI recognized license: Apache License 2.0: LICENSE:0"
+      ],
+      "documentation": {
+        "short": "Determines if the project has defined a license.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#license"
+      },
+      "name": "License",
+      "reason": "license file detected",
+      "score": 10
+    },
+    {
+      "details": [
+        "Info: provenance for release artifact: outcome_receipts-0.1.0.intoto.jsonl: https://github.com/ChelseaKR/outcome-receipts/releases/tag/v0.1.0"
+      ],
+      "documentation": {
+        "short": "Determines if the project cryptographically signs release artifacts.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#signed-releases"
+      },
+      "name": "Signed-Releases",
+      "reason": "1 out of the last 1 releases have a total of 1 signed artifacts.",
+      "score": 10
+    },
+    {
+      "details": [
+        "Warn: Project is vulnerable to: GHSA-jmr9-qjv8-65gv"
+      ],
+      "documentation": {
+        "short": "Determines if the project has open, known unfixed vulnerabilities.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#vulnerabilities"
+      },
+      "name": "Vulnerabilities",
+      "reason": "1 existing vulnerabilities detected",
+      "score": 9
+    },
+    {
+      "details": [
+        "Info: Project packages its releases by way of GitHub Actions.: .github/workflows/release.yml:241"
+      ],
+      "documentation": {
+        "short": "Determines if the project is published as a package that others can easily download, install, easily update, and uninstall.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#packaging"
+      },
+      "name": "Packaging",
+      "reason": "packaging workflow detected",
+      "score": 10
+    },
+    {
+      "details": [
+        "Info: SAST configuration detected: CodeQL",
+        "Warn: 0 commits out of 30 are checked with a SAST tool"
+      ],
+      "documentation": {
+        "short": "Determines if the project uses static code analysis.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#sast"
+      },
+      "name": "SAST",
+      "reason": "SAST tool detected but not run on all commits",
+      "score": 7
+    },
+    {
+      "details": [
+        "Warn: no fuzzer integrations found"
+      ],
+      "documentation": {
+        "short": "Determines if the project uses fuzzing.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#fuzzing"
+      },
+      "name": "Fuzzing",
+      "reason": "project is not fuzzed",
+      "score": 0
+    },
+    {
+      "details": [
+        "Info: 'allow deletion' disabled on branch 'main'",
+        "Info: 'force pushes' disabled on branch 'main'",
+        "Info: 'branch protection settings apply to administrators' is required to merge on branch 'main'",
+        "Info: 'stale review dismissal' is required to merge on branch 'main'",
+        "Warn: branch 'main' does not require approvers",
+        "Warn: codeowners review is not required on branch 'main'",
+        "Warn: 'last push approval' is disabled on branch 'main'",
+        "Info: 'up-to-date branches' is required to merge on branch 'main'",
+        "Info: status check found to merge onto on branch 'main'",
+        "Info: PRs are required in order to make changes on branch 'main'"
+      ],
+      "documentation": {
+        "short": "Determines if the default and release branches are protected with GitHub's branch protection settings.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#branch-protection"
+      },
+      "name": "Branch-Protection",
+      "reason": "branch protection is not maximal on development and all release branches",
+      "score": 4
+    },
+    {
+      "details": [
+        "Info: found contributions from: chelsea kelly-reif"
+      ],
+      "documentation": {
+        "short": "Determines if the project has a set of contributors from multiple organizations (e.g., companies).",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#contributors"
+      },
+      "name": "Contributors",
+      "reason": "project has 1 contributing companies or organizations -- score normalized to 3",
+      "score": 3
+    },
+    {
+      "details": null,
+      "documentation": {
+        "short": "Determines if the project runs tests before pull requests are merged.",
+        "url": "https://github.com/ossf/scorecard/blob/c22063e786c11f9dd714d777a687ff7c4599b600/docs/checks.md#ci-tests"
+      },
+      "name": "CI-Tests",
+      "reason": "25 out of 25 merged PRs checked by a CI test -- score normalized to 10",
+      "score": 10
+    }
+  ],
+  "date": "2026-08-15T07:34:00Z",
+  "metadata": null,
+  "repo": {
+    "commit": "2326dd90af5fc5b237f0e9066ba675a65d5f31dc",
+    "name": "github.com/ChelseaKR/outcome-receipts"
+  },
+  "score": 7.0,
+  "scorecard": {
+    "commit": "c22063e786c11f9dd714d777a687ff7c4599b600",
+    "version": "v5.3.0"
+  }
+}

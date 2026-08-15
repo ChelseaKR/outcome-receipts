@@ -94,6 +94,23 @@ release-hardening work completed before the first public tag.
   and no VEX statement was needed. The npm-audit gate's accept-and-refuse
   boundary is still fully tested, now against a fixture registry, so the
   mechanism does not go untested just because nothing is currently waived.
+- The `scorecard` workflow asserted `Vulnerabilities == 10`, which OpenSSF
+  derives from OSV and which therefore moves when OSV publishes rather than
+  when this repository changes. That same GHSA-jmr9-qjv8-65gv record dropped
+  the check to 9 and turned `main` red with no code change behind it, and the
+  `jq -e` assertions reported only that something was under target, never
+  which. `scripts/check_scorecard.py` now holds every floor exactly where it
+  was, prints each measured value, and adjudicates a Vulnerabilities deduction
+  advisory by advisory against `waivers.yml` — the rule SEC-12 already applies
+  to `npm audit`. An unwaived advisory, an expired waiver, or a deduction
+  Scorecard declines to attribute all still fail;
+  `tests/test_scorecard_gate.py` pins that boundary against the recorded
+  report from the red run. Because that advisory was fixed rather than waived
+  and the registry now holds no dependency exception, the new gate is
+  currently identical in effect to the assertion it replaces; it diverges only
+  once someone records a dated, owned, named one. The results artifact now
+  uploads on failure too, so the numbers behind a red Scorecard run no longer
+  have to be reconstructed from a log line.
 - `receipts audit` grounded a narrative against the **unsuppressed** figures, so
   a draft stating the protected small cells bound every one of them and exited
   `0` — the command the README offers for checking a hand-written draft

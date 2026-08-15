@@ -32,20 +32,32 @@ jobs:
           results_file: results.json
           results_format: json
           publish_results: false
+      # Every floor is unchanged: aggregate >= 6.8 (WVR-006, the repository-age
+      # ratchet), Pinned-Dependencies >= 9, Token-Permissions == 10,
+      # Dangerous-Workflow == 10, Branch-Protection >= 4 (WVR-005, the
+      # solo-maintainer approval exception), Signed-Releases == 10.
+      #
+      # What changes is the Vulnerabilities floor, which used to be `== 10`.
+      # OpenSSF derives that check from OSV, so it moves when OSV publishes,
+      # not when this repository changes: GHSA-jmr9-qjv8-65gv turned main red
+      # without a single line of this repository having moved. `npm audit` had
+      # the identical problem and SEC-12 already solved it -- keep the floor,
+      # adjudicate each deduction against waivers.yml. check_scorecard.py
+      # applies that rule here and prints every measured value instead of
+      # failing silently. An unwaived advisory, an expired waiver, or a
+      # deduction Scorecard will not attribute all still fail the job.
       - name: Enforce portfolio score floors
-        run: |
-          set -euo pipefail
-          # WVR-006: ratchet the measured baseline while the repository-age
-          # component is immutable; the waiver expires after the 90-day mark.
-          jq -e '.score >= 6.8' results.json >/dev/null
-          jq -e '[.checks[] | select(.name == "Pinned-Dependencies") | .score][0] >= 9' results.json >/dev/null
-          jq -e '[.checks[] | select(.name == "Token-Permissions") | .score][0] == 10' results.json >/dev/null
-          jq -e '[.checks[] | select(.name == "Dangerous-Workflow") | .score][0] == 10' results.json >/dev/null
-          # WVR-005: the solo-maintainer approval exception caps this at 4.
-          jq -e '[.checks[] | select(.name == "Branch-Protection") | .score][0] >= 4' results.json >/dev/null
-          jq -e '[.checks[] | select(.name == "Signed-Releases") | .score][0] == 10' results.json >/dev/null
-          jq -e '[.checks[] | select(.name == "Vulnerabilities") | .score][0] == 10' results.json >/dev/null
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        run: python3 -m scripts.check_scorecard --report results.json
+      # Uploaded whenever a report exists, whether or not the floors held: the
+      # report is the evidence for the SEC-38 monthly Scorecard record, and a
+      # run that failed its floors is exactly the one whose numbers someone
+      # needs to read. Recovering them from a log line, as this change's own
+      # fixture had to be, is not an evidence trail. The hashFiles guard keeps
+      # `if-no-files-found: error` meaningful: it still fails a run that
+      # produced a report and lost it, and stays quiet when the analysis step
+      # never got far enough to write one.
+      - if: ${{ !cancelled() && hashFiles('results.json') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: scorecard-results
           path: results.json
