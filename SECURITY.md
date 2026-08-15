@@ -69,7 +69,14 @@ Release actions are pinned to commit SHAs, release artifacts carry a Sigstore bu
 attestation and a CycloneDX SBOM, and publishing to PyPI uses Trusted Publishing (OIDC, no
 long-lived token). The CI token is least-privilege and does not persist credentials.
 `make security` and CI run pip-audit, npm audit, OSV-Scanner, gitleaks,
-Semgrep, and zizmor. CodeQL covers Python and Actions; OpenSSF Scorecard enforces
+Semgrep, and zizmor. Each is a separate target and every one runs on every
+commit, whatever the others did: they were once six lines of a single recipe,
+and make stops a recipe at its first failure, so one unfixable advisory in a
+development dependency silently cancelled the four scanners after it. Any
+finding a scanner reports still blocks merge; accepted findings are recorded,
+dated, owned and expiring, in [`waivers.yml`](waivers.yml), and a finding with
+no live waiver naming its exact advisory id, package, and severity fails the
+build. CodeQL covers Python and Actions; OpenSSF Scorecard enforces
 the portfolio score floors on its automatic triggers. `release.yml` re-runs the
 full `make verify` gate at the tagged commit before signing or publishing.
 

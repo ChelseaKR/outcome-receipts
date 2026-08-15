@@ -66,6 +66,22 @@ release-hardening work completed before the first public tag.
   is an explicit solo-maintainer ADR, not a silent missing rule.
 
 ### Fixed
+- Every gate now runs on every commit. `make verify` and `make security` were
+  prerequisite lists and single recipes, and make stops both at the first
+  failure. An unpatched HIGH advisory in the npm accessibility toolchain
+  (GHSA-jmr9-qjv8-65gv in `extract-zip`, no fixed release) failed the second
+  line of `security`, so OSV-Scanner, gitleaks, Semgrep and zizmor never ran —
+  and because `verify` stopped at `security`, neither did `cards`,
+  `eval-check`, or `compat`. Six gates silently stopped executing, for weeks,
+  while the jobs reported red for a reason that had nothing to do with them.
+  Each scanner is now its own target, `scripts/run_gates.sh` runs every gate in
+  a set and reports each result, and any failure still fails the job.
+- The one advisory behind that is recorded in `waivers.yml` as WVR-007, with
+  the package and version, the full dependency path, an owner, and a
+  2026-11-15 expiry. `scripts/check_npm_audit.py` matches it on advisory id,
+  package, and severity together, so a new advisory, a second advisory in
+  `extract-zip`, or the same advisory escalated in severity all still fail;
+  `tests/test_npm_audit_gate.py` pins that boundary.
 - `receipts audit` grounded a narrative against the **unsuppressed** figures, so
   a draft stating the protected small cells bound every one of them and exited
   `0` — the command the README offers for checking a hand-written draft
