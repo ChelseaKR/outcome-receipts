@@ -1,6 +1,19 @@
 .PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
+	security-pip security-npm security-osv security-secrets security-semgrep security-workflows \
 	a11y build-html cards benchmark eval eval-check mutation run container-build \
 	container-smoke container-scan container-verify container-demo clean
+
+# The gate sets, in reporting order. Lists rather than prerequisites, because
+# make stops a prerequisite list at the first failure and these gates are
+# independent of one another. `verify` aborted at `security` for weeks, so
+# `cards`, `eval-check` and `compat` had not run on any commit -- silently,
+# because a red job looks the same whether it ran six gates or eleven.
+# scripts/run_gates.sh runs every gate, reports each one's own result, and
+# exits non-zero if any of them failed. Nothing is muted; nothing is skipped.
+SECURITY_GATES := security-pip security-npm security-osv security-secrets \
+	security-semgrep security-workflows
+VERIFY_GATES := lint type test hygiene i18n security a11y cards eval-check compat \
+	container-verify
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
 # --frozen: install exactly what uv.lock records, never re-resolve; a lockfile
@@ -41,14 +54,38 @@ hygiene:
 
 # Keep ephemeral Python tools on the same interpreter as the locked project. In
 # particular, Semgrep's macOS source distribution does not carry semgrep-core.
-security:
+#
+# Each scanner is its own target. They used to be six lines of one recipe, and
+# make stops a recipe at the first failing line: an unfixable HIGH advisory in
+# the npm accessibility toolchain meant `npm audit` failed on line 2 and
+# OSV-Scanner, gitleaks, Semgrep and zizmor never ran at all -- while the CI
+# job called "security (pip-audit - osv-scanner - gitleaks - zizmor)" reported
+# red, which is exactly what it would have reported if they had.
+security-pip:
 	.venv/bin/pip-audit --local
-	npm audit --audit-level=high
+
+# npm cannot accept one reviewed advisory: `--audit-level` is its only lever
+# and raising it hides every finding at that severity. The floor stays at HIGH
+# and scripts/check_npm_audit.py adjudicates against waivers.yml instead, so
+# anything without a live, exact waiver still fails. See waivers.yml WVR-007.
+security-npm:
+	npm audit --json | .venv/bin/python scripts/check_npm_audit.py
+
+security-osv:
 	.tools/osv-scanner --lockfile uv.lock
+
+security-secrets:
 	.tools/gitleaks detect --source . --redact --exit-code 1
+
+security-semgrep:
 	uvx --python 3.12 --from semgrep==1.168.0 semgrep scan \
 		--config p/default --config p/python --severity ERROR --error --metrics off
+
+security-workflows:
 	uvx --python 3.12 --from zizmor==1.16.3 zizmor .github/workflows/
+
+security:
+	@MAKE="$(MAKE)" scripts/run_gates.sh $(SECURITY_GATES)
 
 i18n:
 	.venv/bin/pybabel extract -F babel.cfg --no-location --omit-header \
@@ -79,7 +116,8 @@ eval-check: benchmark eval
 compat:
 	.venv/bin/python scripts/generate_workflow_compat_fixtures.py --check
 
-verify: lint type test hygiene i18n security a11y cards eval-check compat container-verify
+verify:
+	@MAKE="$(MAKE)" scripts/run_gates.sh $(VERIFY_GATES)
 
 # Mutation testing over the invariant core (grounding gate + engine). Slow, so it
 # is opt-in and not part of `verify`. A low surviving-mutant count is evidence the

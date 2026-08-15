@@ -34,6 +34,11 @@ jobs:
       # Drive CI through the Makefile so it runs the same path as `make verify`.
       - name: Install and smoke-check the complete toolchain
         run: make install-smoke
+      # `verify` used to be a prerequisite list, and make stops one of those at
+      # the first failure. It aborted at `security`, so `cards`, `eval-check`
+      # and `compat` had not run on any commit -- and this job reported red
+      # either way, which is why nothing noticed. It now runs every gate,
+      # prints each one's own PASS/FAIL, and still exits non-zero if any failed.
       - name: Verify (full local AUTO-GATE set)
         run: make verify
 
@@ -58,6 +63,12 @@ jobs:
           node-version: "22"
       - name: Install and smoke-check the complete toolchain
         run: make install-smoke
+      # The six scanners this job's display name promises were six lines of one
+      # make recipe, and make stops a recipe at its first failing line. An
+      # unfixable HIGH advisory in the npm accessibility toolchain failed line
+      # two, so osv-scanner, gitleaks, semgrep and zizmor had not run here at
+      # all. They are independent targets now: every one runs on every commit,
+      # each reports its own result, and any failure still fails this job.
       - name: Security gates (same target used by make verify)
         run: make security
 
