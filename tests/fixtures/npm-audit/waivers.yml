@@ -1,0 +1,40 @@
+# A waiver registry for tests only. Nothing reads this at gate time.
+#
+# The npm-audit adjudication gate exists so that one reviewed, unpatched
+# advisory can be accepted by name without lowering the severity floor for
+# everything else. Its boundary -- what it refuses -- has to stay pinned even
+# when the live registry happens to be empty, which it is: the repository's one
+# real npm-audit waiver, WVR-007 for GHSA-jmr9-qjv8-65gv in extract-zip, was
+# retired when the override on @puppeteer/browsers took that package out of the
+# dependency graph entirely.
+#
+# So the behavioural tests run against this fixture instead of against
+# waivers.yml. Keeping them coupled to whatever exception happens to be live
+# would mean the mechanism goes untested the moment the repository is clean,
+# which is exactly when the next advisory arrives. Tests pass --today to pin
+# the expiry, so this file does not rot.
+#
+# WVR-900 is a fixture id. Real ids are allocated in waivers.yml and are never
+# reused, so the fixture range is kept clear of them deliberately.
+version: 1
+
+waivers:
+  - id: WVR-900
+    control: SEC-12
+    repo: outcome-receipts
+    kind: npm-audit
+    advisory: GHSA-jmr9-qjv8-65gv
+    package: extract-zip
+    version: 2.0.1
+    severity: high
+    dependency_path: >-
+      pa11y@9.1.1 -> puppeteer@24.43.1 -> @puppeteer/browsers@2.13.2 ->
+      extract-zip@2.0.1
+    reason: >-
+      Fixture copy of the retired WVR-007, kept so the adjudication gate's
+      accept-and-refuse boundary stays under test after the real waiver was
+      released. It authorises nothing: no gate reads this file.
+    owner: chelseakr
+    granted: 2026-08-15
+    expires: 2026-11-15
+    link: https://github.com/advisories/GHSA-jmr9-qjv8-65gv
