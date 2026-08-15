@@ -1,12 +1,21 @@
 """The npm-audit waiver is bounded to one advisory, and provably so.
 
-waivers.yml WVR-007 accepts GHSA-jmr9-qjv8-65gv, an unpatched symlink
-path-traversal issue in extract-zip that reaches this repository only as a
-transitive development dependency of the accessibility toolchain. An exception
-mechanism nobody has tested is worse than no exception at all, so these pin
-what it will *not* accept: a different advisory, a second advisory in the same
-package, the waived advisory on another package or at a higher severity, and an
-expired or malformed waiver all still fail the gate.
+The gate exists so one reviewed, unpatched advisory can be accepted by name
+without lowering the severity floor for everything else. An exception mechanism
+nobody has tested is worse than no exception at all, so these pin what it will
+*not* accept: a different advisory, a second advisory in the same package, the
+waived advisory on another package or at a higher severity, and an expired or
+malformed waiver all still fail.
+
+They run against `tests/fixtures/npm-audit/waivers.yml`, not the live registry.
+They used to run against the live registry, because it held WVR-007 for
+GHSA-jmr9-qjv8-65gv in extract-zip. That waiver is retired: the override on
+`@puppeteer/browsers` took extract-zip out of the dependency graph, so there is
+nothing left to waive. Had these tests stayed coupled to the live registry they
+would have had to be deleted along with it, and the mechanism would have gone
+untested from the moment the repository got clean until the moment the next
+advisory landed. `test_the_committed_registry_waives_nothing_today` asserts the
+clean state separately.
 
 The reports below are recorded `npm audit --json` shapes, so none of this needs
 a network call or an installed node_modules tree.
@@ -16,18 +25,22 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from scripts.check_npm_audit import live_waivers, main
 
 ROOT = Path(__file__).resolve().parents[1]
-WAIVERS = ROOT / "waivers.yml"
+WAIVERS = ROOT / "tests" / "fixtures" / "npm-audit" / "waivers.yml"
+COMMITTED_WAIVERS = ROOT / "waivers.yml"
 MAKEFILE = ROOT / "Makefile"
+LOCKFILE = ROOT / "package-lock.json"
 
 WAIVED_ADVISORY = "GHSA-jmr9-qjv8-65gv"
 WAIVED_PACKAGE = "extract-zip"
+#: Pinned so the fixture's expiry never turns these tests into a calendar bomb.
+TODAY = "2026-08-15"
 
 
 def _advisory(
@@ -82,7 +95,7 @@ def _report(*advisories: dict[str, Any]) -> dict[str, Any]:
 def _gate(tmp_path: Path, report: dict[str, Any], waivers: Path = WAIVERS) -> int:
     path = tmp_path / "audit.json"
     path.write_text(json.dumps(report), encoding="utf-8")
-    return main(["--report", str(path), "--waivers", str(waivers)])
+    return main(["--report", str(path), "--waivers", str(waivers), "--today", TODAY])
 
 
 def test_the_committed_waiver_accepts_the_advisory_it_names(tmp_path: Path) -> None:
@@ -125,9 +138,8 @@ def test_a_moderate_advisory_does_not_fail_the_high_floor(tmp_path: Path) -> Non
 
 def test_an_expired_waiver_accepts_nothing(tmp_path: Path) -> None:
     stale = tmp_path / "waivers.yml"
-    yesterday = (date.today() - timedelta(days=1)).isoformat()
     stale.write_text(
-        WAIVERS.read_text(encoding="utf-8").replace("expires: 2026-11-15", f"expires: {yesterday}"),
+        WAIVERS.read_text(encoding="utf-8").replace("expires: 2026-11-15", "expires: 2026-08-14"),
         encoding="utf-8",
     )
     assert _gate(tmp_path, _report(_advisory(WAIVED_ADVISORY, WAIVED_PACKAGE)), stale) == 1
@@ -145,7 +157,7 @@ def test_an_empty_audit_report_fails_closed(tmp_path: Path) -> None:
 
     empty = tmp_path / "audit.json"
     empty.write_text("", encoding="utf-8")
-    assert main(["--report", str(empty), "--waivers", str(WAIVERS)]) == 1
+    assert main(["--report", str(empty), "--waivers", str(WAIVERS), "--today", TODAY]) == 1
 
 
 def test_a_report_shape_the_gate_cannot_read_fails_closed(tmp_path: Path) -> None:
@@ -191,16 +203,47 @@ def test_every_security_scanner_is_its_own_gate() -> None:
         assert re.search(rf"^{gate}:$", text, re.MULTILINE)
 
 
-def test_the_committed_registry_is_well_formed() -> None:
+def test_the_fixture_registry_is_well_formed() -> None:
+    """The fixture has to be a real waiver, or these tests prove nothing."""
+
     waivers, problems = live_waivers(
-        WAIVERS.read_text(encoding="utf-8"), "outcome-receipts", date.today()
+        WAIVERS.read_text(encoding="utf-8"), "outcome-receipts", date.fromisoformat(TODAY)
     )
     assert problems == []
     assert set(waivers) == {WAIVED_ADVISORY.upper()}
     waiver = waivers[WAIVED_ADVISORY.upper()]
     assert waiver["package"] == WAIVED_PACKAGE
     assert waiver["severity"] == "high"
-    # The record has to carry the facts the acceptance rests on, not just an id.
+    # The record has to carry the facts an acceptance rests on, not just an id.
     evidence = waiver["reason"] + waiver["version"] + waiver["dependency_path"]
-    for claim in ("2.0.1", "pa11y", "2026-08-15", "devDependency"):
+    for claim in ("2.0.1", "pa11y", "retired"):
         assert claim in evidence
+
+
+def test_the_committed_registry_waives_nothing_today() -> None:
+    """The point of retiring WVR-007: there is no live dependency exception.
+
+    A waiver outlives its advisory silently. This is the assertion that makes
+    that impossible here -- re-add one and this test says so.
+    """
+
+    waivers, problems = live_waivers(
+        COMMITTED_WAIVERS.read_text(encoding="utf-8"), "outcome-receipts", date.today()
+    )
+    assert problems == []
+    assert waivers == {}
+
+
+def test_extract_zip_is_gone_from_the_dependency_graph() -> None:
+    """The fix that retired the waiver, pinned so a lockfile churn cannot undo it.
+
+    `@puppeteer/browsers` 2.x unpacked the downloaded Chrome build with
+    extract-zip, which has no patched release. 3.x does not depend on it at
+    all. The override in package.json is what keeps it out; without this
+    assertion a routine `npm install` could quietly put it back and the only
+    thing that would notice is a scanner, later.
+    """
+
+    assert "extract-zip" not in LOCKFILE.read_text(encoding="utf-8")
+    package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    assert package["overrides"]["@puppeteer/browsers"].startswith("^3.")

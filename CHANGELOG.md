@@ -157,6 +157,18 @@ release-hardening work completed before the first public tag.
 - `suppress_figures` now refuses an already-redacted figure set instead of
   reading a redacted `value` as a true zero and reporting the cell as
   unsuppressed — a false all-clear on the invariant it exists to assert.
+- That waiver is now retired, because the advisory turned out to be removable
+  rather than unfixable. `@puppeteer/browsers` 2.x unpacked the downloaded
+  Chrome build with `extract-zip`, which has no patched release; 3.x does not
+  depend on it at all. An `overrides` entry pinning `@puppeteer/browsers` to
+  `^3.0.2` — the same mechanism already used for `inquirer`, `tmp`, and `uuid`
+  — takes the vulnerable package out of the dependency graph entirely.
+  `extract-zip` no longer appears anywhere in `package-lock.json`, `npm audit`
+  reports zero vulnerabilities, and WVR-007 is deleted rather than left to
+  outlive the finding it described. No gate was loosened, no ignore file added,
+  and no VEX statement was needed. The npm-audit gate's accept-and-refuse
+  boundary is still fully tested, now against a fixture registry, so the
+  mechanism does not go untested just because nothing is currently waived.
 - `receipts audit` grounded a narrative against the **unsuppressed** figures, so
   a draft stating the protected small cells bound every one of them and exited
   `0` — the command the README offers for checking a hand-written draft

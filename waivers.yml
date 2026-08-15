@@ -54,36 +54,3 @@ waivers:
     granted: 2026-07-12
     expires: 2026-10-15
     link: docs/audits/openssf-scorecard-2026-07-12.md
-
-  - id: WVR-007
-    control: SEC-12
-    repo: outcome-receipts
-    kind: npm-audit
-    advisory: GHSA-jmr9-qjv8-65gv
-    package: extract-zip
-    version: 2.0.1
-    severity: high
-    dependency_path: >-
-      pa11y@9.1.1 -> puppeteer@24.43.1 -> @puppeteer/browsers@2.13.2 ->
-      extract-zip@2.0.1, and @lhci/cli@0.15.1 -> lighthouse@12.6.1 ->
-      puppeteer-core@24.43.1 -> @puppeteer/browsers@2.13.2 -> extract-zip@2.0.1
-    reason: >-
-      extract-zip 2.0.1 does not validate symlink targets when unpacking an
-      archive, so a crafted archive can write outside the extraction directory
-      (CWE-22, CVSS 8.1). It is present here only as a transitive development
-      dependency of the accessibility toolchain, four levels below pa11y and
-      @lhci/cli, where its only job is unpacking the Chrome build that
-      @puppeteer/browsers downloads from Google's own storage host. It is a
-      devDependency of the quality-gate package, it is not in the published
-      Python distribution, the container image, or anything a report consumer
-      receives, and no shipped code path reaches it. No patched release of
-      extract-zip exists as of 2026-08-15. The only remedy npm offers is
-      `npm audit fix --force`, which downgrades pa11y from 9.1.1 to 6.2.3, a
-      breaking major that would walk the WCAG 2.1 AA gate backwards in exchange
-      for fixing a package nothing shipped ever loads. Accepted on that basis,
-      to be re-reviewed on or before the expiry date below and released the
-      moment extract-zip ships a fix or pa11y moves off it.
-    owner: chelseakr
-    granted: 2026-08-15
-    expires: 2026-11-15
-    link: https://github.com/advisories/GHSA-jmr9-qjv8-65gv
