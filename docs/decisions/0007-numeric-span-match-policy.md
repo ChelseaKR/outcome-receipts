@@ -1,6 +1,11 @@
 # 0007 — Numeric-span matching is exact and written numerals fail closed
 
-Status: accepted
+Status: accepted. Amended by
+[0011](0011-canonicalization-preserves-magnitude.md), which states what the
+normalization this record relies on does and does not preserve. The decision
+text below is unchanged; the normalization was lossy for one separator shape
+(issue #80), so "exact after presentational normalization" did not hold across
+it until 0011.
 
 ## Context
 
