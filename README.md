@@ -263,7 +263,12 @@ reconciliations are held to the same gate as every narrative:
   standalone SVG and paired with an accessible data table that carries the same
   numbers as text, so a chart is readable without the image and every number in it
   traces to a receipt. The SVG is built with the standard library, so no
-  dependency is added.
+  dependency is added. A withheld figure has no value to draw: its bar becomes a
+  hatched, dashed full-height slot rather than a bar of height zero, a line chart
+  breaks rather than interpolating through it, and it takes no part in the axis
+  scale. A bar height is a claim, and the chart does not make one the text
+  refuses to make. See
+  [ADR 0010](docs/decisions/0010-withheld-cells-are-drawn-as-an-absence.md).
 * **Period comparison.** A `[comparison]` section runs one set of metrics across
   two periods (for example two quarters) and reports the change. The two period
   values and the change are each a figure with a receipt; the change is computed

@@ -214,14 +214,13 @@ def _redact(figure: Figure) -> Figure:
         column_names=None,
         suppressed=True,
     )
-    # ``Figure.value`` is still 0.0 here, and that is still wrong: it is what
-    # the chart renderer reads for geometry, so a suppressed bar draws at the
-    # axis baseline and a line interpolates through it. That is issue #78 and is
-    # fixed there; nothing in this module's serialised output reads it, because
-    # the manifest, the report appendix, and the trace view all read the receipt.
+    # ``Figure.value`` goes with them. It is what the chart renderer reads for
+    # geometry, and a redacted figure carrying 0.0 drew a bar of height zero on
+    # the axis baseline and a line straight through the floor -- a picture of
+    # "we housed nobody this quarter" beside a label saying the opposite.
     return Figure(
         metric_id=figure.metric_id,
-        value=0.0,
+        value=None,
         display=_REDACTED_DISPLAY,
         receipt=redacted_receipt,
     )
@@ -401,7 +400,12 @@ def _complementary_suppress(figures: list[Figure], suppressed_ids: set[str]) -> 
     """
 
     complementary: set[str] = set()
-    values_by_id = {figure.metric_id: figure.value for figure in figures}
+    # Every figure has a value here: ``suppress_figures`` refuses an input set
+    # containing a redacted one, so the filter narrows the type without
+    # discarding anything the search would otherwise have considered.
+    values_by_id = {
+        figure.metric_id: figure.value for figure in figures if figure.value is not None
+    }
     units_by_id = {figure.metric_id: figure.receipt.unit for figure in figures}
 
     def hidden(metric_id: str) -> bool:
@@ -462,12 +466,13 @@ def suppress_figures(
     """
 
     # Suppression reads raw values, so it must be given raw figures. An already
-    # redacted figure has no value to check or to search with: run twice, the
-    # second pass would see ``value=0.0`` on a withheld cell, read it as a true
-    # zero, and pass it through as "unsuppressed" in the result -- a false
-    # all-clear on exactly the invariant this function exists to assert. Fail
-    # closed and say which figures.
-    already = sorted(figure.metric_id for figure in figures if figure.receipt.suppressed)
+    # redacted figure has no value to check or to search with, and the threshold
+    # test would silently skip it: run twice, the second pass would list a
+    # withheld cell under "unsuppressed" -- a false all-clear on exactly the
+    # invariant this function exists to assert. Fail closed and say which.
+    already = sorted(
+        figure.metric_id for figure in figures if figure.receipt.suppressed or figure.value is None
+    )
     if already:
         raise ValueError(
             "suppress_figures needs unredacted figures; these are already "
@@ -480,7 +485,12 @@ def suppress_figures(
     # First pass: identify figures that must be suppressed (magnitude in
     # [1, threshold)). True zeros (value = 0) are not suppressed.
     for figure in figures:
-        if figure.receipt.unit == "count" and _is_below_threshold(figure.value, threshold):
+        value = figure.value
+        if (
+            value is not None
+            and figure.receipt.unit == "count"
+            and _is_below_threshold(value, threshold)
+        ):
             suppressed_ids.add(figure.metric_id)
         else:
             unsuppressed_ids.add(figure.metric_id)
@@ -507,7 +517,9 @@ def suppress_figures(
         unsuppressed=tuple(sorted(unsuppressed_ids)),
         aggregate_only=True,
         threshold=threshold,
-        values=tuple((figure.metric_id, figure.value) for figure in figures),
+        values=tuple(
+            (figure.metric_id, figure.value) for figure in figures if figure.value is not None
+        ),
     )
 
     return redacted, result

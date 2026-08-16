@@ -18,6 +18,7 @@ Sourced from:
 from __future__ import annotations
 
 import json
+import re
 from itertools import product
 from pathlib import Path
 
@@ -49,6 +50,11 @@ from outcome_receipts.suppression import (
 from outcome_receipts.trace import render_trace_html
 
 EXAMPLES_ROOT = Path(__file__).resolve().parents[1] / "examples"
+
+# The visible text of a chart SVG: value labels, category labels, and the title.
+# Coordinates live in attributes and are presentation, not claims, so they are
+# deliberately outside this.
+_SVG_TEXT = re.compile(r"<text[^>]*>(.*?)</text>", re.S)
 
 
 def _make_figure(
@@ -642,6 +648,47 @@ class TestSuppressionArtifactIntegration:
         assert "<dd>10</dd>" not in _trace_figure_section(trace_html, "exits")
         assert "<dd>6</dd>" not in _trace_figure_section(trace_html, "exits_permanent")
 
+    def test_the_chart_svgs_are_in_the_exported_artifact_search(self, tmp_path: Path) -> None:
+        """Chart SVGs are exported artifacts and were not in this search.
+
+        ADR 0004's consequences list an end-to-end string search over
+        `report.md`, `receipts.json`, and `trace.html`. The chart SVGs are
+        written beside them, are digest-listed in both `receipts.json` and
+        `bundle.json`, and were never searched -- which is how a withheld cell
+        could be drawn as a bar of height zero for as long as it was. The grant
+        report is the shipped spec with charts over suppressed quarters.
+        """
+
+        config = EXAMPLES_ROOT / "grant-report" / "report.toml"
+        out = tmp_path / "out"
+        run_args = ["run", "--config", str(config), "--out", str(out)]
+        run_args += ["--reproducible", "--approved-by", "CI"]
+        assert main(run_args) == 0
+
+        figures = _full_figure_set(config)
+        assert _hidden_figures(figures), "the grant report no longer has a suppressed cell"
+        publishable, _result = suppress_figures(figures)
+        spec = load_spec(config)
+
+        # Everything a chart is allowed to write as visible text: a publishable
+        # figure's display (which is the redaction marker for a withheld one), a
+        # category label, or the chart's own title. A raw withheld count is in
+        # none of those sets, so it cannot slip through as a coincidence.
+        allowed = {figure.display for figure in publishable}
+        for chart_spec in spec.report.charts:
+            allowed |= set(chart_spec.labels)
+            allowed.add(chart_spec.title)
+
+        svgs = sorted((out / "charts").glob("*.svg"))
+        assert svgs, "the grant report no longer exports a chart"
+        for path in svgs:
+            svg = path.read_text(encoding="utf-8")
+            unexpected = set(_SVG_TEXT.findall(svg)) - allowed
+            assert not unexpected, f"{path.name} renders {unexpected}"
+            # And the withheld cells may not take the shape of a true zero: no
+            # bar sits flat on the axis baseline.
+            assert 'height="0.0"' not in svg
+
 
 class TestFullDepthDisclosureSearch:
     """Merge-blocking: the disclosure search must cover the whole figure group.
@@ -672,7 +719,8 @@ class TestFullDepthDisclosureSearch:
         assert "dept_e" in result.suppressed
         # The adversary's check, run against exactly what the export shows: no
         # +/- combination of visible values may reconstruct the suppressed 2.
-        visible_values = [f.value for f in redacted if f.display != "[SUPPRESSED]"]
+        visible_values = [f.value for f in redacted if f.value is not None]
+        assert all(f.display != "[SUPPRESSED]" for f in redacted if f.value is not None)
         assert not _signed_subset_recovers(2.0, visible_values)
         # The next-smallest-cell rule breaks the five-term identity by redacting
         # dept_d (17), the smallest figure in the recovering combination; the

@@ -157,6 +157,22 @@ def _direction(value: float) -> str:
     return "no change"
 
 
+def _computed_value(figure: Figure) -> float:
+    """The raw value of a just-computed figure, refusing a withheld one.
+
+    ``Figure.value`` is ``None`` only for a figure suppression already redacted.
+    Comparison runs before suppression, so a ``None`` reaching here means a
+    redacted figure entered the compute path and the direction word and
+    magnitude about to be derived from it would be assertions about a cell the
+    report declines to publish. Fail closed rather than treat it as a zero,
+    which is the mistake this whole class of defect is made of.
+    """
+
+    if figure.value is None:
+        raise ValueError(f"{figure.metric_id}: a suppressed figure cannot be compared")
+    return figure.value
+
+
 def _compare_metric(
     conn: sqlite3.Connection,
     spec: MetricSpec,
@@ -178,9 +194,10 @@ def _compare_metric(
     prior_fig = compute_figure(conn, _for_period(spec, prior), clock=clock)
     current_fig = compute_figure(conn, _for_period(spec, current), clock=clock)
     raw_delta = compute_figure(conn, _delta_spec(spec, current, prior), clock=clock)
+    delta_value = _computed_value(raw_delta)
     delta_fig = replace(
         raw_delta,
-        display=_magnitude_display(raw_delta.value, spec.unit, spec.decimals),
+        display=_magnitude_display(delta_value, spec.unit, spec.decimals),
     )
     row = ComparisonRow(
         base_metric_id=spec.metric_id,
@@ -188,7 +205,7 @@ def _compare_metric(
         prior=prior_fig,
         current=current_fig,
         delta=delta_fig,
-        direction=_direction(raw_delta.value),
+        direction=_direction(delta_value),
     )
     return row, [prior_fig, current_fig, delta_fig]
 
