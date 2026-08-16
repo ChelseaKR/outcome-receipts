@@ -10,6 +10,12 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-16
+
+Pre-1.0, so a breaking change to the receipts-manifest contract lands in a
+minor bump rather than a major one (see the versioning note above). The
+contract change is described in full under **Changed** below.
+
 ### Added
 - Digest-pinned, non-root Docker self-hosting with a one-command demo,
   networkless/read-only smoke test, and blocking Trivy HIGH/CRITICAL scan.
@@ -77,6 +83,18 @@ release-hardening work completed before the first public tag.
   is an explicit solo-maintainer ADR, not a silent missing rule.
 
 ### Fixed
+- The dependency-install step could not fail on lockfile drift. `make install`
+  ran `uv sync --frozen` under a comment claiming `--frozen` made "a lockfile
+  drift a loud CI failure"; it does not. `--frozen` installs exactly what
+  `uv.lock` records and never compares the lock against `pyproject.toml`, so
+  bumping `project.version` without re-locking still exits 0 — proven by doing
+  exactly that: `uv sync --frozen` returned 0 with `pyproject.toml` at `0.2.0`
+  and `uv.lock` at `0.1.0`, while `uv lock --check` returned 1 on the same tree.
+  The one change guaranteed to desynchronise the lock was the one change the
+  gate could not see, and every release re-verified against a stale editable
+  install. `make install` now runs `uv lock --check` first and fails closed,
+  matching what `npm ci` (as opposed to `npm install`) already did for the
+  JavaScript half of the toolchain.
 - Every gate now runs on every commit. `make verify` and `make security` were
   prerequisite lists and single recipes, and make stops both at the first
   failure. An unpatched HIGH advisory in the npm accessibility toolchain
@@ -469,5 +487,6 @@ release-hardening work completed before the first public tag.
   suppressed, every percent figure is suppressed with it, documented as such in
   the module docstring.
 
-[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ChelseaKR/outcome-receipts/releases/tag/v0.1.0
