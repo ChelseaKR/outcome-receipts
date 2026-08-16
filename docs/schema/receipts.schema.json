@@ -2,15 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ChelseaKR/outcome-receipts/docs/schema/receipts.schema.json",
   "title": "Outcome Receipts manifest",
-  "description": "The receipts.json manifest exported alongside a report. Every figure carries a receipt: the exact query, the slice it was computed over, the value, and how the slice hash was produced. The schema is versioned; see docs/decisions/0005-receipt-canonicalization-and-schema.md.",
+  "description": "The receipts.json manifest exported alongside a report. Every figure carries a receipt: the exact query, the slice it was computed over, the value, and how the slice hash was produced. A figure withheld by small-cell suppression carries suppressed: true and null for every numeric field, so a withheld cell is never readable as a count of zero. The schema is versioned; see docs/decisions/0005-receipt-canonicalization-and-schema.md and docs/SPEC-STABILITY.md.",
   "type": "object",
   "required": ["schema_version", "hash", "receipts"],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "description": "The manifest schema version. Consumers check this before re-deriving fields.",
+      "description": "The manifest schema version. Consumers check this before re-deriving fields. 2.0 withholds a suppressed receipt's numerics as null; 1.0 wrote zeros there and could not be told apart from a true zero.",
       "type": "string",
-      "const": "1.0"
+      "const": "2.0"
     },
     "hash": {
       "description": "How every slice_hash was produced.",
@@ -41,6 +41,7 @@
         "type": "object",
         "required": [
           "metric_id",
+          "suppressed",
           "value",
           "display",
           "unit",
@@ -52,17 +53,46 @@
           "computed_at"
         ],
         "additionalProperties": false,
+        "allOf": [
+          {
+            "description": "A withheld figure asserts no number: every numeric field is null.",
+            "if": { "properties": { "suppressed": { "const": true } }, "required": ["suppressed"] },
+            "then": {
+              "properties": {
+                "value": { "type": "null" },
+                "row_count": { "type": "null" },
+                "slice_hash": { "type": "null" },
+                "column_names": { "type": "null" }
+              }
+            }
+          },
+          {
+            "description": "A published figure asserts a real number: no numeric field is null.",
+            "if": { "properties": { "suppressed": { "const": false } }, "required": ["suppressed"] },
+            "then": {
+              "properties": {
+                "value": { "type": "number" },
+                "row_count": { "type": "integer" },
+                "slice_hash": { "type": "string" }
+              }
+            }
+          }
+        ],
         "properties": {
           "metric_id": {
             "description": "The stable identifier of the metric.",
             "type": "string"
           },
+          "suppressed": {
+            "description": "Whether small-cell suppression withheld this figure. This is the field to branch on. When true, value, row_count, slice_hash, and column_names are all null and the figure asserts no number; when false, they carry the real values, including a genuine zero. A figure that does not exist has no entry in receipts at all. Suppressed, absent, and zero are three states with three distinguishable renderings.",
+            "type": "boolean"
+          },
           "value": {
-            "description": "The numeric value the figure asserts.",
-            "type": "number"
+            "description": "The numeric value the figure asserts, or null when the figure is suppressed. Null is not zero: it means the report declines to state this number, and a consumer must not read, plot, or sum it as a count.",
+            "type": ["number", "null"]
           },
           "display": {
-            "description": "The canonical rendering the grounding gate matches on.",
+            "description": "The canonical rendering the grounding gate matches on. A suppressed figure displays the redaction marker [SUPPRESSED]; the marker is a redaction sentinel, never translated, and is not a number the gate binds.",
             "type": "string"
           },
           "unit": {
@@ -94,18 +124,18 @@
             "type": "string"
           },
           "row_count": {
-            "description": "The number of rows in the slice.",
-            "type": "integer",
+            "description": "The number of rows in the slice, or null when the figure is suppressed. For an ordinary count metric the row count is the withheld value again, so it is withheld with it rather than zeroed. A row_count of 0 means a query ran and matched nothing.",
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "slice_hash": {
-            "description": "The hex digest over the canonicalized slice; the all-zero sentinel marks an empty slice.",
-            "type": "string",
+            "description": "The hex digest over the canonicalized slice, or null when the figure is suppressed. The all-zero sentinel marks a genuinely empty slice; it is deliberately not reused for a withheld one, because a hash of a guessed row set could otherwise be compared against a published one to confirm the guess.",
+            "type": ["string", "null"],
             "pattern": "^[0-9a-f]+$"
           },
           "column_names": {
-            "description": "The slice's column names, in query order. Folded into the slice hash under canonicalization v1.",
-            "type": "array",
+            "description": "The slice's column names, in query order, or null when the figure is suppressed. Folded into the slice hash under canonicalization v1.",
+            "type": ["array", "null"],
             "items": { "type": "string" }
           },
           "kind": {

@@ -211,6 +211,19 @@ operator's responsibility. See the [data card](docs/cards/data-card-reporting.md
 the [DPIA findings](docs/RESPONSIBLE-TECH-AUDITS.md), and the historic suppression
 ADRs in [docs/decisions](docs/decisions/).
 
+A withheld cell is never a zero. In `receipts.json` its receipt carries
+`suppressed: true` and `null` for `value`, `row_count`, `slice_hash`, and
+`column_names`; a figure that is genuinely zero carries `suppressed: false` and a
+real `0`; a figure that does not exist has no receipt at all. Three states, three
+distinguishable renderings, so a consumer reading the manifest cannot mistake "we
+cannot report this figure" for "we served nobody". The report appendix and the
+trace view show `[SUPPRESSED]` in place of the row count and slice hash for the
+same reason. See
+[ADR 0009](docs/decisions/0009-withheld-cells-are-null-not-zero.md) for the
+reasoning and
+[Specification and manifest stability](docs/SPEC-STABILITY.md) for the manifest
+schema `2.0` change and the field mapping from `1.0`.
+
 Check a narrative against the receipts at any time:
 
 ```sh

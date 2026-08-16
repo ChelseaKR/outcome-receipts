@@ -21,6 +21,7 @@
             "metric_id": "served",
             "row_count": 14,
             "slice_hash": "7b3c5f34e1662f3db560400ee4af33ca00715d14126fdbc555d268a754cb21b6",
+            "suppressed": false,
             "unit": "count",
             "value": 14.0,
             "value_sql": "SELECT COUNT(*) FROM data"
@@ -28,15 +29,15 @@
           "delta_receipt": {
             "computed_at": "1970-01-01T00:00:00+00:00",
             "display": "2",
-            "input_digest": "8b2fc1c8adc5794d701b505205e4156c7294d15eddac1a9d746a2ff9db08bdc9",
+            "input_digest": "cb7e22b0fd312e06f43a6745a05e8fd4a604495b4a7a54ba8c54af45545cf0b0",
             "inputs": [
               {
                 "metric_id": "served",
-                "receipt_digest": "d7f681a6d075585ce9c66b72d91113fe8cc1af90b8c518dce580079665cb46ee"
+                "receipt_digest": "7705c4a7371858be6cfdba78dea71a6f86fcc378f27079835d30a1b21efd68fa"
               },
               {
                 "metric_id": "served",
-                "receipt_digest": "930443373616c473f0588186ae44fefcebb9f26a78833805d99881f216c600f6"
+                "receipt_digest": "adb8cbb07f1950110840fdb0a2a3fb9def06490c3394fbae455511fd8238c9ed"
               }
             ],
             "metric_id": "served__restatement_delta",
@@ -62,6 +63,7 @@
             "metric_id": "served",
             "row_count": 12,
             "slice_hash": "9691ab7c9a94f163b01bd45348fd313cabd811875e0d2a72ed7c1afeab9e344c",
+            "suppressed": false,
             "unit": "count",
             "value": 12.0,
             "value_sql": "SELECT COUNT(*) FROM data"
@@ -73,12 +75,12 @@
           ]
         }
       ],
-      "current_manifest_digest": "86d757f180367f18637b4ab33cc9f5760342405ce7d418a78c5d9701e7aa89cb",
+      "current_manifest_digest": "f053b8820c7ead34badfef06695421baa0ec0de1f824e0c65103be4525c31b5a",
       "current_spec_digest": "d65438ef0569cdae5edde76215e7309876aaba5ca5dca0745a64b51a40ffa35a",
       "kind": "restatement",
       "reason": "Synthetic late records were accepted.",
       "relationship": {
-        "bundle_digest": "3f5ff3bd8ba8a8ee3279514436aee987febe6ec08551885773db33a1321076d0",
+        "bundle_digest": "492b77b07f8d529b0503d21ebd7ffb35c6a139c4c48ccf905dbfd790010dc9b0",
         "type": "supersedes"
       },
       "removed": [],
@@ -107,6 +109,7 @@
             "metric_id": "served",
             "row_count": 14,
             "slice_hash": "7b3c5f34e1662f3db560400ee4af33ca00715d14126fdbc555d268a754cb21b6",
+            "suppressed": false,
             "unit": "count",
             "value": 14.0,
             "value_sql": "SELECT COUNT(*) FROM data"
@@ -126,6 +129,7 @@
             "metric_id": "served",
             "row_count": 12,
             "slice_hash": "9691ab7c9a94f163b01bd45348fd313cabd811875e0d2a72ed7c1afeab9e344c",
+            "suppressed": false,
             "unit": "count",
             "value": 12.0,
             "value_sql": "SELECT COUNT(*) FROM data"
@@ -133,15 +137,15 @@
           "delta_receipt": {
             "computed_at": "1970-01-01T00:00:00+00:00",
             "display": "2",
-            "input_digest": "8b2fc1c8adc5794d701b505205e4156c7294d15eddac1a9d746a2ff9db08bdc9",
+            "input_digest": "cb7e22b0fd312e06f43a6745a05e8fd4a604495b4a7a54ba8c54af45545cf0b0",
             "inputs": [
               {
                 "metric_id": "served",
-                "receipt_digest": "d7f681a6d075585ce9c66b72d91113fe8cc1af90b8c518dce580079665cb46ee"
+                "receipt_digest": "7705c4a7371858be6cfdba78dea71a6f86fcc378f27079835d30a1b21efd68fa"
               },
               {
                 "metric_id": "served",
-                "receipt_digest": "930443373616c473f0588186ae44fefcebb9f26a78833805d99881f216c600f6"
+                "receipt_digest": "adb8cbb07f1950110840fdb0a2a3fb9def06490c3394fbae455511fd8238c9ed"
               }
             ],
             "metric_id": "served__migration_delta",
@@ -210,6 +214,7 @@
             "metric_id": "financial",
             "row_count": 12,
             "slice_hash": "6b4d33d03feeef298c7f8cba2ef7a29c0c63627903bda7dfeba9cb045636d560",
+            "suppressed": false,
             "unit": "money",
             "value": 5000.0,
             "value_sql": "SELECT MAX(CAST(amount AS INTEGER)) FROM data"
@@ -230,6 +235,7 @@
             "metric_id": "observed",
             "row_count": 12,
             "slice_hash": "9691ab7c9a94f163b01bd45348fd313cabd811875e0d2a72ed7c1afeab9e344c",
+            "suppressed": false,
             "unit": "count",
             "value": 12.0,
             "value_sql": "SELECT COUNT(*) FROM data"
@@ -250,6 +256,7 @@
             "metric_id": "threshold",
             "row_count": 12,
             "slice_hash": "5ede6c808e135c5574bcdff8b7127e8c929fbdd05f363095a3888b696791c8c8",
+            "suppressed": false,
             "unit": "count",
             "value": 11.0,
             "value_sql": "SELECT MAX(CAST(threshold AS INTEGER)) FROM data"
@@ -266,11 +273,11 @@
       "approved_by": "Compatibility fixture reviewer",
       "inputs": [
         {
-          "bundle_digest": "3f5ff3bd8ba8a8ee3279514436aee987febe6ec08551885773db33a1321076d0",
+          "bundle_digest": "492b77b07f8d529b0503d21ebd7ffb35c6a139c4c48ccf905dbfd790010dc9b0",
           "partner": "Partner A"
         },
         {
-          "bundle_digest": "98f67009bc79b259fc47a5ca07b490f1e0a9cb441e3247b17a37883d7b2673d5",
+          "bundle_digest": "0d68773a5419c639947342b3f505ea475caa889eafcba440a3dedccc0d036a8f",
           "partner": "Partner B"
         }
       ],
@@ -284,15 +291,15 @@
       "rollup_receipt": {
         "computed_at": "1970-01-01T00:00:00+00:00",
         "display": "25",
-        "input_digest": "1649859090459e91b6026112344633b5fff287baed35cba50cb5c27148d2c309",
+        "input_digest": "1d8603188172c187e8387779f28a8ac8f509f477592041a0632fc4016e02e00b",
         "inputs": [
           {
             "metric_id": "served",
-            "receipt_digest": "702596c14f359647a2bb2fcec0f29e3e80ab6828b7c9afefedeb4afc2e280a08"
+            "receipt_digest": "7705c4a7371858be6cfdba78dea71a6f86fcc378f27079835d30a1b21efd68fa"
           },
           {
             "metric_id": "served",
-            "receipt_digest": "d7f681a6d075585ce9c66b72d91113fe8cc1af90b8c518dce580079665cb46ee"
+            "receipt_digest": "f93bed16879758e08ee43d5d894c74146f8741b12a879f4c679d1f73a46b4469"
           }
         ],
         "metric_id": "served__rollup",
@@ -317,7 +324,7 @@
           "receipt": {
             "caveat": "",
             "collection_frequency": "",
-            "column_names": [],
+            "column_names": null,
             "computed_at": "1970-01-01T00:00:00+00:00",
             "data_source": "",
             "definition": "Synthetic records in operator-reviewed group A.",
@@ -325,10 +332,11 @@
             "indicator": "",
             "kind": "outcome",
             "metric_id": "group_a",
-            "row_count": 0,
-            "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "row_count": null,
+            "slice_hash": null,
+            "suppressed": true,
             "unit": "count",
-            "value": 0.0,
+            "value": null,
             "value_sql": "SELECT COUNT(*) FROM data WHERE category = 'A'"
           }
         },
@@ -337,7 +345,7 @@
           "receipt": {
             "caveat": "",
             "collection_frequency": "",
-            "column_names": [],
+            "column_names": null,
             "computed_at": "1970-01-01T00:00:00+00:00",
             "data_source": "",
             "definition": "Synthetic records in operator-reviewed group B.",
@@ -345,17 +353,19 @@
             "indicator": "",
             "kind": "outcome",
             "metric_id": "group_b",
-            "row_count": 0,
-            "slice_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "row_count": null,
+            "slice_hash": null,
+            "suppressed": true,
             "unit": "count",
-            "value": 0.0,
+            "value": null,
             "value_sql": "SELECT COUNT(*) FROM data WHERE category = 'B'"
           }
         }
       ],
       "interpretation_limits": [
         "No group ranking is produced.",
-        "No causal or fairness conclusion is produced."
+        "No causal or fairness conclusion is produced.",
+        "One or more groups are withheld under the small-cell suppression policy. A withheld group carries suppressed: true and a null value; it is not a count of zero and must not be read, plotted, or summed as one."
       ],
       "kind": "equity_review",
       "plan_digest": "c942e3ca92e36a135488b7f7215a113dd30a9be77dc27ba4414853f90ce7ef76",

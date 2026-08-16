@@ -24,17 +24,33 @@ from typing import Any
 
 from outcome_receipts.grounding import ground
 from outcome_receipts.models import (
+    EMPTY_SLICE_HASH,
     HASH_ALGORITHM,
     HASH_CANONICALIZATION,
     HASH_DIGEST_SIZE,
     SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
     Figure,
     GroundingResult,
 )
 
 # The receipt fields re-derivation compares. ``computed_at`` is excluded on
 # purpose; see the module docstring.
-_CHECKED_FIELDS = ("value", "slice_hash", "row_count", "value_sql", "unit", "display")
+_CHECKED_FIELDS = (
+    "value",
+    "slice_hash",
+    "row_count",
+    "value_sql",
+    "unit",
+    "display",
+    "suppressed",
+)
+
+# The same list for a manifest written under schema 1.0, which had no
+# ``suppressed`` field. Comparing it against a re-derived ``False``/``True``
+# would report drift on every receipt of an older manifest and say nothing about
+# whether the numbers still hold.
+_CHECKED_FIELDS_V1 = tuple(field for field in _CHECKED_FIELDS if field != "suppressed")
 
 
 @dataclass(frozen=True)
@@ -61,16 +77,33 @@ class VerifyResult:
         return sum(1 for check in self.checks if check.ok)
 
 
-def _recomputed_fields(figure: Figure) -> dict[str, Any]:
+def _recomputed_fields(figure: Figure, *, legacy: bool) -> dict[str, Any]:
+    """The re-derived receipt fields, rendered as the stored receipt's schema wrote them.
+
+    Schema 2.0 withholds a suppressed receipt's numerics as ``null``. Schema 1.0
+    wrote zeros there (``value: 0.0``, ``row_count: 0``, the all-zero slice-hash
+    sentinel) -- the defect that made a withheld cell indistinguishable from a
+    true zero. A 1.0 manifest is still verifiable: with ``legacy`` set this
+    reconstructs that rendering from the current figure, so the comparison
+    answers "do the numbers still hold" rather than reporting the schema change
+    as drift on every suppressed receipt. Nothing writes 1.0 any more.
+    """
+
     receipt = figure.receipt
-    return {
+    fields: dict[str, Any] = {
         "value": receipt.value,
         "slice_hash": receipt.slice_hash,
         "row_count": receipt.row_count,
         "value_sql": receipt.value_sql,
         "unit": receipt.unit,
         "display": figure.display,
+        "suppressed": receipt.suppressed,
     }
+    if legacy and receipt.suppressed:
+        fields["value"] = 0.0
+        fields["row_count"] = 0
+        fields["slice_hash"] = EMPTY_SLICE_HASH
+    return fields
 
 
 def _schema_checks(manifest: Mapping[str, Any]) -> list[Check]:
@@ -87,12 +120,17 @@ def _schema_checks(manifest: Mapping[str, Any]) -> list[Check]:
     checks: list[Check] = []
     if "schema_version" in manifest:
         got = manifest["schema_version"]
-        ok = got == SCHEMA_VERSION
-        detail = (
-            "schema_version matches"
-            if ok
-            else f"schema_version: manifest {got!r} != expected {SCHEMA_VERSION!r}"
-        )
+        ok = got in SUPPORTED_SCHEMA_VERSIONS
+        if not ok:
+            detail = (
+                f"schema_version: manifest {got!r} is not one of {list(SUPPORTED_SCHEMA_VERSIONS)}"
+            )
+        elif got == SCHEMA_VERSION:
+            detail = "schema_version matches"
+        else:
+            detail = (
+                f"schema_version {got!r} is supported for reading (current is {SCHEMA_VERSION!r})"
+            )
         checks.append(Check("schema_version", ok, detail))
     if "hash" in manifest:
         got_hash = manifest["hash"]
@@ -113,9 +151,22 @@ def _schema_checks(manifest: Mapping[str, Any]) -> list[Check]:
     return checks
 
 
-def _compare(stored: Mapping[str, Any], recomputed: Mapping[str, Any]) -> list[str]:
+def _compare(stored: Mapping[str, Any], figure: Figure) -> list[str]:
+    """Field-by-field drift between one stored receipt and its re-derived figure.
+
+    Which rendering to compare against is read off the stored receipt itself
+    rather than off the manifest envelope: a 2.0 receipt declares ``suppressed``
+    and a 1.0 receipt does not, so the presence of the key is exact for a
+    well-formed manifest of either version, and a 2.0 manifest missing the key on
+    one receipt is compared against the 1.0 rendering and reported as drift
+    rather than waved through.
+    """
+
+    legacy = "suppressed" not in stored
+    fields = _CHECKED_FIELDS_V1 if legacy else _CHECKED_FIELDS
+    recomputed = _recomputed_fields(figure, legacy=legacy)
     drifts: list[str] = []
-    for field in _CHECKED_FIELDS:
+    for field in fields:
         want = recomputed[field]
         got = stored.get(field)
         if got != want:
@@ -131,9 +182,11 @@ def verify_manifest(figures: Sequence[Figure], manifest: Mapping[str, Any]) -> V
     with no receipt, is reported as a failure so the two sets must agree exactly.
 
     When the manifest carries a ``schema_version`` or ``hash`` descriptor, they are
-    checked against the current constants first, so a manifest written under a
-    different schema fails with a named version/descriptor reason before any
-    per-receipt re-derivation is attempted.
+    checked against the current constants first, so a manifest written under an
+    unsupported schema fails with a named version/descriptor reason before any
+    per-receipt re-derivation is attempted. A manifest written under an older but
+    still supported schema is compared field-for-field as *that* schema wrote it,
+    so a schema change is not reported as data drift; see ``_recomputed_fields``.
     """
 
     by_id = {figure.metric_id: figure for figure in figures}
@@ -147,7 +200,7 @@ def verify_manifest(figures: Sequence[Figure], manifest: Mapping[str, Any]) -> V
         if figure is None:
             checks.append(Check(metric_id, False, "no figure re-derives for this receipt"))
             continue
-        drifts = _compare(stored, _recomputed_fields(figure))
+        drifts = _compare(stored, figure)
         if drifts:
             checks.append(Check(metric_id, False, "; ".join(drifts)))
         else:

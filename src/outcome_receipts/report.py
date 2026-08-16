@@ -19,6 +19,7 @@ from outcome_receipts.models import (
     HASH_ALGORITHM,
     HASH_CANONICALIZATION,
     HASH_DIGEST_SIZE,
+    REDACTED_DISPLAY,
     SCHEMA_VERSION,
     Figure,
 )
@@ -210,6 +211,19 @@ def render_charts_section(charts: Sequence[Chart], *, chart_dir: str, locale: Lo
     return "\n".join(lines).rstrip()
 
 
+def _withheld(value: object) -> str:
+    """Render a receipt field, or the redaction marker when it was withheld.
+
+    A suppressed receipt carries ``None`` for every numeric field, so printing it
+    directly would put ``None`` next to the ``[SUPPRESSED]`` label. Printing a
+    ``0`` -- which is what the field used to hold -- told the reader the query
+    matched no rows. Neither is what the report means, so both surfaces show the
+    same marker the figure itself shows.
+    """
+
+    return REDACTED_DISPLAY if value is None else str(value)
+
+
 def _receipt_lines(figure: Figure, *, locale: Locale = "en") -> list[str]:
     receipt = figure.receipt
     copy = get_copy(locale)
@@ -228,8 +242,8 @@ def _receipt_lines(figure: Figure, *, locale: Locale = "en") -> list[str]:
     lines.extend(
         [
             f"  - {copy.receipt_query_label}: `{receipt.value_sql}`",
-            f"  - {copy.receipt_rows_label}: {receipt.row_count}",
-            f"  - {copy.receipt_slice_hash_label}: `{receipt.slice_hash}`",
+            f"  - {copy.receipt_rows_label}: {_withheld(receipt.row_count)}",
+            f"  - {copy.receipt_slice_hash_label}: `{_withheld(receipt.slice_hash)}`",
             f"  - {copy.receipt_computed_at_label}: {receipt.computed_at}",
         ]
     )
@@ -295,6 +309,13 @@ def receipts_manifest(
     digest size, canonicalization rule set), so a consumer can validate and
     re-derive without reading the engine. See ``docs/schema/receipts.schema.json``
     and ADR 0005.
+
+    Every receipt carries ``suppressed``. When it is true the withheld numerics
+    (``value``, ``row_count``, ``slice_hash``, ``column_names``) are ``null``,
+    never zero, so a consumer cannot read a withheld cell as a count of nobody.
+    A genuinely zero figure is ``suppressed: false`` with a real ``0``; a figure
+    that does not exist has no entry in ``receipts`` at all. Three states, three
+    distinguishable renderings.
     """
 
     payload: dict[str, object] = {
@@ -307,6 +328,7 @@ def receipts_manifest(
         "receipts": [
             {
                 "metric_id": f.receipt.metric_id,
+                "suppressed": f.receipt.suppressed,
                 "value": f.receipt.value,
                 "display": f.display,
                 "unit": f.receipt.unit,
@@ -319,7 +341,9 @@ def receipts_manifest(
                 "value_sql": f.receipt.value_sql,
                 "row_count": f.receipt.row_count,
                 "slice_hash": f.receipt.slice_hash,
-                "column_names": list(f.receipt.column_names),
+                "column_names": (
+                    None if f.receipt.column_names is None else list(f.receipt.column_names)
+                ),
                 "computed_at": f.receipt.computed_at,
             }
             for f in sorted(figures, key=lambda f: f.metric_id)

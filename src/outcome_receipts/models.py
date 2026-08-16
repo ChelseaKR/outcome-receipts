@@ -15,12 +15,29 @@ from dataclasses import dataclass, field
 # visible rather than silently indistinguishable.
 EMPTY_SLICE_HASH = "0" * 64
 
+# What a reader sees in place of a figure small-cell suppression withheld. It is
+# a redaction marker, not narrative copy, so it is never translated. Single
+# sourced here because suppression writes it, the report and trace views render
+# it, and the evidence workflows branch on it; three copies of the literal is
+# three chances for one of them to drift out of agreement with the others.
+REDACTED_DISPLAY = "[SUPPRESSED]"
+
 # The schema version of the receipts manifest. Bumped when the shape of
 # receipts.json or the meaning of a receipt field changes in a way that a
 # consumer or the re-derivation check must know about. ``verify`` names a
 # version mismatch before it tries to re-derive fields, so a manifest written
 # under an older schema fails with a clear reason rather than as opaque drift.
-SCHEMA_VERSION = "1.0"
+#
+# 2.0 is a breaking change: a suppressed receipt's withheld numerics are ``null``
+# and it carries ``suppressed: true``. Under 1.0 they were zeros, so a consumer
+# reading the numeric field could not tell a withheld cell from a true zero. See
+# docs/SPEC-STABILITY.md for the field mapping.
+SCHEMA_VERSION = "2.0"
+
+# Manifest schema versions ``verify`` can still re-derive. Reading an older
+# manifest is supported (the 1.0 rendering of a suppressed receipt is
+# reconstructable from the current figures); writing one is not.
+SUPPORTED_SCHEMA_VERSIONS = ("1.0", "2.0")
 
 # The hash descriptor. It rides in the manifest so a consumer knows exactly how
 # every ``slice_hash`` was produced without reading the engine. ``canonicalization``
@@ -127,13 +144,25 @@ class Receipt:
     ``caveat`` carries the figure's optional qualifying note (e.g. a
     data-quality limitation) forward the same way, so the limitation rides inside
     the receipt chain rather than as loose prose.
+
+    ``suppressed`` says whether small-cell suppression withheld this figure. It
+    is the field a machine consumer branches on, and it is why the withheld
+    numerics are typed ``| None``: a suppressed receipt carries ``None`` for
+    ``value``, ``row_count``, ``slice_hash``, and ``column_names``, never a zero.
+    Three states have to stay three states. A figure that is genuinely zero
+    carries ``suppressed=False`` with ``value=0.0``, ``row_count=0``, and the
+    all-zero ``EMPTY_SLICE_HASH``; a figure that is withheld carries
+    ``suppressed=True`` and nothing numeric at all; a figure that does not exist
+    has no ``Receipt``. Writing a zero for a withheld cell told every downstream
+    reader "we served nobody", which is a worse answer to a funder than "we
+    cannot report that figure" and is not the answer the report makes in prose.
     """
 
     metric_id: str
     value_sql: str
-    row_count: int
-    slice_hash: str
-    value: float
+    row_count: int | None
+    slice_hash: str | None
+    value: float | None
     unit: str
     computed_at: str
     definition: str = ""
@@ -142,7 +171,8 @@ class Receipt:
     data_source: str = ""
     collection_frequency: str = ""
     caveat: str = ""
-    column_names: tuple[str, ...] = ()
+    column_names: tuple[str, ...] | None = ()
+    suppressed: bool = False
 
 
 @dataclass(frozen=True)

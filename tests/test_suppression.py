@@ -38,6 +38,7 @@ from outcome_receipts.models import (
     ReconciliationRow,
     ReconciliationSpec,
 )
+from outcome_receipts.report import receipts_manifest, render_report
 from outcome_receipts.suppression import (
     SuppressionResult,
     filter_for_aggregate_only,
@@ -45,6 +46,7 @@ from outcome_receipts.suppression import (
     redact_reconciliation,
     suppress_figures,
 )
+from outcome_receipts.trace import render_trace_html
 
 EXAMPLES_ROOT = Path(__file__).resolve().parents[1] / "examples"
 
@@ -273,7 +275,7 @@ class TestSuppressionRedaction:
         assert redacted[0].display == "100"
         assert redacted[1].display == "75.0%"
 
-    def test_suppressed_receipt_value_zeroed(self) -> None:
+    def test_suppressed_receipt_withholds_rather_than_zeroes(self) -> None:
         """A suppressed figure's *receipt* must also be scrubbed, not just the figure.
 
         report.py and trace.py render `receipt.row_count` and the manifest renders
@@ -281,16 +283,55 @@ class TestSuppressionRedaction:
         figure that keeps its original, unredacted receipt "for audit trail" is
         not suppressed at all: the raw count is still sitting right there for
         every renderer that reads the receipt instead of the figure.
+
+        The fields are withheld (``None``), never zeroed. A zero is a claim the
+        report does not make, and it is the same claim a genuinely-zero figure
+        makes, so zeroing them was indistinguishable from "we served nobody".
         """
         figures = [
             _make_figure("count_8", 8),
         ]
         redacted, _result = suppress_figures(figures)
+        receipt = redacted[0].receipt
 
-        assert redacted[0].value == 0.0
-        assert redacted[0].receipt.value == 0.0
-        assert redacted[0].receipt.row_count == 0
-        assert redacted[0].receipt.slice_hash != figures[0].receipt.slice_hash
+        assert receipt.suppressed is True
+        assert receipt.value is None
+        assert receipt.row_count is None
+        assert receipt.slice_hash is None
+        assert receipt.column_names is None
+        assert receipt.slice_hash != figures[0].receipt.slice_hash
+
+    def test_a_withheld_receipt_is_not_a_true_zero_receipt(self) -> None:
+        """The invariant this whole issue is about, stated as an inequality.
+
+        A figure that is genuinely zero and a figure that is withheld must not
+        produce the same receipt fields. Under the old redaction they produced
+        identical values in every field the manifest schema constrains.
+        """
+        zero = _make_figure("true_zero", 0)
+        small = _make_figure("withheld", 4)
+        redacted, result = suppress_figures([zero, small])
+        by_id = {figure.metric_id: figure.receipt for figure in redacted}
+
+        assert result.suppressed == ("withheld",)
+        assert by_id["true_zero"].suppressed is False
+        assert by_id["withheld"].suppressed is True
+        for field in ("value", "row_count", "slice_hash"):
+            assert getattr(by_id["true_zero"], field) != getattr(by_id["withheld"], field), field
+        assert by_id["true_zero"].value == 0.0
+        assert by_id["true_zero"].row_count == 0
+
+    def test_suppressing_an_already_suppressed_set_fails_closed(self) -> None:
+        """Running suppression twice must not report a withheld cell as safe.
+
+        A redacted figure carries no value to test, so a second pass would read
+        ``Figure.value == 0.0`` as a true zero and list it under ``unsuppressed``
+        -- a false all-clear on the one invariant this function asserts.
+        """
+        redacted, _result = suppress_figures([_make_figure("count_4", 4)])
+
+        with pytest.raises(ValueError, match="already suppressed: count_4"):
+            suppress_figures(redacted)
 
 
 class TestAggregateOnlyAssertion:
@@ -461,7 +502,8 @@ class TestRealWorldScenario:
 
         redacted_by_id = {f.metric_id: f for f in redacted}
         assert redacted_by_id["exited_to_ph"].display == "[SUPPRESSED]"
-        assert redacted_by_id["exited_to_ph"].receipt.value == 0.0
+        assert redacted_by_id["exited_to_ph"].receipt.suppressed is True
+        assert redacted_by_id["exited_to_ph"].receipt.value is None
 
 
 class TestArithmeticDisclosureNotNameMatching:
@@ -575,8 +617,12 @@ class TestSuppressionArtifactIntegration:
         for metric_id in ("exits", "exits_permanent"):
             record = by_metric[metric_id]
             assert record["display"] == "[SUPPRESSED]"
-            assert record["value"] == 0.0
-            assert record["row_count"] == 0
+            assert record["suppressed"] is True
+            # Withheld, not zeroed: a zero is a claim, and it is the same claim
+            # a genuinely-zero figure makes.
+            assert record["value"] is None
+            assert record["row_count"] is None
+            assert record["slice_hash"] is None
             assert record["slice_hash"] != raw_by_id[metric_id].receipt.slice_hash
 
         # The exact leak this bug reported: "rows in slice: 10" right under a
@@ -771,8 +817,8 @@ class TestPercentTriangulation:
 
         assert "exits_permanent" in result.suppressed
         assert by_id["pct_permanent"].display == "[SUPPRESSED]"
-        assert by_id["pct_permanent"].value == 0.0
-        assert by_id["pct_permanent"].receipt.value == 0.0
+        assert by_id["pct_permanent"].receipt.suppressed is True
+        assert by_id["pct_permanent"].receipt.value is None
         assert "pct_permanent" in result.complementary_suppressed
         # The denominator itself is at no risk and stays visible: the rule
         # removes the triangulating percent, not every count in sight.
@@ -807,7 +853,8 @@ class TestPercentTriangulation:
         manifest = json.loads((out / "receipts.json").read_text(encoding="utf-8"))
         by_id = {record["metric_id"]: record for record in manifest["receipts"]}
         assert by_id["pct_permanent"]["display"] == "[SUPPRESSED]"
-        assert by_id["pct_permanent"]["value"] == 0.0
+        assert by_id["pct_permanent"]["suppressed"] is True
+        assert by_id["pct_permanent"]["value"] is None
         # clients_served (12) is above threshold, in no recovering relationship,
         # and not a percent: it stays visible.
         assert by_id["clients_served"]["display"] == "12"
@@ -1275,3 +1322,102 @@ class TestAuditAmbiguityIsReportedNotResolved:
         assert result.ok is False
         assert result.suppressed == ()
         assert [span.text for span in result.unbound] == ["six"]
+
+
+def _three_state_figures() -> list[Figure]:
+    """A figure set holding all three states at once.
+
+    ``visible_total`` is above threshold. ``true_zero`` is a real zero: nobody
+    was in that category, and saying so discloses nothing. ``withheld`` is a
+    small cell. No signed combination of 20 and 0 equals 4, so nothing else is
+    pulled down and the three states stay one per figure.
+    """
+
+    return [
+        _make_figure("visible_total", 20),
+        _make_figure("true_zero", 0),
+        _make_figure("withheld", 4),
+    ]
+
+
+class TestSuppressedAbsentAndZeroAreThreeStates:
+    """Merge-blocking (issue #77): a withheld cell must never serialise as a zero.
+
+    Under the previous redaction a suppressed receipt carried ``value: 0.0``,
+    ``row_count: 0``, and the all-zero slice hash -- byte-identical, in every
+    field the manifest schema constrains, to a figure that is genuinely zero.
+    The prose said "[SUPPRESSED]" and the numbers said nobody, and every machine
+    consumer reads the numbers. These tests assert the inequality directly, on
+    each surface the figures are written to.
+    """
+
+    def test_the_manifest_gives_the_three_states_three_renderings(self) -> None:
+        publishable, result = suppress_figures(_three_state_figures())
+        manifest = json.loads(receipts_manifest(publishable))
+        by_id = {record["metric_id"]: record for record in manifest["receipts"]}
+
+        assert result.suppressed == ("withheld",)
+        zero = by_id["true_zero"]
+        withheld = by_id["withheld"]
+
+        # Not one constrained field may agree between the two.
+        for field in ("suppressed", "value", "row_count", "slice_hash", "column_names"):
+            assert zero[field] != withheld[field], field
+
+        assert zero["suppressed"] is False
+        assert zero["value"] == 0.0
+        assert zero["row_count"] == 0
+        assert withheld["suppressed"] is True
+        assert withheld["value"] is None
+        assert withheld["row_count"] is None
+        assert withheld["slice_hash"] is None
+        assert withheld["column_names"] is None
+
+        # The third state: a figure that does not exist has no receipt at all,
+        # which is what distinguishes absent from both of the above.
+        assert "never_computed" not in by_id
+
+    def test_a_consumer_summing_the_values_cannot_count_a_withheld_cell_as_zero(self) -> None:
+        """The harm the issue names, reproduced as the consumer would hit it.
+
+        "A funder's analyst importing receipts.json into a spreadsheet gets
+        zeros." Summing the column must now fail loudly instead of returning a
+        total that silently treats a withheld group as nobody.
+        """
+
+        publishable, _result = suppress_figures(_three_state_figures())
+        values = [
+            record["value"] for record in json.loads(receipts_manifest(publishable))["receipts"]
+        ]
+
+        assert None in values
+        with pytest.raises(TypeError):
+            sum(values)
+
+    def test_the_report_appendix_shows_a_marker_not_a_row_count_of_zero(self) -> None:
+        publishable, _result = suppress_figures(_three_state_figures())
+        report_md = render_report("Three states", "narrative", publishable)
+
+        zero_block = _report_receipt_block(report_md, "true_zero")
+        withheld_block = _report_receipt_block(report_md, "withheld")
+
+        assert "rows in slice: 0" in zero_block
+        assert "rows in slice: 0" not in withheld_block
+        assert "rows in slice: [SUPPRESSED]" in withheld_block
+        assert "slice hash: `[SUPPRESSED]`" in withheld_block
+
+    def test_the_trace_view_shows_a_marker_not_a_row_count_of_zero(self) -> None:
+        publishable, _result = suppress_figures(_three_state_figures())
+        trace_html = render_trace_html("Three states", publishable)
+
+        zero_section = _trace_figure_section(trace_html, "true_zero")
+        withheld_section = _trace_figure_section(trace_html, "withheld")
+
+        assert "<dd>0</dd>" in zero_section
+        assert "<dd>0</dd>" not in withheld_section
+        assert "<dd>[SUPPRESSED]</dd>" in withheld_section
+        # The funder-facing summary table's Rows column, which is what a grant
+        # manager actually reads, beside the redaction label.
+        summary = trace_html.split("<h2>")[0]
+        assert "<td>0</td>" in summary
+        assert summary.count("<td>[SUPPRESSED]</td>") >= 1

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ChelseaKR/outcome-receipts/blob/main/docs/schema/workflow-artifact.schema.json",
   "title": "Outcome Receipts workflow artifact",
-  "description": "Versioned contract for deterministic evidence-workflow artifacts.",
+  "description": "Versioned contract for deterministic evidence-workflow artifacts. Where an artifact embeds a receipt verbatim (an equity-review group, a migration or restatement before/after, a contract milestone's observed/threshold/financial), that object is a receipt from the receipts manifest and follows docs/schema/receipts.schema.json: a figure withheld by small-cell suppression carries suppressed: true with null for value, row_count, slice_hash, and column_names. A consumer must branch on suppressed and must not read, plot, or sum a withheld receipt as zero. `receipts verify-workflow` fails an artifact in which any object declaring suppressed: true still carries a number in one of those fields.",
   "type": "object",
   "required": [
     "schema_version",
@@ -146,10 +146,12 @@
       "$ref": "#/$defs/composedReceipt"
     },
     "groups": {
+      "description": "One record per allowlisted subgroup: a label and the subgroup's receipt, embedded verbatim from the receipts manifest. A group whose receipt carries suppressed: true is withheld, not empty.",
       "type": "array",
       "minItems": 2
     },
     "interpretation_limits": {
+      "description": "What this artifact does not establish. When any group is withheld by suppression, the limits state that explicitly; `receipts verify-workflow` fails an equity review that withholds a group without saying so.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/nonEmptyString"
