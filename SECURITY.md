@@ -14,10 +14,11 @@ version.
 
 | Version | Supported | Notes                                      |
 |---------|-----------|--------------------------------------------|
-| 0.1.x   | Yes       | Current pre-1.0 security-support line.     |
+| 0.2.x   | Yes       | Current pre-1.0 security-support line.     |
+| 0.1.x   | No        | Support ended when `0.2.0` shipped.        |
 | < 0.1.0 | No        | Pre-release snapshots are not supported.  |
 
-When a `0.2.0` ships, `0.1.x` security support ends and this table is updated in the same
+When a `0.3.0` ships, `0.2.x` security support ends and this table is updated in the same
 release.
 
 ## Reporting a vulnerability

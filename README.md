@@ -14,7 +14,8 @@ a narrative around the receipted figures and runs fail-closed grounding gates
 before and after suppression. Export is refused if any displayed number does not
 trace to a receipt.
 
-> **Status: Beta.** The first tagged release is `v0.1.0`. The default path is
+> **Status: Beta.** The current tagged release is `v0.2.0`; `v0.1.0` was the
+> first. The default path is
 > deterministic, offline, and tested end to end. The release includes the completed privacy,
 > verification, mapping, localization, multi-template, reconciliation, and
 > optional Bedrock-drafting roadmap work. The v1 implementation package adds
