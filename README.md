@@ -403,7 +403,7 @@ pinning guidance.
 | `receipts verify-ledger` | Re-hash the append-only export ledger and detect a broken chain. |
 | `receipts diff` | Explain added, removed, or changed figures between two manifests. |
 | `receipts restate` | Link a verified prior bundle to a receipted restatement and named approval. |
-| `receipts migrate-check` | Compare reviewed metrics across two schema-variant exports. |
+| `receipts migrate-check` | Compare reviewed metrics across two schema-variant exports. Each metric is `equivalent`, `changed`, or `indeterminate` (withheld by suppression on one side, so no comparison is possible). |
 | `receipts requirements-diff` | Classify funder requirement changes by stable ID and text digest. |
 | `receipts contract-check` | Package receipted milestone, threshold, and financial evidence without making a legal determination. |
 | `receipts rollup` | Compose an aggregate count from verified, unsuppressed partner bundles. |

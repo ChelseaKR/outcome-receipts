@@ -129,7 +129,40 @@
       "type": "array"
     },
     "metrics": {
-      "type": "array"
+      "description": "One record per metric compared across the two specs. A metric withheld by small-cell suppression on either side is classified indeterminate rather than aborting the artifact: neither side publishes its value, so neither equivalence nor change can be asserted about it.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric_id", "status", "before", "after"],
+        "properties": {
+          "metric_id": { "$ref": "#/$defs/nonEmptyString" },
+          "status": {
+            "description": "equivalent: both sides publish the same value. changed: both publish, and they differ. indeterminate: at least one side is withheld, so no comparison is possible. The same word contract_evidence uses for the same reason.",
+            "enum": ["equivalent", "changed", "indeterminate"]
+          },
+          "delta_status": {
+            "description": "Why no delta receipt is present. Required when status is indeterminate, absent otherwise.",
+            "enum": ["suppressed"]
+          },
+          "delta_receipt": {
+            "description": "The SQL-grounded difference between the two sides. Present exactly when status is equivalent or changed; a composed receipt over a withheld cell is refused, so an indeterminate metric carries none.",
+            "$ref": "#/$defs/composedReceipt"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "status": { "const": "indeterminate" } },
+              "required": ["status"]
+            },
+            "then": {
+              "required": ["delta_status"],
+              "not": { "required": ["delta_receipt"] }
+            },
+            "else": { "required": ["delta_receipt"] }
+          }
+        ]
+      }
     },
     "requirements": {
       "type": "array"

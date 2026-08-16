@@ -9,6 +9,7 @@ import pytest
 
 from outcome_receipts.cli import EXIT_OK, EXIT_VERIFY_FAIL, main
 from outcome_receipts.workflows import (
+    MIGRATION_STATUSES,
     WORKFLOW_SCHEMA_VERSION,
     WorkflowError,
     build_contract_evidence,
@@ -93,6 +94,40 @@ def test_restatement_verifies_prior_bundle_and_composes_delta(tmp_path: Path) ->
     assert verify_workflow_artifact(artifact).ok
 
 
+def test_restatement_over_a_suppressed_metric_states_no_delta(tmp_path: Path) -> None:
+    """A metric withheld on one side is restated without a composed delta.
+
+    ``build_restatement`` already guarded this case; what was missing was any
+    test whose input report contained a small cell, so the guard was never
+    exercised. The delta must be *absent*, not zero and not derived: a
+    difference between a published count and a withheld one is arithmetic on a
+    cell the prior report declined to state.
+    """
+
+    prior_config = _report_with_small_cell(tmp_path, "prior", 14, 4)
+    current_config = _report_with_small_cell(tmp_path, "current", 20, 12)
+    bundle = tmp_path / "prior-bundle"
+    _bundle(prior_config, bundle)
+
+    artifact = build_restatement(
+        prior_config=prior_config,
+        prior_bundle=bundle,
+        current_config=current_config,
+        reason="Cohort A grew past the small-cell threshold.",
+        approved_by="Grant manager",
+        reproducible=True,
+    )
+
+    by_id = {record["metric_id"]: record for record in artifact["changed"]}
+    assert by_id["served"]["delta_receipt"]["display"] == "6"
+    withheld = by_id["small_group"]
+    assert withheld["delta_status"] == "suppressed"
+    assert "delta_receipt" not in withheld
+    assert withheld["prior"]["suppressed"] is True
+    assert withheld["prior"]["value"] is None
+    assert verify_workflow_artifact(artifact).ok
+
+
 def test_restatement_rejects_tampered_prior_bundle(tmp_path: Path) -> None:
     config = _report(tmp_path, "prior", 12)
     bundle = tmp_path / "prior-bundle"
@@ -133,6 +168,157 @@ def test_migration_classifies_equal_and_changed_metrics(tmp_path: Path) -> None:
     assert changed_artifact["metrics"][0]["delta_receipt"]["display"] == "1"
     assert verify_workflow_artifact(equal_artifact).ok
     assert verify_workflow_artifact(changed_artifact).ok
+
+
+def _report_with_small_cell(tmp_path: Path, name: str, total: int, small: int) -> Path:
+    """A spec whose second metric is a small cell, so suppression fires on it.
+
+    Every workflow builder that takes a report has to be exercised against one
+    of these: until issue #79 not one of them was, even though any real
+    human-services export has at least one small cell, and `migrate-check`
+    aborted on every spec that did.
+    """
+
+    directory = tmp_path / name
+    directory.mkdir()
+    rows = ["client_id,cohort"]
+    rows.extend(f"p{index},{'a' if index < small else 'b'}" for index in range(total))
+    (directory / "data.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    config = directory / "report.toml"
+    config.write_text(
+        """
+schema_version = "1.0"
+[data]
+path = "data.csv"
+[report]
+title = "Program report"
+template = "People served: {served}. Cohort A: {small_group}."
+[metrics.served]
+description = "People served"
+definition = "People represented by one row."
+kind = "output"
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data"
+slice_sql = "SELECT client_id FROM data"
+[metrics.small_group]
+description = "Cohort A"
+definition = "People represented by one row whose cohort is A."
+kind = "output"
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE cohort = 'a'"
+slice_sql = "SELECT client_id FROM data WHERE cohort = 'a'"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    return config
+
+
+def test_migration_classifies_a_suppressed_metric_instead_of_aborting(tmp_path: Path) -> None:
+    """Merge-blocking (issue #79): one small cell must not silence the whole report.
+
+    ``_composed_receipt`` refuses a suppressed input, and ``build_migration_check``
+    composed a delta for every metric unconditionally, so a single small cell
+    anywhere in a spec aborted the artifact and reported nothing about the
+    metrics that could have been compared. All four shipped example specs failed
+    against themselves.
+    """
+
+    before = _report_with_small_cell(tmp_path, "before", 14, 4)
+    after = _report_with_small_cell(tmp_path, "after", 14, 4)
+
+    artifact = build_migration_check(
+        before_config=before,
+        after_config=after,
+        approved_by="Data lead",
+        reproducible=True,
+    )
+
+    by_id = {record["metric_id"]: record for record in artifact["metrics"]}
+    assert by_id["served"]["status"] == "equivalent"
+    assert by_id["served"]["delta_receipt"]["display"] == "0"
+
+    withheld = by_id["small_group"]
+    assert withheld["status"] == "indeterminate"
+    assert withheld["delta_status"] == "suppressed"
+    # The unsafe outcomes, asserted as absences. Not "equivalent": two withheld
+    # cells compare equal on their nulls, and asserting equivalence nobody can
+    # see is worse than saying nothing. And no composed delta, which would be a
+    # number derived from a cell neither side publishes.
+    assert withheld["status"] != "equivalent"
+    assert "delta_receipt" not in withheld
+    assert verify_workflow_artifact(artifact).ok
+
+
+def test_migration_verifier_refuses_an_indeterminate_metric_with_a_delta(
+    tmp_path: Path,
+) -> None:
+    """The classification has to hold at the artifact boundary, not just at build.
+
+    An artifact reaches a consumer as a file. A record claiming no comparison was
+    possible while carrying a composed delta is the shape that would put a number
+    derived from a withheld cell in front of a reader.
+    """
+
+    config = _report_with_small_cell(tmp_path, "spec", 14, 4)
+    artifact = build_migration_check(
+        before_config=config,
+        after_config=config,
+        approved_by="Data lead",
+        reproducible=True,
+    )
+    by_id = {record["metric_id"]: record for record in artifact["metrics"]}
+    assert verify_workflow_artifact(artifact).ok
+
+    by_id["small_group"]["delta_receipt"] = by_id["served"]["delta_receipt"]
+    result = verify_workflow_artifact(artifact)
+    assert not result.ok
+    assert any(check.scope == "delta_receipt" and not check.ok for check in result.checks)
+
+    del by_id["small_group"]["delta_receipt"]
+    del by_id["served"]["delta_receipt"]
+    comparable = verify_workflow_artifact(artifact)
+    assert not comparable.ok, "a comparable metric with no delta receipt must not verify"
+
+
+@pytest.mark.parametrize(
+    "example", ["housing-demo", "grant-report", "board-report", "multi-funder"]
+)
+def test_migrate_check_runs_on_every_shipped_example(example: str, tmp_path: Path) -> None:
+    """Each shipped spec compared against itself: the trivially-equivalent case.
+
+    Four of four used to exit 1 with "a suppressed input cannot be composed",
+    including board-report, where no headline metric is suppressed -- its
+    comparison delta figures are, which was enough.
+    """
+
+    config = ROOT / "examples" / example / "report.toml"
+    out = tmp_path / "migration.json"
+    code = main(
+        [
+            "migrate-check",
+            "--before-config",
+            str(config),
+            "--after-config",
+            str(config),
+            "--approved-by",
+            "A. Reviewer",
+            "--out",
+            str(out),
+            "--reproducible",
+        ]
+    )
+
+    assert code == EXIT_OK, f"{example}: migrate-check still aborts"
+    artifact = json.loads(out.read_text(encoding="utf-8"))
+    assert verify_workflow_artifact(artifact).ok
+    statuses = {record["status"] for record in artifact["metrics"]}
+    # A spec compared against itself has no changed metric: every metric is
+    # either equivalent or withheld on both sides.
+    assert statuses <= {"equivalent", "indeterminate"}, statuses
+    assert "indeterminate" in statuses, f"{example} no longer exercises a suppressed metric"
+    for record in artifact["metrics"]:
+        if record["status"] == "indeterminate":
+            assert "delta_receipt" not in record
 
 
 def test_migration_rejects_definition_drift(tmp_path: Path) -> None:
@@ -180,9 +366,36 @@ def test_requirement_diff_rejects_missing_or_duplicate_stable_ids(tmp_path: Path
         build_requirement_change(prior, current)
 
 
-def _contract_report(tmp_path: Path) -> Path:
+def test_requirement_diff_has_no_figures_to_suppress(tmp_path: Path) -> None:
+    """The one builder for which "a report with a suppressed figure" is vacuous.
+
+    Issue #79 asks for a suppressed-figure test on each of the six workflow
+    builders. Five take a report spec. This one takes two requirement documents
+    and never computes a figure, so it has no receipt to withhold; this test
+    records that as a fact about the artifact rather than leaving the gap
+    looking like an oversight.
+    """
+
+    prior = _write_json(
+        tmp_path / "prior.json",
+        {"requirements": [{"requirement_id": "served", "definition": "People served"}]},
+    )
+    current = _write_json(
+        tmp_path / "current.json",
+        {"requirements": [{"requirement_id": "served", "definition": "Unduplicated people"}]},
+    )
+
+    artifact = build_requirement_change(prior, current)
+
+    assert not [
+        record for record in artifact["requirements"] if {"value", "display"} & record.keys()
+    ]
+    assert verify_workflow_artifact(artifact).ok
+
+
+def _contract_report(tmp_path: Path, *, observed: int = 12) -> Path:
     data = tmp_path / "contract.csv"
-    rows = ["client_id,threshold,amount"] + [f"p{i},11,5000" for i in range(12)]
+    rows = ["client_id,threshold,amount"] + [f"p{i},11,5000" for i in range(observed)]
     data.write_text("\n".join(rows) + "\n", encoding="utf-8")
     config = tmp_path / "contract.toml"
     config.write_text(
@@ -257,6 +470,32 @@ def test_contract_evidence_links_observed_threshold_and_finance_receipts(
     assert milestone["threshold"]["metric_id"] == "threshold"
     assert milestone["financial"]["metric_id"] == "financial"
     assert artifact["legal_determination"] == "not_made"
+    assert verify_workflow_artifact(artifact).ok
+
+
+def test_contract_evidence_over_a_suppressed_observation_is_indeterminate(
+    tmp_path: Path,
+) -> None:
+    """A milestone over a withheld cell is not met and not unmet.
+
+    Four people served against a threshold of eleven: the count is a small cell,
+    so the report does not publish it and no comparison can be asserted. The
+    milestone must say that rather than resolve to ``unmet``, which would be a
+    statement about a number the report withheld.
+    """
+
+    artifact = build_contract_evidence(
+        config_path=_contract_report(tmp_path, observed=4),
+        contract_path=_contract(tmp_path / "contract.json"),
+        approved_by="Contracts reviewer",
+        reproducible=True,
+    )
+
+    milestone = artifact["milestones"][0]
+    assert milestone["status"] == "indeterminate"
+    assert milestone["status"] not in {"met", "unmet"}
+    assert milestone["observed"]["suppressed"] is True
+    assert milestone["observed"]["value"] is None
     assert verify_workflow_artifact(artifact).ok
 
 
@@ -570,6 +809,27 @@ def test_published_workflow_schema_pins_all_artifact_kinds() -> None:
     assert schema["properties"]["rollup_receipt"]["$ref"] == "#/$defs/composedReceipt"
 
 
+def test_the_schema_and_the_docs_agree_on_the_migration_status_vocabulary() -> None:
+    """Issue #79: the code raised where the docs said it classified.
+
+    ``docs/NOVEL-USE-CASES.md`` UC-2 described a third status the schema did not
+    enumerate and the code did not produce. All three now name the same set, and
+    this test is what keeps them naming it.
+    """
+
+    schema = json.loads(
+        (ROOT / "docs/schema/workflow-artifact.schema.json").read_text(encoding="utf-8")
+    )
+    published = set(schema["properties"]["metrics"]["items"]["properties"]["status"]["enum"])
+    use_cases = (ROOT / "docs/NOVEL-USE-CASES.md").read_text(encoding="utf-8")
+
+    assert published == set(MIGRATION_STATUSES)
+    for status in published:
+        assert f"`{status}`" in use_cases, f"UC-2 does not name {status}"
+    # The word the docs used to promise and nothing produced.
+    assert "blocked" not in published
+
+
 def test_committed_v1_compatibility_fixtures_cover_and_verify_every_kind() -> None:
     payload = json.loads(
         (ROOT / "tests/fixtures/compat/v1/workflow-artifacts.json").read_text(encoding="utf-8")
@@ -586,6 +846,21 @@ def test_committed_v1_compatibility_fixtures_cover_and_verify_every_kind() -> No
         "equity_review",
     }
     assert all(verify_workflow_artifact(artifact).ok for artifact in artifacts)
+
+    # The frozen set covers the classifications a suppressed figure produces, not
+    # only the happy path: a migration artifact with an indeterminate metric, and
+    # an equity review with a withheld group.
+    migrations = [a for a in artifacts if a["kind"] == "migration_equivalence"]
+    statuses = {record["status"] for artifact in migrations for record in artifact["metrics"]}
+    assert "indeterminate" in statuses
+    withheld = [
+        group
+        for artifact in artifacts
+        if artifact["kind"] == "equity_review"
+        for group in artifact["groups"]
+        if group["receipt"]["suppressed"]
+    ]
+    assert withheld
 
 
 def test_workflow_verifier_rejects_future_versions_bad_digests_and_client_rows() -> None:

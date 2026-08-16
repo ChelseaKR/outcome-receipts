@@ -165,6 +165,124 @@
       "schema_version": "1.0"
     },
     {
+      "after_spec_digest": "dbf2bd0b3d8469bf42d1426e98416b1e0301a724c5e1bf3f2acff565deae7914",
+      "approved_by": "Compatibility fixture reviewer",
+      "before_spec_digest": "dbf2bd0b3d8469bf42d1426e98416b1e0301a724c5e1bf3f2acff565deae7914",
+      "kind": "migration_equivalence",
+      "metrics": [
+        {
+          "after": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "synthetic_key"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Synthetic people represented by one row.",
+            "display": "14",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "served",
+            "row_count": 14,
+            "slice_hash": "7b3c5f34e1662f3db560400ee4af33ca00715d14126fdbc555d268a754cb21b6",
+            "suppressed": false,
+            "unit": "count",
+            "value": 14.0,
+            "value_sql": "SELECT COUNT(*) FROM data"
+          },
+          "before": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": [
+              "synthetic_key"
+            ],
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Synthetic people represented by one row.",
+            "display": "14",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "served",
+            "row_count": 14,
+            "slice_hash": "7b3c5f34e1662f3db560400ee4af33ca00715d14126fdbc555d268a754cb21b6",
+            "suppressed": false,
+            "unit": "count",
+            "value": 14.0,
+            "value_sql": "SELECT COUNT(*) FROM data"
+          },
+          "delta_receipt": {
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "display": "0",
+            "input_digest": "5d23c4a54e93596729e105cf1ab68f81628632df299de01666e544e2c8d92d53",
+            "inputs": [
+              {
+                "metric_id": "served",
+                "receipt_digest": "a8c8ee98cf2af79344faa32b4209d6bc7be6b6633728987493feb2d3b02244cf"
+              },
+              {
+                "metric_id": "served",
+                "receipt_digest": "a8c8ee98cf2af79344faa32b4209d6bc7be6b6633728987493feb2d3b02244cf"
+              }
+            ],
+            "metric_id": "served__migration_delta",
+            "operation": "delta",
+            "provenance_type": "receipt_composed",
+            "query": "SELECT (SELECT value FROM receipt_inputs WHERE position = 1) - (SELECT value FROM receipt_inputs WHERE position = 0)",
+            "unit": "count",
+            "value": 0.0
+          },
+          "metric_id": "served",
+          "status": "equivalent"
+        },
+        {
+          "after": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": null,
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Synthetic people represented by one row whose cohort is A.",
+            "display": "[SUPPRESSED]",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "small_group",
+            "row_count": null,
+            "slice_hash": null,
+            "suppressed": true,
+            "unit": "count",
+            "value": null,
+            "value_sql": "SELECT COUNT(*) FROM data WHERE cohort = 'a'"
+          },
+          "before": {
+            "caveat": "",
+            "collection_frequency": "",
+            "column_names": null,
+            "computed_at": "1970-01-01T00:00:00+00:00",
+            "data_source": "",
+            "definition": "Synthetic people represented by one row whose cohort is A.",
+            "display": "[SUPPRESSED]",
+            "indicator": "",
+            "kind": "output",
+            "metric_id": "small_group",
+            "row_count": null,
+            "slice_hash": null,
+            "suppressed": true,
+            "unit": "count",
+            "value": null,
+            "value_sql": "SELECT COUNT(*) FROM data WHERE cohort = 'a'"
+          },
+          "delta_status": "suppressed",
+          "metric_id": "small_group",
+          "status": "indeterminate"
+        }
+      ],
+      "relationship": {
+        "type": "compares_to"
+      },
+      "schema_version": "1.0"
+    },
+    {
       "current_document_digest": "2c20cd0a6eee46293cf35e04abd408b7f02c71b53d9490f9e3ad7c6aa28c8b6b",
       "kind": "requirement_change",
       "prior_document_digest": "6e953dc2d0b85be6e78c7eb854f2096a232815ed7fb39aac9b51f752910109d5",

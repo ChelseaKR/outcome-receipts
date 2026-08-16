@@ -172,6 +172,13 @@ _FORBIDDEN_ARTIFACT_KEYS = frozenset(
         "raw_data",
     }
 )
+# The migration-equivalence status vocabulary. ``indeterminate`` is the same word
+# ``contract_evidence`` uses for the same reason -- a receipted comparison the
+# suppression policy makes impossible -- so a consumer reading two artifacts does
+# not have to learn two words for one meaning. It is published in
+# docs/schema/workflow-artifact.schema.json and described in docs/NOVEL-USE-CASES.md.
+MIGRATION_STATUSES = frozenset({"equivalent", "changed", "indeterminate"})
+
 _COMPOSED_QUERIES = {
     "sum": "SELECT SUM(value) FROM receipt_inputs",
     "delta": (
@@ -437,11 +444,12 @@ def _semantic_checks(artifact: Mapping[str, Any]) -> list[WorkflowCheck]:
             _collection_check(
                 "metrics",
                 artifact.get("metrics"),
-                required=frozenset({"metric_id", "status", "before", "after", "delta_receipt"}),
+                required=frozenset({"metric_id", "status", "before", "after"}),
                 status_field="status",
-                statuses=frozenset({"equivalent", "changed"}),
+                statuses=MIGRATION_STATUSES,
             )
         )
+        checks.append(_migration_delta_check(artifact.get("metrics")))
     elif kind == "requirement_change":
         checks.append(
             _collection_check(
@@ -535,6 +543,39 @@ def _semantic_checks(artifact: Mapping[str, Any]) -> list[WorkflowCheck]:
         )
         checks.append(_equity_suppression_limit_check(artifact, groups))
     return checks
+
+
+def _migration_delta_check(metrics: object) -> WorkflowCheck:
+    """Each migration metric carries a delta receipt exactly when it can.
+
+    Both directions matter. A comparable metric without a delta receipt is an
+    equivalence claim with nothing behind it. An ``indeterminate`` metric *with*
+    one is worse: it would be a composed number derived from a cell neither side
+    publishes, presented beside a status saying no comparison was possible.
+    """
+
+    if not isinstance(metrics, list):
+        return WorkflowCheck("delta_receipt", False, "metrics are not a list")
+    offenders: list[str] = []
+    for record in metrics:
+        if not isinstance(record, dict):
+            return WorkflowCheck("delta_receipt", False, "a metric record is not an object")
+        metric_id = str(record.get("metric_id", "?"))
+        has_delta = isinstance(record.get("delta_receipt"), dict)
+        if record.get("status") == "indeterminate":
+            if has_delta:
+                offenders.append(f"{metric_id} is indeterminate but carries a delta receipt")
+            if record.get("delta_status") != "suppressed":
+                offenders.append(f"{metric_id} is indeterminate without a stated reason")
+        elif not has_delta:
+            offenders.append(f"{metric_id} is comparable but carries no delta receipt")
+    return WorkflowCheck(
+        "delta_receipt",
+        not offenders,
+        "every metric's delta receipt matches its status"
+        if not offenders
+        else "; ".join(offenders),
+    )
 
 
 def _equity_suppression_limit_check(artifact: Mapping[str, Any], groups: object) -> WorkflowCheck:
@@ -830,21 +871,30 @@ def build_migration_check(
         for field in ("definition", "unit", "kind"):
             if left.get(field) != right.get(field):
                 raise WorkflowError(f"{metric_id}: {field} differs; equivalence is blocked")
-        status = "equivalent" if left.get("value") == right.get("value") else "changed"
-        metrics.append(
-            {
-                "metric_id": metric_id,
-                "status": status,
-                "before": left,
-                "after": right,
-                "delta_receipt": _composed_receipt(
-                    metric_id=f"{metric_id}__migration_delta",
-                    operation="delta",
-                    inputs=(left, right),
-                    reproducible=reproducible,
-                ),
-            }
-        )
+        record: dict[str, Any] = {"metric_id": metric_id, "before": left, "after": right}
+        if _is_suppressed(left) or _is_suppressed(right):
+            # Classify, do not abort. A withheld cell cannot be compared: its
+            # value is not published on either side, so neither equivalence nor
+            # change can be asserted about it. Two withheld cells would compare
+            # equal on their nulls, which is worse than saying nothing -- it
+            # would assert an equivalence nobody can see. The sibling workflows
+            # already do this (`contract-check` returns `indeterminate`,
+            # `restate` returns `delta_status: "suppressed"`), and aborting the
+            # whole artifact instead meant one small cell anywhere in a spec
+            # reported nothing about the metrics that *could* be compared.
+            record["status"] = "indeterminate"
+            record["delta_status"] = "suppressed"
+        else:
+            record["status"] = (
+                "equivalent" if left.get("value") == right.get("value") else "changed"
+            )
+            record["delta_receipt"] = _composed_receipt(
+                metric_id=f"{metric_id}__migration_delta",
+                operation="delta",
+                inputs=(left, right),
+                reproducible=reproducible,
+            )
+        metrics.append(record)
     return {
         "schema_version": WORKFLOW_SCHEMA_VERSION,
         "kind": "migration_equivalence",
@@ -1250,6 +1300,7 @@ def write_artifact(path: Path, artifact: Mapping[str, Any]) -> None:
 
 
 __all__ = (
+    "MIGRATION_STATUSES",
     "WORKFLOW_SCHEMA_VERSION",
     "WorkflowCheck",
     "WorkflowError",

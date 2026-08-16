@@ -69,6 +69,33 @@ value_sql = "SELECT MAX(CAST(amount AS INTEGER)) FROM data"
 slice_sql = "SELECT amount FROM data"
 """.lstrip()
 
+# A spec whose second metric is a small cell, so migration equivalence has to
+# classify it rather than compose a delta over it. Frozen as its own fixture so
+# the `indeterminate` status is covered by the compatibility contract and not
+# only by the unit tests.
+_SMALL_CELL_SPEC = """
+schema_version = "1.0"
+[data]
+path = "data.csv"
+[report]
+title = "Small-cell compatibility fixture"
+template = "Total {served}; cohort A {small_group}."
+[metrics.served]
+description = "People served"
+definition = "Synthetic people represented by one row."
+kind = "output"
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data"
+slice_sql = "SELECT synthetic_key FROM data"
+[metrics.small_group]
+description = "Cohort A"
+definition = "Synthetic people represented by one row whose cohort is A."
+kind = "output"
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE cohort = 'a'"
+slice_sql = "SELECT synthetic_key FROM data WHERE cohort = 'a'"
+""".lstrip()
+
 _EQUITY_SPEC = """
 schema_version = "1.0"
 [data]
@@ -106,6 +133,16 @@ def _write_basic(directory: Path, count: int) -> Path:
     (directory / "data.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
     config = directory / "report.toml"
     config.write_text(_BASIC_SPEC, encoding="utf-8")
+    return config
+
+
+def _write_small_cell(directory: Path, total: int, small: int) -> Path:
+    directory.mkdir()
+    rows = ["synthetic_key,cohort"]
+    rows.extend(f"fixture-{index},{'a' if index < small else 'b'}" for index in range(total))
+    (directory / "data.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    config = directory / "report.toml"
+    config.write_text(_SMALL_CELL_SPEC, encoding="utf-8")
     return config
 
 
@@ -242,6 +279,7 @@ def _artifacts(workspace: Path) -> list[dict[str, object]]:
     )
 
     equity_config, equity_plan = _equity_files(workspace / "equity")
+    small_cell = _write_small_cell(workspace / "small-cell", 14, 4)
     reproducible = True
     return [
         build_restatement(
@@ -255,6 +293,12 @@ def _artifacts(workspace: Path) -> list[dict[str, object]]:
         build_migration_check(
             before_config=prior,
             after_config=current,
+            approved_by="Compatibility fixture reviewer",
+            reproducible=reproducible,
+        ),
+        build_migration_check(
+            before_config=small_cell,
+            after_config=small_cell,
             approved_by="Compatibility fixture reviewer",
             reproducible=reproducible,
         ),
