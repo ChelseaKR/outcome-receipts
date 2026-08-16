@@ -16,9 +16,20 @@ VERIFY_GATES := lint type test hygiene i18n security a11y cards eval-check compa
 	container-verify
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
-# --frozen: install exactly what uv.lock records, never re-resolve; a lockfile
-# drift becomes a loud CI failure instead of a silently different toolchain.
+# `uv lock --check` first, because `uv sync --frozen` cannot fail on drift. The
+# comment that used to sit here claimed --frozen made "a lockfile drift a loud
+# CI failure"; it does not. --frozen means "install exactly what uv.lock
+# records and never re-resolve", and it never compares the lock against
+# pyproject.toml. Bump `project.version` and leave uv.lock behind and
+# `uv sync --frozen` still exits 0, having installed the previous version --
+# which is exactly the drift a release creates, so the one change guaranteed to
+# desynchronise the lock was the one change this step could not see. Every
+# release since would have verified against a stale editable install. `uv lock
+# --check` re-resolves and exits 1 when the lock no longer matches the
+# manifest; npm's half of the pair (`npm ci`, not `npm install`) already fails
+# closed the same way.
 install: install-security
+	uv lock --check
 	uv sync --frozen --python 3.12 --group dev
 	npm ci
 	npx playwright install chromium
