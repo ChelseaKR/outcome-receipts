@@ -67,7 +67,10 @@ security-pip:
 # npm cannot accept one reviewed advisory: `--audit-level` is its only lever
 # and raising it hides every finding at that severity. The floor stays at HIGH
 # and scripts/check_npm_audit.py adjudicates against waivers.yml instead, so
-# anything without a live, exact waiver still fails. See waivers.yml WVR-007.
+# anything without a live, exact waiver still fails. The registry holds no
+# npm-audit waiver right now -- WVR-007 was retired when the override on
+# @puppeteer/browsers took extract-zip out of the graph -- and the gate's
+# boundary stays under test against a fixture registry regardless.
 security-npm:
 	npm audit --json | .venv/bin/python scripts/check_npm_audit.py
 
