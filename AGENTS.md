@@ -112,7 +112,7 @@ repo commits to:
 * **Code quality.** `ruff` (full select set: `E,W,F,I,UP,B,SIM,S,C90,RUF`,
   `max-complexity = 10`), `mypy --strict`, `pytest` with branch coverage
   **≥ 90%** (treat the metric engine as a library; correctness is the product),
-  all merge-blocking. `uv` with a committed `uv.lock`; `uv sync --frozen` in CI.
+  all merge-blocking. `uv` with a committed `uv.lock`; `uv sync --locked` in CI.
   PyPA src layout, `pyproject.toml` as the single config root.
 * **AI evaluation.** This is an AI repo: the drafting seam puts a model in the
   path, so the AI-Evaluation standard applies in full. Committed eval on seeded
