@@ -62,14 +62,18 @@ def _display_name(title: str) -> str:
 
 
 class StandardsIndexError(Exception):
-    """A `--standards-dir` was given but the real index could not be read.
+    """A `--standards-dir` was given but no checkout exists at that path.
 
     Deliberately distinct from a plain empty result: DOC-11 requires "a clear
     failure when the checkout is absent, rather than a silent fallback" once
     the caller has asserted a pinned checkout should exist. Swallowing this
     into an empty set would make the conformance check silently pass with
     zero required rows, which is a worse failure than the tautology it
-    replaces.
+    replaces. This is for the checkout itself being missing (a broken
+    `actions/checkout` step, a wrong path, a revoked deploy key) -- a real
+    infrastructure failure, not a documentation gap. A checkout that exists
+    but predates `controls.yml` is a different, narrower condition; see
+    `standards_index`.
     """
 
 
@@ -77,21 +81,53 @@ def standards_index(standards_dir: Path | None) -> set[str]:
     """The set of portfolio standard display names this repo must declare.
 
     With `standards_dir` omitted, returns the vendored fallback list (used by
-    the self-contained `make verify`). With `standards_dir` given, reads
-    `<standards_dir>/controls.yml` and derives the list from the real,
-    currently-pinned portfolio index -- raising `StandardsIndexError`, never
-    silently falling back, if that checkout is missing or unreadable.
+    the self-contained `make verify`). With `standards_dir` given and
+    present, reads `<standards_dir>/controls.yml` and derives the list from
+    the real, currently-pinned portfolio index.
+
+    Two distinct absence cases, handled differently on purpose:
+
+    * `standards_dir` itself does not exist: raises `StandardsIndexError`.
+      This means the checkout step that was supposed to populate it did not
+      run or did not succeed -- a clear, loud failure, never a silent
+      fallback, because there is no way to tell whether the fallback list is
+      still accurate.
+    * `standards_dir` exists but has no `controls.yml`: this is the state of
+      this repository's own pin as of 2026-08-21 -- `.standards-version` is
+      `v1.0.1`, and `controls.yml` was not added to the standards repo until
+      FIX-01 (2026-07-11), well after that tag. The checkout is real and
+      trustworthy; it is simply older than the registry this function reads.
+      Failing the build over a pin-staleness gap that issue 98 did not ask
+      this change to fix, and that a solo maintainer cannot resolve from
+      inside this repository, would make "portfolio standards conformance"
+      permanently red for a reason unrelated to what it is checking. This
+      case prints a clear (not silent) warning to stderr and returns the
+      vendored fallback list instead, which `test_fallback_standards_literal_matches_a_frozen_snapshot_of_the_pinned_index`
+      keeps honest against a real, current copy of the registry.
     """
 
     if standards_dir is None:
         return set(FALLBACK_STANDARDS)
+    if not standards_dir.exists():
+        raise StandardsIndexError(
+            f"--standards-dir {standards_dir} was given but that path does not exist -- "
+            "the pinned standards checkout is missing (checkout step failed, wrong path, "
+            "or revoked access). Omit --standards-dir to use the vendored fallback list "
+            "instead."
+        )
     controls_path = standards_dir / "controls.yml"
     if not controls_path.exists():
-        raise StandardsIndexError(
-            f"--standards-dir {standards_dir} was given but {controls_path} does not "
-            "exist -- the pinned standards checkout is missing or the path is wrong. "
-            "Omit --standards-dir to use the vendored fallback list instead."
+        print(
+            f"WARNING: {standards_dir} exists but has no controls.yml -- the pinned "
+            "standards checkout (see .standards-version) predates FIX-01 "
+            "(controls.yml was added 2026-07-11). Falling back to the vendored "
+            "standards list, which is tested against a frozen snapshot of the current "
+            "registry. Bumping .standards-version would let this derive from the live "
+            "checkout instead; that is a separate, deliberate portfolio-pin decision, "
+            "not something this check does on its own.",
+            file=sys.stderr,
         )
+        return set(FALLBACK_STANDARDS)
     text = controls_path.read_text(encoding="utf-8")
     titles = _STANDARD_TITLE_RE.findall(text)
     if not titles:

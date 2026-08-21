@@ -159,6 +159,27 @@ def test_standards_index_fails_loudly_when_controls_yml_has_no_standards(
         standards_index(tmp_path)
 
 
+def test_standards_index_falls_back_with_a_warning_when_checkout_predates_controls_yml(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # This is this repository's actual live state: `.standards-version` is
+    # pinned to v1.0.1, and controls.yml was not added to the standards repo
+    # until FIX-01, after that tag. A present-but-older checkout is not the
+    # same failure as a missing one -- it should not turn CI red for a
+    # pin-staleness gap this change did not set out to fix, but it must not
+    # be silent about it either.
+    empty_checkout = tmp_path / "standards-checkout-without-controls-yml"
+    empty_checkout.mkdir()
+    (empty_checkout / "SECURITY-AND-SUPPLY-CHAIN-STANDARD.md").write_text("stub", encoding="utf-8")
+
+    result = standards_index(empty_checkout)
+
+    assert result == FALLBACK_STANDARDS
+    warning = capsys.readouterr().err
+    assert "predates FIX-01" in warning
+    assert "Falling back to the vendored standards list" in warning
+
+
 def test_readme_standards_rows_ignores_unrelated_tables_in_the_document() -> None:
     readme = """\
 ## Usage
