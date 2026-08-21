@@ -51,6 +51,17 @@ compute -> draft -> ground -> suppress -> re-draft/re-ground -> approve -> expor
   suppression applied to totals, true zeros (0) preserved. Tested with
   comprehensive cases covering threshold behavior, complementary suppression, and
   aggregate-only export. Merge-blocking: `tests/test_suppression.py`.
+* ✅ Calibration against real, non-synthetic data (issue 94, 2026-08-21):
+  ran the shipped engine over HUD's own 2024 CoC Point-in-Time subpopulation
+  counts (363 CoCs, 10,890 real cells). No HUD-published numeric small-cell
+  rule exists to match — confirming the gap this section already named — but
+  applied to subpopulation-shaped data, threshold 11 withholds a majority of
+  granular cells (60.7%, vs. ~1% for whole-CoC totals) and complementary
+  suppression fires on 95% of CoCs, evidence the default does real,
+  differentiated privacy work in this domain rather than being an
+  unvalidated placeholder. Full findings:
+  [`docs/audits/hud-coc-suppression-calibration-2026-08-21.md`](audits/hud-coc-suppression-calibration-2026-08-21.md);
+  recomputed and gated by `tests/test_hud_suppression_calibration.py`.
 * ✅ Aggregate-only export mode for figures shared externally. Provenance
   attestation includes `aggregate_only: true`; the artifact boundary accepts
   only scalar `Figure` objects and never receives the source client rows.
