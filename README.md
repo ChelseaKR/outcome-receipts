@@ -478,7 +478,7 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Code Quality | Applies — Python 3.12, current canonical ruff/mypy floors, strict typing, 90% branch coverage and 95% on integrity-critical modules |
 | Security & Supply-Chain | Applies — Semgrep, CodeQL, dependency and secret scans, Scorecard, SHA-pinned Actions, CycloneDX 1.7, Sigstore-backed attestations, and OIDC publishing |
 | CI/CD | Applies — `make verify` is the full local gate and CI invokes the same targets; main is ruleset-protected and releases run the trusted-main dispatch pipeline |
-| Release & Versioning | Applies — SemVer, signed tags verified against committed allowed signers, trusted-main dispatch with checkout-free publication, CHANGELOG, exact-version build, PyPI Trusted Publishing, provenance, SBOM, and published-artifact verification |
+| Release & Versioning | Applies — SemVer, signed tags verified against committed allowed signers, trusted-main dispatch with checkout-free publication, CHANGELOG, exact-version build, PyPI Trusted Publishing, provenance, SBOM, and published-artifact verification; maintainer procedure in [docs/RELEASING.md](docs/RELEASING.md) |
 | Observability | Applies — Tier C local CLI; no service telemetry or SLO surface, with explicit operational and incident runbooks |
 | Accessibility | Applies — axe, pa11y, Lighthouse, reflow, and reduced-motion gates cover generated HTML; the ACR records manual VoiceOver/NVDA evidence status |
 | Internationalization | Applies — packaged gettext catalogs with EN/ES key and placeholder parity; operational CLI messages remain English |
