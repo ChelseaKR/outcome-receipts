@@ -79,7 +79,7 @@ to this offline tool as a measurable training run.
 A named human approves the final redacted artifact. Approval is not evidence
 that the underlying metric definition or source data is correct.
 
-*Last verified: 2026-07-12 · Recheck: on any model, prompt, or Bedrock policy change.*
+*Last verified: 2026-07-12 · Recheck cadence: on any model, prompt, or Bedrock policy change, and at least quarterly.*
 """
 
 
@@ -156,7 +156,7 @@ files, outputs, ledgers, and bundles remain under operator control. Receipts sho
 how a number was computed, not whether collection was complete, consensual, or
 free from structural bias.
 
-*Last verified: 2026-07-12 · Recheck: on any data-boundary, retention, or model-seam change.*
+*Last verified: 2026-07-12 · Recheck cadence: on any data-boundary, retention, or model-seam change, and at least quarterly.*
 """
 
 

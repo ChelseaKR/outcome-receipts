@@ -13,4 +13,4 @@ catalog and must already match the selected artifact language.
 Adding a regional locale follows BCP 47 fallback from the exact tag to its primary
 language, then English, and requires a locale-acceptance artifact before release.
 
-*Last verified: 2026-07-12 · Recheck: every release and locale change.*
+*Last verified: 2026-07-12 · Recheck cadence: every release and locale change, and at least quarterly.*

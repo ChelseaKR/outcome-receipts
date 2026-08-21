@@ -48,4 +48,4 @@ A release starts from the reviewed workflow on `main`, never from a tag push:
 push the signed tag, then `gh workflow run release.yml --ref main -f tag=vX.Y.Z`
 (see `docs/adr/0005-adopt-shared-release-authorization.md`).
 
-*Last verified: 2026-08-07 · Recheck: after any incident or release-process change.*
+*Last verified: 2026-08-07 · Recheck cadence: after any incident or release-process change, and at least quarterly.*

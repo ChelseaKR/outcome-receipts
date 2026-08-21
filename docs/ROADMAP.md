@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last verified: 2026-07-22 · Recheck: quarterly*
+*Last verified: 2026-07-22 · Recheck cadence: quarterly*
 
 Planned direction for outcome-receipts. Dates are intentions, not promises;
 items move earlier when users ask for them. Feedback is welcome as GitHub issues.

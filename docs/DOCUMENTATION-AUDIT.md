@@ -28,4 +28,4 @@ suppressions, catalog extraction/parity, and authored UTF-8. Relative Markdown
 links are checked during this remediation and `make verify` gates the executable
 artifacts and generated cards.
 
-*Last verified: 2026-07-12 · Recheck: quarterly, each release, and each standards bump.*
+*Last verified: 2026-07-12 · Recheck cadence: quarterly, each release, and each standards bump.*

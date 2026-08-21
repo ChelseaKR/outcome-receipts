@@ -20,4 +20,4 @@ The compatibility directory also preserves the signed `v0.1.0` housing fixture
 byte-for-byte, with its immutable source commit recorded in `SOURCE.md`. It is
 synthetic L1 data, not an organization export.
 
-*Last verified: 2026-07-22 · Recheck: with each eval or fixture change.*
+*Last verified: 2026-08-21 · Recheck cadence: with each eval or fixture change, and at least quarterly.*

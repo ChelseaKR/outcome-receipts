@@ -27,7 +27,7 @@ trace to a receipt.
 > See [CHANGELOG.md](CHANGELOG.md) and
 > [SECURITY.md](SECURITY.md#supported-versions).
 >
-> *Last verified: 2026-07-22 · Recheck: quarterly*
+> *Last verified: 2026-07-22 · Recheck cadence: quarterly*
 
 **Start here:** [run the five-minute synthetic demo](docs/TRY_THE_DEMO.md),
 [inspect the current evaluation](eval/report.md), or

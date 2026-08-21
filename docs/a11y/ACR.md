@@ -34,4 +34,4 @@ complete. Until both rows in
 the dated walkthrough are signed, this ACR reports Partially Supports and must not
 be represented as a completed human WCAG conformance assessment.
 
-*Last verified: 2026-07-12 · Recheck: every release and after any HTML change.*
+*Last verified: 2026-08-21 · Recheck cadence: every release and after any HTML change, and at least quarterly.*
