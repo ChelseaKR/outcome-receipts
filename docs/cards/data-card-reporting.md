@@ -68,4 +68,4 @@ files, outputs, ledgers, and bundles remain under operator control. Receipts sho
 how a number was computed, not whether collection was complete, consensual, or
 free from structural bias.
 
-*Last verified: 2026-07-12 · Recheck: on any data-boundary, retention, or model-seam change.*
+*Last verified: 2026-07-12 · Recheck cadence: on any data-boundary, retention, or model-seam change, and at least quarterly.*

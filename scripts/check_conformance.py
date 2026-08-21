@@ -140,6 +140,89 @@ def standards_index(standards_dir: Path | None) -> set[str]:
     return {_display_name(title) for title in titles}
 
 
+#: Mirrors automation/check_staleness.py's LAST_VERIFIED_RE/CADENCE_RE exactly
+#: (accepting both the plain footer and `**Bold:**`-emphasized labels), so a
+#: doc using either label reads the same way in the portfolio parser and here.
+LAST_VERIFIED_RE = re.compile(r"Last verified:\s*\*{0,2}\s*(\d{4}-\d{2}-\d{2})")
+CADENCE_RE = re.compile(r"Recheck cadence:\s*\*{0,2}\s*(.+)")
+
+#: Mirrors automation/check_staleness.py's CADENCE_DAYS keyword -> max-age
+#: mapping exactly, so a cadence sentence means the same number of days in
+#: both places.
+CADENCE_DAYS = (
+    (re.compile(r"\bmonthly\b", re.IGNORECASE), 31),
+    (re.compile(r"\bquarter", re.IGNORECASE), 92),
+    (re.compile(r"\bsemi-?annual", re.IGNORECASE), 183),
+    (re.compile(r"\bannual|\byearly\b", re.IGNORECASE), 365),
+)
+
+
+def _cadence_to_days(cadence: str) -> int | None:
+    """The strictest recognized interval named in a cadence sentence, or None.
+
+    Unlike the portfolio parser's `cadence_to_days` (which defaults an
+    unrecognized cadence to 180 days), this returns None when nothing
+    matches, so the caller can fail closed instead of silently granting a
+    six-month grace period to a sentence nothing has actually parsed.
+    """
+
+    best: int | None = None
+    for pattern, days in CADENCE_DAYS:
+        if pattern.search(cadence):
+            best = days if best is None else min(best, days)
+    return best
+
+
+def doc_staleness_failures(root: Path, today: date) -> list[str]:
+    """Every root-level or docs/ Markdown file whose currency stamp is stale,
+    unreadable, or missing a cadence -- issue 93/DOC-15.
+
+    Nothing checked this repository's own `Last verified:` stamps before:
+    `automation/check_staleness.py` only globs `*-STANDARD.md`/`*-FRAMEWORK.md`
+    inside the vendored `.standards` checkout, never this repository's own
+    docs. All fourteen of this repository's stamps also used a `Recheck:`
+    label the portfolio parser's `CADENCE_RE` cannot match (it requires the
+    literal `Recheck cadence:`), so every one of them silently fell through
+    to that 180-day default even in tooling that did look -- which never
+    happened to be this repository's own gates, only the portfolio-wide
+    parser if it were ever pointed here.
+
+    Scoped to `_repo_markdown_files` (root `*.md` plus everything under
+    `docs/`, the same set `_link_failures` walks), not every Markdown file in
+    the tree -- `node_modules` and `.venv` carry vendored READMEs this check
+    has no business grading.
+    """
+
+    failures: list[str] = []
+    for path in _repo_markdown_files(root):
+        text = path.read_text(encoding="utf-8")
+        verified_match = LAST_VERIFIED_RE.search(text)
+        if verified_match is None:
+            continue
+        rel = path.relative_to(root)
+        cadence_match = CADENCE_RE.search(text)
+        if cadence_match is None:
+            failures.append(f"{rel}: has 'Last verified:' but no 'Recheck cadence:' line")
+            continue
+        cadence_text = cadence_match.group(1).strip()
+        max_days = _cadence_to_days(cadence_text)
+        if max_days is None:
+            failures.append(
+                f"{rel}: 'Recheck cadence: {cadence_text}' names no recognized interval "
+                "(monthly/quarterly/semi-annual/annual) -- add one so staleness is "
+                "mechanically checkable instead of unverifiable prose"
+            )
+            continue
+        verified = date.fromisoformat(verified_match.group(1))
+        age = (today - verified).days
+        if age > max_days:
+            failures.append(
+                f"{rel}: stale -- last verified {verified.isoformat()} ({age}d ago), "
+                f"cadence allows {max_days}d"
+            )
+    return failures
+
+
 REQUIRED = (
     "CHANGELOG.md",
     "CITATION.cff",
@@ -229,10 +312,17 @@ def _standards_table_failures(rows: dict[str, str], standards: set[str]) -> list
     return failures
 
 
+def _repo_markdown_files(root: Path) -> list[Path]:
+    """Root-level `*.md` plus everything under `docs/` -- this repo's own docs,
+    not vendored trees like `node_modules` or `.venv`."""
+
+    return sorted((*root.glob("*.md"), *root.joinpath("docs").rglob("*.md")))
+
+
 def _link_failures() -> list[str]:
     failures: list[str] = []
     link = re.compile(r"\[[^]]+\]\(([^)]+)\)")
-    for path in sorted((*ROOT.glob("*.md"), *ROOT.joinpath("docs").rglob("*.md"))):
+    for path in _repo_markdown_files(ROOT):
         for target in link.findall(path.read_text(encoding="utf-8")):
             clean = target.strip().strip("<>").split("#", 1)[0]
             if not clean or re.match(r"(?:https?|mailto):", clean):
@@ -627,6 +717,7 @@ def main() -> int:
 
     audits_text = (ROOT / "docs" / "RESPONSIBLE-TECH-AUDITS.md").read_text(encoding="utf-8")
     failures.extend(security_declaration_failures(audits_text, waivers_text, ROOT / "vex.json"))
+    failures.extend(doc_staleness_failures(ROOT, date.today()))
 
     if failures:
         print("repository conformance failed:", file=sys.stderr)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from scripts.check_conformance import (
     StandardsIndexError,
     _readme_standards_rows,
     _standards_table_failures,
+    doc_staleness_failures,
     security_declaration_failures,
     standards_index,
     waiver_failures,
@@ -579,3 +581,103 @@ def test_security_declaration_ignores_an_expired_dependency_waiver() -> None:
     )
 
     assert failures == []
+
+
+# ---------------------------------------------------------------------------
+# Issue 93/DOC-15: this repository's own `Last verified:` stamps were never
+# mechanically checked -- the portfolio's own staleness parser only scans the
+# vendored `.standards` checkout -- and all fourteen used a `Recheck:` label
+# the parser's `Recheck cadence:` regex cannot match, so every one silently
+# fell through to that parser's 180-day default in any tooling that looked.
+# ---------------------------------------------------------------------------
+
+
+def _doc(root: Path, relpath: str, stamp: str) -> None:
+    path = root / relpath
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"# Doc\n\nBody text.\n\n{stamp}\n", encoding="utf-8")
+
+
+def test_doc_staleness_ignores_docs_with_no_stamp(tmp_path: Path) -> None:
+    _doc(tmp_path, "README.md", "No stamp here at all.")
+
+    assert doc_staleness_failures(tmp_path, date(2026, 8, 21)) == []
+
+
+def test_doc_staleness_accepts_a_fresh_quarterly_stamp(tmp_path: Path) -> None:
+    _doc(
+        tmp_path,
+        "docs/fresh.md",
+        "*Last verified: 2026-07-01 · Recheck cadence: quarterly*",
+    )
+
+    assert doc_staleness_failures(tmp_path, date(2026, 8, 21)) == []
+
+
+def test_doc_staleness_flags_a_stamp_older_than_its_cadence(tmp_path: Path) -> None:
+    _doc(
+        tmp_path,
+        "docs/stale.md",
+        "*Last verified: 2026-01-01 · Recheck cadence: monthly*",
+    )
+
+    failures = doc_staleness_failures(tmp_path, date(2026, 8, 21))
+    assert any("docs/stale.md" in f and "stale" in f for f in failures)
+
+
+def test_doc_staleness_fails_closed_on_a_missing_cadence_line(tmp_path: Path) -> None:
+    _doc(tmp_path, "docs/no-cadence.md", "*Last verified: 2026-08-01*")
+
+    failures = doc_staleness_failures(tmp_path, date(2026, 8, 21))
+    assert any("no 'Recheck cadence:' line" in f for f in failures)
+
+
+def test_doc_staleness_fails_closed_on_an_unparseable_cadence(tmp_path: Path) -> None:
+    # The exact bug this issue names: a portfolio-style parser would default
+    # an unrecognized cadence to 180 days and report this fresh. This one
+    # fails instead, even though 2026-08-21 is only 20 days after the stamp.
+    _doc(
+        tmp_path,
+        "docs/vague.md",
+        "*Last verified: 2026-08-01 · Recheck cadence: whenever it feels due*",
+    )
+
+    failures = doc_staleness_failures(tmp_path, date(2026, 8, 21))
+    assert any("names no recognized interval" in f for f in failures)
+
+
+def test_doc_staleness_reads_a_keyword_on_the_first_wrapped_line(tmp_path: Path) -> None:
+    # Regression guard: an earlier draft of this fix wrapped a cadence
+    # sentence across two Markdown source lines with the recognizable
+    # keyword ("quarterly") on the *second* line, past where the single-line
+    # CADENCE_RE regex stops -- which silently misclassified two real
+    # documents (docs/THREAT-MODEL.md, docs/a11y/ACR.md) as unparseable
+    # before the wrap was fixed. Confirms a keyword within the regex's own
+    # single line is read even when the human-authored sentence continues
+    # past it (the wrap fix pairs with this, not a substitute for it).
+    _doc(
+        tmp_path,
+        "docs/wrapped.md",
+        "*Last verified: 2026-07-01 · Recheck cadence: quarterly, and also\non any related change.*",
+    )
+
+    assert doc_staleness_failures(tmp_path, date(2026, 8, 21)) == []
+
+
+def test_doc_staleness_ignores_files_outside_root_md_and_docs(tmp_path: Path) -> None:
+    (tmp_path / "node_modules" / "somepkg").mkdir(parents=True)
+    _doc(
+        tmp_path,
+        "node_modules/somepkg/README.md",
+        "*Last verified: 2020-01-01 · Recheck cadence: monthly*",
+    )
+
+    assert doc_staleness_failures(tmp_path, date(2026, 8, 21)) == []
+
+
+def test_doc_staleness_is_silent_against_the_real_committed_docs() -> None:
+    # The fourteen real stamps this issue named, checked as of today: every
+    # one now uses the parseable `Recheck cadence:` label and a recognized
+    # interval keyword.
+    root = Path(__file__).resolve().parents[1]
+    assert doc_staleness_failures(root, date.today()) == []

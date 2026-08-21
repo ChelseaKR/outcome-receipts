@@ -143,4 +143,4 @@ register under `docs/audits/`.
 | Manual assistive-technology review | REVIEW | Dated walkthrough; currently incomplete |
 | Residual-risk acceptance | REVIEW | Dated residual-risk register |
 
-Status: beta. *Last verified: 2026-07-22 · Recheck: quarterly and every release.*
+Status: beta. *Last verified: 2026-07-22 · Recheck cadence: quarterly and every release.*

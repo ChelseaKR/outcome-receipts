@@ -34,6 +34,42 @@ release-hardening work completed before the first public tag.
   "AI Development Measurement" becomes "AI-Development Measurement".
   `make verify` keeps a vendored fallback list so the gate stays
   self-contained without the private standards checkout.
+- All fourteen of this repository's `Last verified:` currency stamps used a
+  `Recheck:` label the portfolio staleness parser's `Recheck cadence:` regex
+  cannot match (DOC-15), so every one silently fell through to that parser's
+  180-day default in any tooling that looked. Relabeled to the literal the
+  parser expects; eight cadences that named only an event trigger ("after
+  any incident", "on any HTML change") gained an explicit "and at least
+  quarterly" day-based backstop, since a pure event trigger has no ceiling a
+  mechanical check can enforce. `scripts/check_conformance.py` gains
+  `doc_staleness_failures`, wired into `make hygiene`: it runs the same
+  cadence math as the portfolio's own `check_staleness.py` against this
+  repository's own docs (which nothing checked before -- the portfolio
+  parser only scans the vendored `.standards` checkout), but fails closed on
+  an unparseable cadence instead of defaulting to 180 days.
+- `docs/a11y/ACR.md` and `docs/data/synthetic-fixtures.md` were re-verified
+  against the current trace/chart markup and the current eval/compat fixture
+  set (both were overdue against their own stated triggers) and re-stamped;
+  no substantive claim in either needed to change.
+- `tests/test_release_workflow.py` pins the release workflow's split-authority
+  shape (dispatch-only trigger, least-privilege default token, `authorize`
+  pinned to the reusable release-authorize workflow by a full commit SHA,
+  exactly one `contents: write` job that never checks out code, `pypi-publish`
+  re-comparing the live tag object before publishing) after nothing asserted
+  it and a draft PR that once did (#66) was superseded without carrying the
+  test over. `docs/RELEASING.md` documents the maintainer release procedure
+  for the first time; `.github/allowed_signers` gained a comment header
+  recording its key fingerprint.
+- `scripts/check_conformance.py`'s `waiver_failures` no longer misreads a
+  folded `reason: >-` block scalar as the non-empty string `">-"` -- every
+  entry in the live registry folds its reason, so "missing or empty reason"
+  was unenforceable against any of them. Also now rejects an unregistered
+  waiver `kind`, a malformed `WVR-NNN` id, and (given `--standards-dir`) a
+  `control` ID absent from the pinned `controls.yml`. `security_declaration_failures`
+  cross-checks `docs/RESPONSIBLE-TECH-AUDITS.md` §F's VEX line against
+  `waivers.yml`, so a live dependency-advisory waiver and an "N/A" VEX
+  declaration can no longer silently coexist the way they did for about
+  seven hours around 2026-08-15.
 
 ## [0.2.0] - 2026-08-16
 

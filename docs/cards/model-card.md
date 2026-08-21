@@ -69,4 +69,4 @@ to this offline tool as a measurable training run.
 A named human approves the final redacted artifact. Approval is not evidence
 that the underlying metric definition or source data is correct.
 
-*Last verified: 2026-07-12 · Recheck: on any model, prompt, or Bedrock policy change.*
+*Last verified: 2026-07-12 · Recheck cadence: on any model, prompt, or Bedrock policy change, and at least quarterly.*

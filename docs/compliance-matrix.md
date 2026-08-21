@@ -11,4 +11,4 @@ The generated artifact carries a valid language tag and uses the same grounding
 and suppression enforcement in both shipping languages. That technical parity
 does not replace professional translation or legal review.
 
-*Last verified: 2026-07-12 · Recheck: annually and on a named public deployment.*
+*Last verified: 2026-07-12 · Recheck cadence: annually and on a named public deployment.*

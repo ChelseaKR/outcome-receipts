@@ -52,5 +52,4 @@ under `docs/audits/`, `docs/cards/`, and `docs/data/`. An integrity bypass,
 recoverable suppressed cell, secret exposure, or L2/L3 data disclosure uses the
 private channel and postmortem process in `SECURITY.md` and `docs/OPERATIONS.md`.
 
-Status: current beta architecture. *Last verified: 2026-07-22 · Recheck: every
-release, threat-boundary change, or disclosed supply-chain compromise.*
+Status: current beta architecture. *Last verified: 2026-07-22 · Recheck cadence: every release, threat-boundary change, or disclosed supply-chain compromise, and at least quarterly.*
