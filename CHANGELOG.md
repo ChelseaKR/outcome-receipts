@@ -70,6 +70,13 @@ release-hardening work completed before the first public tag.
   `waivers.yml`, so a live dependency-advisory waiver and an "N/A" VEX
   declaration can no longer silently coexist the way they did for about
   seven hours around 2026-08-15.
+- SEC-38: re-ran the Scorecard measurement (`docs/audits/openssf-scorecard-2026-08-21.md`,
+  aggregate 7.1, up from 6.8 on 2026-07-12 -- entirely from SAST, which the
+  July report could not measure yet). WVR-006 is re-justified against the
+  fresh number and its expiry is shortened, not extended, to 2026-09-25 (when
+  the Maintained-score's under-90-days premise stops applying) instead of the
+  original 2026-10-15. The `scorecard` workflow's enforced floor ratchets
+  from `>= 6.8` to `>= 7.0`.
 
 ## [0.2.0] - 2026-08-16
 

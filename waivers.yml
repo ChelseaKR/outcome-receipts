@@ -46,11 +46,17 @@ waivers:
     repo: outcome-receipts
     kind: other
     reason: >-
-      The measured aggregate is 6.8 while OpenSSF assigns zero Maintained score
-      to repositories under 90 days old and zero Code-Review score to immutable
-      historic solo changes. Critical checks are at target and the workflow
-      ratchets 6.8 without permitting regression. Reassess after the 90-day mark.
+      Re-measured 2026-08-21 (was 6.8 on 2026-07-12): the aggregate is 7.1
+      while OpenSSF assigns zero Maintained score to repositories under 90
+      days old and zero Code-Review score to a solo maintainer's own
+      unreviewed changes. Critical checks are at target and the workflow
+      ratchets to 7.0 without permitting regression back toward the old
+      floor. Expiry is shortened, not extended, to the date the Maintained
+      premise itself stops applying; Code-Review and CII-Best-Practices are
+      expected to still hold the aggregate under the portfolio's 8.0 target
+      after that, so a renewed (not necessarily retired) waiver is the
+      expected outcome, not an assumption this reaches 8.0 unassisted.
     owner: chelseakr
-    granted: 2026-07-12
-    expires: 2026-10-15
-    link: docs/audits/openssf-scorecard-2026-07-12.md
+    granted: 2026-08-21
+    expires: 2026-09-25
+    link: docs/audits/openssf-scorecard-2026-08-21.md
