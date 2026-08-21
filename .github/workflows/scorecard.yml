@@ -37,7 +37,11 @@ jobs:
           set -euo pipefail
           # WVR-006: ratchet the measured baseline while the repository-age
           # component is immutable; the waiver expires after the 90-day mark.
-          jq -e '.score >= 6.8' results.json >/dev/null
+          # Floor is 7.0 (0.1 below the 7.1 measured 2026-08-21, so routine
+          # Scorecard measurement noise doesn't fail the gate) as of the
+          # docs/audits/openssf-scorecard-2026-08-21.md re-justification;
+          # was 6.8 at the 2026-07-12 measurement.
+          jq -e '.score >= 7.0' results.json >/dev/null
           jq -e '[.checks[] | select(.name == "Pinned-Dependencies") | .score][0] >= 9' results.json >/dev/null
           jq -e '[.checks[] | select(.name == "Token-Permissions") | .score][0] == 10' results.json >/dev/null
           jq -e '[.checks[] | select(.name == "Dangerous-Workflow") | .score][0] == 10' results.json >/dev/null
