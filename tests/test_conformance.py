@@ -4,7 +4,42 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.check_conformance import waiver_failures
+import pytest
+from scripts.check_conformance import (
+    FALLBACK_STANDARDS,
+    StandardsIndexError,
+    _readme_standards_rows,
+    _standards_table_failures,
+    standards_index,
+    waiver_failures,
+)
+
+# A frozen, verbatim copy of the 15 standard-registry lines from the pinned
+# portfolio standards repo's controls.yml, as of the version this repository
+# pins in .standards-version. This is what a real `--standards-dir` checkout
+# looks like; the test below proves the vendored FALLBACK_STANDARDS literal
+# (used by the self-contained `make verify`) agrees with it. It is a frozen
+# snapshot, not a live read: keeping it in sync with the real registry is the
+# job of the "portfolio standards" CI job, which runs against the live
+# checkout, not this test's job.
+_CONTROLS_YML_STANDARDS_SNAPSHOT = """
+standards:
+  CQ:   { file: CODE-QUALITY-STANDARD.md,            title: "Code Quality Standard" }
+  SEC:  { file: SECURITY-AND-SUPPLY-CHAIN-STANDARD.md, title: "Security & Supply-Chain Standard" }
+  CICD: { file: CI-CD-STANDARD.md,                   title: "CI/CD Standard" }
+  OBS:  { file: OBSERVABILITY-STANDARD.md,           title: "Observability Standard" }
+  A11Y: { file: ACCESSIBILITY-STANDARD.md,           title: "Accessibility Standard" }
+  I18N: { file: INTERNATIONALIZATION-STANDARD.md,    title: "Internationalization & Localization Standard" }
+  AIEV: { file: AI-EVALUATION-STANDARD.md,           title: "AI Evaluation Standard" }
+  QM:   { file: QUALITY-AND-METRICS-STANDARD.md,     title: "Quality & Metrics Standard" }
+  DOC:  { file: DOCUMENTATION-STANDARD.md,           title: "Documentation Standard" }
+  REL:  { file: RELEASE-AND-VERSIONING-STANDARD.md,  title: "Release & Versioning Standard" }
+  RTF:  { file: RESPONSIBLE-TECH-FRAMEWORK.md,       title: "Responsible-Tech Framework" }
+  PERF: { file: PERFORMANCE-STANDARD.md,             title: "Performance Standard" }
+  IR:   { file: INCIDENT-RESPONSE-STANDARD.md,       title: "Incident Response Standard" }
+  DG:   { file: DATA-GOVERNANCE-STANDARD.md,         title: "Data Governance Standard" }
+  ADM:  { file: AI-DEVELOPMENT-MEASUREMENT-STANDARD.md, title: "AI-Development Measurement Standard" }
+"""
 
 
 def test_waiver_registry_accepts_a_current_complete_entry(tmp_path: Path) -> None:
@@ -61,3 +96,126 @@ waiverz:
     assert "WVR-TEST: expired" in failures
     assert "duplicate waiver id: WVR-TEST" in failures
     assert "WVR-TEST: expiry precedes granted date" in failures
+
+
+# ---------------------------------------------------------------------------
+# DOC-11: the standards index must be derived, not duplicated (issue 98).
+# ---------------------------------------------------------------------------
+
+
+def test_standards_index_defaults_to_the_vendored_fallback_when_unpinned() -> None:
+    assert standards_index(None) == FALLBACK_STANDARDS
+    # Not a tautology by construction: the fallback set only matches the
+    # pinned portfolio index because the next test proves it against a frozen
+    # copy of the real registry, not because this test invented its own copy.
+
+
+def test_standards_index_derives_from_a_pinned_checkouts_controls_yml(tmp_path: Path) -> None:
+    (tmp_path / "controls.yml").write_text(_CONTROLS_YML_STANDARDS_SNAPSHOT, encoding="utf-8")
+
+    assert standards_index(tmp_path) == FALLBACK_STANDARDS
+
+
+def test_fallback_standards_literal_matches_a_frozen_snapshot_of_the_pinned_index() -> None:
+    # Restates the above from the other direction: the vendored fallback list
+    # is not free-standing prose, it is required to equal what a real pinned
+    # checkout's controls.yml derives to. If the portfolio index ever adds,
+    # renames, or retires a standard, this snapshot (and FALLBACK_STANDARDS)
+    # need a deliberate update -- exactly the kind of drift DOC-11 exists to
+    # surface rather than silently outlive.
+    assert len(FALLBACK_STANDARDS) == 15
+    assert {
+        "Code Quality",
+        "Security & Supply-Chain",
+        "CI/CD",
+        "Observability",
+        "Accessibility",
+        "Internationalization & Localization",
+        "AI Evaluation",
+        "Quality & Metrics",
+        "Documentation",
+        "Release & Versioning",
+        "Responsible-Tech Framework",
+        "Performance",
+        "Incident Response",
+        "Data Governance",
+        "AI-Development Measurement",
+    } == FALLBACK_STANDARDS
+
+
+def test_standards_index_fails_loudly_when_the_pinned_checkout_is_missing(tmp_path: Path) -> None:
+    missing = tmp_path / "does-not-exist"
+
+    with pytest.raises(StandardsIndexError, match="does not exist"):
+        standards_index(missing)
+
+
+def test_standards_index_fails_loudly_when_controls_yml_has_no_standards(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "controls.yml").write_text("version: 1\nsomething: else\n", encoding="utf-8")
+
+    with pytest.raises(StandardsIndexError, match="no standard entries"):
+        standards_index(tmp_path)
+
+
+def test_readme_standards_rows_ignores_unrelated_tables_in_the_document() -> None:
+    readme = """\
+## Usage
+
+| Code | Meaning |
+| ---- | ------- |
+| 0 | Success |
+| 1 | Failure |
+
+## Standards conformance
+
+| Standard | State |
+|----------|-------|
+| Code Quality | Applies |
+| Security & Supply-Chain | Applies |
+
+## License
+"""
+    rows = _readme_standards_rows(readme)
+
+    assert rows == {"Code Quality": "Applies", "Security & Supply-Chain": "Applies"}
+    assert "0" not in rows and "1" not in rows and "Standard" not in rows
+
+
+def test_standards_table_failures_flags_a_missing_row() -> None:
+    failures = _standards_table_failures(
+        {"Code Quality": "Applies"}, {"Code Quality", "Observability"}
+    )
+
+    assert "README conformance row missing: Observability" in failures
+
+
+def test_standards_table_failures_flags_an_open_or_na_row() -> None:
+    rows = {"Code Quality": "N/A", "Observability": "Open: pending decision"}
+    failures = _standards_table_failures(rows, {"Code Quality", "Observability"})
+
+    assert "README conformance row is not closed: Code Quality: N/A" in failures
+    assert "README conformance row is not closed: Observability: Open: pending decision" in failures
+
+
+def test_standards_table_failures_flags_a_row_not_in_the_index() -> None:
+    rows = {"Code Quality": "Applies", "Retired Standard": "Applies"}
+    failures = _standards_table_failures(rows, {"Code Quality"})
+
+    assert any("Retired Standard" in failure for failure in failures)
+
+
+def test_standards_table_failures_flags_a_row_count_mismatch() -> None:
+    # Two rows recorded, but the index only names one standard: a duplicate
+    # or stray row would otherwise slip past the per-standard checks above,
+    # which only ever look up names the index already expects.
+    rows = {"Code Quality": "Applies", "Code Quality ": "Applies"}
+    failures = _standards_table_failures(rows, {"Code Quality"})
+
+    assert any("2 row(s)" in failure and "1 standard(s)" in failure for failure in failures)
+
+
+def test_standards_table_failures_is_silent_when_everything_matches() -> None:
+    rows = {"Code Quality": "Applies", "Observability": "Applies"}
+    assert _standards_table_failures(rows, {"Code Quality", "Observability"}) == []

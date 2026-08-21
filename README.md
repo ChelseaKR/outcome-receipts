@@ -481,14 +481,14 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Release & Versioning | Applies — SemVer, signed tags verified against committed allowed signers, trusted-main dispatch with checkout-free publication, CHANGELOG, exact-version build, PyPI Trusted Publishing, provenance, SBOM, and published-artifact verification |
 | Observability | Applies — Tier C local CLI; no service telemetry or SLO surface, with explicit operational and incident runbooks |
 | Accessibility | Applies — axe, pa11y, Lighthouse, reflow, and reduced-motion gates cover generated HTML; the ACR records manual VoiceOver/NVDA evidence status |
-| Internationalization | Applies — packaged gettext catalogs with EN/ES key and placeholder parity; operational CLI messages remain English |
+| Internationalization & Localization | Applies — packaged gettext catalogs with EN/ES key and placeholder parity; operational CLI messages remain English |
 | AI Evaluation | Applies to optional Bedrock drafting — 100-case bilingual grounding benchmark, generated cards, red-team and governance artifacts; no judge ships |
 | Documentation | Applies — pinned standards, current root docs, canonical ADR log, data/incident/operations artifacts, and conformance checks |
 | Quality & Metrics | Applies — Definition of Done, committed eval with Wilson intervals, fail-closed gates, and project metrics ledger |
 | Incident Response | Applies — severity/label convention, private disclosure, secret-leak runbook, and committed-postmortem requirement |
 | Data Governance | Applies — L3 ephemeral input and L2 aggregate-output cards, retention boundary, lineage, and verified recovery procedure |
 | Performance | Applies — no performance budget or benchmark is committed in this repository yet; recorded here as an open gap, not as an exemption |
-| AI Development Measurement | Applies — no measurement artifact is committed in this repository yet; recorded here as an open gap, not as an exemption |
+| AI-Development Measurement | Applies — no measurement artifact is committed in this repository yet; recorded here as an open gap, not as an exemption |
 
 ## License
 
