@@ -22,6 +22,18 @@ release-hardening work completed before the first public tag.
   Development Measurement. Both were missing from the table entirely, so
   neither was recorded as met, as exempt, or as a gap. Both are declared as
   applying with no committed artifact yet, which is an open gap.
+- `scripts/check_conformance.py` no longer validates the README's
+  standards-conformance table against a hardcoded literal that duplicated
+  the table it was checking (DOC-11): given `--standards-dir`, it now derives
+  the required-standards list from that checkout's `controls.yml` and fails
+  loudly if the checkout is missing, rather than silently trusting its own
+  copy. The "portfolio standards" CI job now passes `--standards-dir
+  .standards`. Two row names move to match the pinned index's actual
+  titles, which the table's own gate had never been able to check against:
+  "Internationalization" becomes "Internationalization & Localization", and
+  "AI Development Measurement" becomes "AI-Development Measurement".
+  `make verify` keeps a vendored fallback list so the gate stays
+  self-contained without the private standards checkout.
 
 ## [0.2.0] - 2026-08-16
 
