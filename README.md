@@ -340,7 +340,7 @@ the optional dependency, an enabled `[report.drafting]` policy with a model ID,
 and `--allow-cloud-drafting` on every run:
 
 ```sh
-uv sync --frozen --python 3.12 --group dev --extra bedrock
+uv sync --locked --python 3.12 --group dev --extra bedrock
 receipts run --config report.toml --out out --allow-cloud-drafting \
   --approved-by "A. Reviewer"
 ```
@@ -487,6 +487,8 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Quality & Metrics | Applies — Definition of Done, committed eval with Wilson intervals, fail-closed gates, and project metrics ledger |
 | Incident Response | Applies — severity/label convention, private disclosure, secret-leak runbook, and committed-postmortem requirement |
 | Data Governance | Applies — L3 ephemeral input and L2 aggregate-output cards, retention boundary, lineage, and verified recovery procedure |
+| Performance | Applies — no performance budget or benchmark is committed in this repository yet; recorded here as an open gap, not as an exemption |
+| AI Development Measurement | Applies — no measurement artifact is committed in this repository yet; recorded here as an open gap, not as an exemption |
 
 ## License
 

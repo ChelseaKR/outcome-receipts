@@ -24,12 +24,16 @@ def _make_list(text: str, name: str) -> list[str]:
     return match.group(1).replace("\\\n", " ").split()
 
 
-def test_container_uses_immutable_base_images_and_frozen_install() -> None:
+def test_container_uses_immutable_base_images_and_locked_install() -> None:
     text = DOCKERFILE.read_text(encoding="utf-8")
     from_lines = [line for line in text.splitlines() if line.startswith("FROM ")]
     assert len(from_lines) == 3
     assert all("@sha256:" in line for line in from_lines)
-    assert "uv sync --frozen --no-dev --no-editable" in text
+    # `--locked`, not `--frozen`: `--frozen` never reads pyproject.toml, so it
+    # exits 0 and installs the stale set when the lock has drifted. The image
+    # build is the last place that drift should be able to pass unnoticed.
+    assert "uv sync --locked --no-dev --no-editable" in text
+    assert "uv sync --frozen" not in text
 
 
 def test_container_runs_as_an_unprivileged_cli() -> None:

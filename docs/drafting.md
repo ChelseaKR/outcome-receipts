@@ -5,7 +5,7 @@ Claude on Amazon Bedrock is an optional prose-rewrite seam. Until the first
 package release, install the locked optional dependency from a repository clone:
 
 ```console
-uv sync --frozen --python 3.12 --group dev --extra bedrock
+uv sync --locked --python 3.12 --group dev --extra bedrock
 source .venv/bin/activate
 ```
 

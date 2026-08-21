@@ -27,10 +27,12 @@ VERIFY_GATES := lint type test hygiene i18n security a11y cards eval-check compa
 # release since would have verified against a stale editable install. `uv lock
 # --check` re-resolves and exits 1 when the lock no longer matches the
 # manifest; npm's half of the pair (`npm ci`, not `npm install`) already fails
-# closed the same way.
+# closed the same way. The sync below uses `--locked`, which makes the same
+# comparison and exits 1 on drift, so the install cannot pass on a stale lock
+# even when it is run on its own without `uv lock --check` ahead of it.
 install: install-security
 	uv lock --check
-	uv sync --frozen --python 3.12 --group dev
+	uv sync --locked --python 3.12 --group dev
 	npm ci
 	npx playwright install chromium
 

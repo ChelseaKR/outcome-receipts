@@ -10,6 +10,19 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Changed
+- Every `uv sync --frozen` is now `uv sync --locked`: the `make install` step,
+  the Dockerfile's builder stage, and the setup commands in `README.md`,
+  `AGENTS.md`, and `docs/drafting.md`. `uv lock --check` was already the drift
+  gate in `make install` and still runs first, but the sync itself could pass
+  on a stale lock whenever it was invoked outside that target, and the image
+  build had no drift check at all. `test_container_contract.py` now asserts
+  `--locked` and asserts `--frozen` is absent from the Dockerfile.
+- The README standards-conformance table declares Performance and AI
+  Development Measurement. Both were missing from the table entirely, so
+  neither was recorded as met, as exempt, or as a gap. Both are declared as
+  applying with no committed artifact yet, which is an open gap.
+
 ## [0.2.0] - 2026-08-16
 
 Pre-1.0, so a breaking change to the receipts-manifest contract lands in a
