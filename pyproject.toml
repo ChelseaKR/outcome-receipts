@@ -50,6 +50,14 @@ dev = [
 Homepage = "https://github.com/ChelseaKR/outcome-receipts"
 Documentation = "https://github.com/ChelseaKR/outcome-receipts/tree/main/docs"
 
+# pip is a transitive dependency of pip-audit (via pip-api), never a direct
+# one, so a lockfile-only bump cannot pin it: uv re-resolves to whatever
+# pip-api's range allows on the next `uv lock`. PYSEC-2026-3721 (pip < 26.2)
+# is fixed upstream; this override is the floor until pip-api's own
+# constraint moves past 26.2 and the override becomes redundant, not wrong.
+[tool.uv]
+override-dependencies = ["pip>=26.2"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/outcome_receipts"]
 
