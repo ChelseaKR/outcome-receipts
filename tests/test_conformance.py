@@ -10,6 +10,7 @@ from scripts.check_conformance import (
     StandardsIndexError,
     _readme_standards_rows,
     _standards_table_failures,
+    security_declaration_failures,
     standards_index,
     waiver_failures,
 )
@@ -48,7 +49,7 @@ def test_waiver_registry_accepts_a_current_complete_entry(tmp_path: Path) -> Non
         """version: 1
 
 waivers:
-  - id: WVR-TEST
+  - id: WVR-950
     control: SEC-10
     repo: outcome-receipts
     kind: other
@@ -63,13 +64,43 @@ waivers:
     assert waiver_failures(registry) == []
 
 
-def test_waiver_registry_reports_schema_dates_and_duplicates(tmp_path: Path) -> None:
+def test_waiver_registry_reports_a_wrong_top_level_key(tmp_path: Path) -> None:
+    # `waiverz` (not `waivers`) is a schema violation on its own: the whole
+    # document declares no waivers as far as the schema is concerned, so
+    # nothing under the misspelled key is read as an entry at all -- that is
+    # a second, independent way this document is wrong, not a reason to
+    # expect per-entry checks below to somehow still run on it.
     registry = tmp_path / "waivers.yml"
     registry.write_text(
         """version: 2
 
 waiverz:
-  - id: WVR-TEST
+  - id: WVR-951
+    control: SEC-10
+    repo: outcome-receipts
+    kind: other
+    reason: seeded fixture
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+""",
+        encoding="utf-8",
+    )
+
+    failures = waiver_failures(registry)
+    assert failures == [
+        "waiver registry must declare version: 1",
+        "waiver registry must declare waivers",
+    ]
+
+
+def test_waiver_registry_reports_dates_and_duplicates(tmp_path: Path) -> None:
+    registry = tmp_path / "waivers.yml"
+    registry.write_text(
+        """version: 1
+
+waivers:
+  - id: WVR-952
     control: SEC-10
     repo: outcome-receipts
     kind: other
@@ -77,7 +108,7 @@ waiverz:
     owner: maintainer
     granted: not-a-date
     expires: 2000-01-01
-  - id: WVR-TEST
+  - id: WVR-952
     control: SEC-10
     repo: outcome-receipts
     kind: other
@@ -90,12 +121,10 @@ waiverz:
     )
 
     failures = waiver_failures(registry)
-    assert "waiver registry must declare version: 1" in failures
-    assert "waiver registry must declare waivers" in failures
-    assert "WVR-TEST: invalid granted date" in failures
-    assert "WVR-TEST: expired" in failures
-    assert "duplicate waiver id: WVR-TEST" in failures
-    assert "WVR-TEST: expiry precedes granted date" in failures
+    assert "WVR-952: invalid granted date" in failures
+    assert "WVR-952: expired" in failures
+    assert "duplicate waiver id: WVR-952" in failures
+    assert "WVR-952: expiry precedes granted date" in failures
 
 
 # ---------------------------------------------------------------------------
@@ -240,3 +269,313 @@ def test_standards_table_failures_flags_a_row_count_mismatch() -> None:
 def test_standards_table_failures_is_silent_when_everything_matches() -> None:
     rows = {"Code Quality": "Applies", "Observability": "Applies"}
     assert _standards_table_failures(rows, {"Code Quality", "Observability"}) == []
+
+
+# ---------------------------------------------------------------------------
+# Issue 97: the waiver lint could not see an empty folded reason, an
+# invented kind, or an invented control. Each rotten shape below is seeded
+# on its own (so a failing assertion names exactly which rule broke) and
+# then together in one registry, mirroring tests/test_npm_audit_gate.py's
+# style of proving both what the gate accepts and what it refuses.
+# ---------------------------------------------------------------------------
+
+
+def _registry(tmp_path: Path, body: str) -> Path:
+    registry = tmp_path / "waivers.yml"
+    registry.write_text(f"version: 1\n\nwaivers:\n{body}", encoding="utf-8")
+    return registry
+
+
+def test_waiver_registry_accepts_a_real_folded_reason(tmp_path: Path) -> None:
+    # Every entry in the live waivers.yml folds its reason across several
+    # lines with `>-`. This is the shape the previous single-line-regex
+    # parser could not read correctly (see the next test); this one proves
+    # a *real*, non-empty folded reason is captured and accepted, not just
+    # that an empty one is rejected.
+    registry = _registry(
+        tmp_path,
+        """  - id: WVR-100
+    control: SEC-10
+    repo: outcome-receipts
+    kind: other
+    reason: >-
+      This reason spans multiple folded lines, exactly like every entry in
+      the committed registry, and should be read as one non-empty string.
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+""",
+    )
+
+    assert waiver_failures(registry) == []
+
+
+def test_waiver_registry_rejects_an_empty_folded_reason() -> None:
+    # The bug this fixes directly: the old single-line regex captured the
+    # `>-` folded-scalar indicator itself as the field's "value", so
+    # `reason: >-` (immediately followed by nothing, or by non-indented
+    # content) registered as a non-empty string and the "missing or empty
+    # reason" rule was unenforceable against the shape every real entry uses.
+    from scripts.check_conformance import _parse_waiver_entries
+
+    entries = _parse_waiver_entries(
+        """version: 1
+
+waivers:
+  - id: WVR-101
+    control: SEC-10
+    repo: outcome-receipts
+    kind: other
+    reason: >-
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+"""
+    )
+    assert entries[0]["reason"] == ""
+
+
+def test_waiver_registry_rejects_an_invented_kind(tmp_path: Path) -> None:
+    registry = _registry(
+        tmp_path,
+        """  - id: WVR-102
+    control: SEC-10
+    repo: outcome-receipts
+    kind: totally-made-up
+    reason: seeded fixture
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+""",
+    )
+
+    failures = waiver_failures(registry)
+    assert any("unknown kind 'totally-made-up'" in f for f in failures)
+
+
+def test_waiver_registry_rejects_an_invented_control_by_format(tmp_path: Path) -> None:
+    # No control_ids given: format-only fallback (mirrors the portfolio
+    # lint's own controls.yml-absent behavior).
+    registry = _registry(
+        tmp_path,
+        """  - id: WVR-103
+    control: not-a-real-control-id
+    repo: outcome-receipts
+    kind: other
+    reason: seeded fixture
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+""",
+    )
+
+    failures = waiver_failures(registry)
+    assert any("not a valid PREFIX-NN control ID" in f for f in failures)
+
+
+def test_waiver_registry_rejects_a_control_absent_from_a_pinned_registry(tmp_path: Path) -> None:
+    # control_ids given (as if a pinned controls.yml were checked out):
+    # membership is checked, not just shape -- SEC-99 is well-formed but does
+    # not exist in the (fixture) registry.
+    registry = _registry(
+        tmp_path,
+        """  - id: WVR-104
+    control: SEC-99
+    repo: outcome-receipts
+    kind: other
+    reason: seeded fixture
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+""",
+    )
+
+    failures = waiver_failures(registry, control_ids={"SEC-10", "CQ-35"})
+    assert any("unknown control ID 'SEC-99'" in f for f in failures)
+
+
+def test_waiver_registry_accepts_a_control_present_in_a_pinned_registry(tmp_path: Path) -> None:
+    registry = _registry(
+        tmp_path,
+        """  - id: WVR-105
+    control: SEC-10
+    repo: outcome-receipts
+    kind: other
+    reason: seeded fixture
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+""",
+    )
+
+    assert waiver_failures(registry, control_ids={"SEC-10", "CQ-35"}) == []
+
+
+def test_waiver_registry_rejects_a_malformed_id(tmp_path: Path) -> None:
+    registry = _registry(
+        tmp_path,
+        """  - id: nope
+    control: SEC-10
+    repo: outcome-receipts
+    kind: other
+    reason: seeded fixture
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+""",
+    )
+
+    failures = waiver_failures(registry)
+    assert any("id does not match WVR-NNN" in f for f in failures)
+
+
+def test_waiver_registry_rejects_all_three_rotten_shapes_together(tmp_path: Path) -> None:
+    # The exact scenario issue 97 describes: "an empty reason, an invented
+    # waiver kind, or an invented control" -- fed together, each still caught.
+    registry = _registry(
+        tmp_path,
+        """  - id: WVR-106
+    control: SEC-99
+    repo: outcome-receipts
+    kind: made-up-kind
+    reason: >-
+    owner: maintainer
+    granted: 2099-01-01
+    expires: 2099-02-01
+""",
+    )
+
+    failures = waiver_failures(registry, control_ids={"SEC-10"})
+    assert "WVR-106: missing reason" in failures
+    assert any("unknown kind 'made-up-kind'" in f for f in failures)
+    assert any("unknown control ID 'SEC-99'" in f for f in failures)
+
+
+def test_the_committed_registry_and_gate_still_agree(tmp_path: Path) -> None:
+    # Confirms the hardened gate doesn't regress the real, live registry --
+    # it should report zero failures against waivers.yml as committed.
+    del tmp_path  # unused; keeps the fixture list symmetric with its neighbors
+    root = Path(__file__).resolve().parents[1]
+    assert waiver_failures(root / "waivers.yml") == []
+
+
+# ---------------------------------------------------------------------------
+# Issue 96: nothing compared docs/RESPONSIBLE-TECH-AUDITS.md §F's VEX
+# declaration against the waiver registry, so they silently contradicted
+# each other for about seven hours around 2026-08-15. This seeds that exact
+# historical contradiction and proves the check now catches it.
+# ---------------------------------------------------------------------------
+
+_AUDITS_WITH_NA_VEX = """\
+## F. Security and supply chain
+
+- ASVS: N/A for auth/authz/ingress because the product is an offline CLI.
+- VEX: N/A today because scans report no unfixable HIGH/CRITICAL dependency CVE.
+  Any future exception requires a CycloneDX VEX and quarterly review.
+
+## G. Something else
+"""
+
+_AUDITS_WITH_VEX_DECLARED = """\
+## F. Security and supply chain
+
+- ASVS: N/A for auth/authz/ingress because the product is an offline CLI.
+- VEX: Tracked in vex.json; see the linked CycloneDX VEX document.
+
+## G. Something else
+"""
+
+
+def _waivers_with_live_npm_audit_waiver(expires: str = "2099-01-01") -> str:
+    return f"""version: 1
+
+waivers:
+  - id: WVR-107
+    control: SEC-12
+    repo: outcome-receipts
+    kind: npm-audit
+    advisory: GHSA-jmr9-qjv8-65gv
+    reason: >-
+      Historical contradiction fixture: a live dependency-advisory waiver
+      while the audits doc's VEX line still says N/A.
+    owner: maintainer
+    granted: 2026-08-15
+    expires: {expires}
+"""
+
+
+def test_security_declaration_is_consistent_when_nothing_is_waived() -> None:
+    # Today's actual state: no live dependency-advisory waiver, §F says N/A.
+    assert (
+        security_declaration_failures(
+            _AUDITS_WITH_NA_VEX, "version: 1\n\nwaivers: []\n", Path("vex.json")
+        )
+        == []
+    )
+
+
+def test_security_declaration_catches_the_2026_08_15_contradiction(tmp_path: Path) -> None:
+    # The exact shape issue 96 describes: a live waiver, but §F still N/A,
+    # and no vex.json on disk at all.
+    missing_vex = tmp_path / "vex.json"
+    failures = security_declaration_failures(
+        _AUDITS_WITH_NA_VEX, _waivers_with_live_npm_audit_waiver(), missing_vex
+    )
+
+    assert any("still says N/A" in f for f in failures)
+    assert any("does not exist" in f for f in failures)
+
+
+def test_security_declaration_still_fails_if_vex_json_exists_but_lacks_the_advisory(
+    tmp_path: Path,
+) -> None:
+    vex_path = tmp_path / "vex.json"
+    vex_path.write_text(
+        '{"vulnerabilities": [{"id": "GHSA-unrelated-0000-0000"}]}', encoding="utf-8"
+    )
+
+    failures = security_declaration_failures(
+        _AUDITS_WITH_VEX_DECLARED, _waivers_with_live_npm_audit_waiver(), vex_path
+    )
+
+    assert any("no VEX statement for waived advisory GHSA-jmr9-qjv8-65gv" in f for f in failures)
+
+
+def test_security_declaration_passes_when_vex_json_covers_the_live_waiver(tmp_path: Path) -> None:
+    vex_path = tmp_path / "vex.json"
+    vex_path.write_text(
+        '{"vulnerabilities": [{"id": "GHSA-jmr9-qjv8-65gv", "analysis": {"state": "exploitable"}}]}',
+        encoding="utf-8",
+    )
+
+    failures = security_declaration_failures(
+        _AUDITS_WITH_VEX_DECLARED, _waivers_with_live_npm_audit_waiver(), vex_path
+    )
+
+    assert failures == []
+
+
+def test_security_declaration_catches_a_stale_vex_statement(tmp_path: Path) -> None:
+    # The opposite direction: vex.json still claims a statement for an
+    # advisory that is no longer waived (e.g. the waiver was retired but the
+    # VEX document was not cleaned up).
+    vex_path = tmp_path / "vex.json"
+    vex_path.write_text('{"vulnerabilities": [{"id": "GHSA-jmr9-qjv8-65gv"}]}', encoding="utf-8")
+
+    failures = security_declaration_failures(
+        _AUDITS_WITH_NA_VEX, "version: 1\n\nwaivers: []\n", vex_path
+    )
+
+    assert any("stale VEX statement" in f for f in failures)
+
+
+def test_security_declaration_ignores_an_expired_dependency_waiver() -> None:
+    # An expired waiver is not "live" -- it should not force a VEX document
+    # to exist, and §F may still say N/A.
+    failures = security_declaration_failures(
+        _AUDITS_WITH_NA_VEX,
+        _waivers_with_live_npm_audit_waiver(expires="2020-01-01"),
+        Path("vex.json"),
+    )
+
+    assert failures == []

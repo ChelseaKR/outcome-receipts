@@ -39,4 +39,4 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/check_conformance.py --standards-dir .standards
-          python3 scripts/check_waivers.py waivers.yml
+          python3 scripts/check_waivers.py --standards-dir .standards waivers.yml

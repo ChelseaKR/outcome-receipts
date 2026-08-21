@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from datetime import date
@@ -279,8 +280,156 @@ def _waiver_date(
         return None
 
 
-def waiver_failures(path: Path) -> list[str]:
-    """Return schema and expiry failures from a repository waiver registry."""
+#: The portfolio waiver schema's allowed `kind` values (WAIVERS-SCHEMA.md),
+#: mirrored from the portfolio-wide lint's VALID_KINDS so the two cannot
+#: silently diverge on what a waiver is allowed to claim to be.
+VALID_KINDS = ("semgrep", "vex", "pa11y", "na-in-flight", "other")
+
+#: WAIVERS-SCHEMA.md's waiver-id shape.
+WAIVER_ID_RE = re.compile(r"^WVR-\d{3,}$")
+
+#: Fallback control-id format check when no controls.yml is available to
+#: validate membership against -- mirrors the portfolio lint's own fallback.
+CONTROL_ID_RE = re.compile(r"^[A-Z][A-Z0-9]{1,5}-\d{1,3}$")
+
+
+_BLOCK_SCALAR_INDICATORS = (">-", ">", "|", "|-")
+
+
+def _fold_scalars(lines: list[str]) -> list[tuple[int, str]]:
+    """Collapse `>-`/`>`/`|`/`|-` block scalars into single logical lines.
+
+    Returns `(indent, "key: value")` pairs for every non-blank logical line
+    in `lines`, with a folded scalar's continuation lines already joined
+    into the one line that opened it. Isolating this from
+    `_parse_waiver_entries` keeps each function's branching simple enough to
+    read at a glance (and under the repository's complexity floor).
+    """
+
+    out: list[tuple[int, str]] = []
+    index = 0
+    while index < len(lines):
+        raw = lines[index]
+        stripped = raw.strip()
+        if not stripped:
+            index += 1
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        key, sep, value = stripped.partition(":")
+        value = value.strip()
+        index += 1
+        if not (sep and value in _BLOCK_SCALAR_INDICATORS):
+            out.append((indent, stripped))
+            continue
+        body_indent = indent + 1
+        parts: list[str] = []
+        while index < len(lines) and lines[index].strip():
+            line_indent = len(lines[index]) - len(lines[index].lstrip(" "))
+            if line_indent < body_indent:
+                break
+            parts.append(lines[index].strip())
+            index += 1
+        out.append((indent, f"{key.strip()}: {' '.join(parts)}"))
+    return out
+
+
+def _parse_waiver_entries(text: str) -> list[dict[str, str]]:
+    """Parse the `waivers:` sequence, folded (`>-`) reason scalars included.
+
+    A small, purpose-built parser for exactly the shape WAIVERS-SCHEMA.md
+    documents (a top-level `waivers:` sequence of two-space-indented
+    `- key: value` mappings, where a value may be a folded block scalar),
+    not a general YAML parser. The previous implementation read each field
+    with a single-line regex, which captured a folded scalar's own `>-`
+    indicator as if it were the field's literal value -- so `reason: >-`
+    registered as the non-empty string `">-"`, and the schema's "missing or
+    empty reason" rule was unenforceable against every entry in this
+    repository's own registry, all of which fold their `reason`. This
+    mirrors the block-aware parser in the portfolio's own
+    `automation/check_waivers.py`, so the two cannot read the same file two
+    different ways.
+    """
+
+    entries: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    in_waivers = False
+
+    for indent, line in _fold_scalars(text.splitlines()):
+        if indent == 0:
+            in_waivers = line == "waivers:"
+            current = None
+            continue
+        if not in_waivers:
+            continue
+        if line.startswith("- "):
+            current = {}
+            entries.append(current)
+            line = line[2:].strip()
+        if current is None:
+            continue
+        key, sep, value = line.partition(":")
+        if sep:
+            current[key.strip()] = value.strip()
+
+    return entries
+
+
+def _entry_failures(
+    fields: dict[str, str], control_ids: set[str] | None, seen: set[str]
+) -> list[str]:
+    """Every schema, format, and expiry failure for one parsed waiver entry."""
+
+    failures: list[str] = []
+    waiver_id = fields.get("id", "<missing>").strip()
+    if waiver_id in seen:
+        failures.append(f"duplicate waiver id: {waiver_id}")
+    seen.add(waiver_id)
+
+    for field in ("id", "control", "repo", "kind", "reason", "owner", "granted", "expires"):
+        if not fields.get(field, "").strip():
+            failures.append(f"{waiver_id}: missing {field}")
+
+    if waiver_id not in ("", "<missing>") and not WAIVER_ID_RE.match(waiver_id):
+        failures.append(f"{waiver_id}: id does not match WVR-NNN")
+
+    kind = fields.get("kind", "").strip()
+    if kind and kind not in VALID_KINDS:
+        failures.append(
+            f"{waiver_id}: unknown kind {kind!r} (must be one of {', '.join(VALID_KINDS)})"
+        )
+
+    failures.extend(_control_id_failures(waiver_id, fields.get("control", "").strip(), control_ids))
+
+    granted = _waiver_date(fields, "granted", "granted date", waiver_id, failures)
+    expires = _waiver_date(fields, "expires", "expiry", waiver_id, failures)
+    if expires is not None and expires < date.today():
+        failures.append(f"{waiver_id}: expired")
+    if granted is not None and expires is not None and expires < granted:
+        failures.append(f"{waiver_id}: expiry precedes granted date")
+    return failures
+
+
+def _control_id_failures(waiver_id: str, control: str, control_ids: set[str] | None) -> list[str]:
+    if not control:
+        return []
+    if control_ids is not None:
+        if control not in control_ids:
+            return [f"{waiver_id}: unknown control ID {control!r} (not in controls.yml)"]
+        return []
+    if not CONTROL_ID_RE.match(control):
+        return [f"{waiver_id}: control {control!r} is not a valid PREFIX-NN control ID"]
+    return []
+
+
+def waiver_failures(path: Path, control_ids: set[str] | None = None) -> list[str]:
+    """Return schema and expiry failures from a repository waiver registry.
+
+    `control_ids`, when given, is the set of valid control IDs from a pinned
+    `controls.yml`; an entry's `control` must be a member. When omitted (no
+    pinned checkout available), a control ID is only format-checked against
+    `CONTROL_ID_RE`, matching the portfolio lint's own controls.yml-absent
+    fallback.
+    """
 
     text = path.read_text(encoding="utf-8")
     failures: list[str] = []
@@ -289,24 +438,147 @@ def waiver_failures(path: Path) -> list[str]:
     if not re.search(r"^waivers:\s*(?:\[\])?\s*$", text, re.MULTILINE):
         failures.append("waiver registry must declare waivers")
 
-    blocks = re.split(r"(?=^  - )", text, flags=re.MULTILINE)[1:]
     seen: set[str] = set()
-    required = ("id", "control", "repo", "kind", "reason", "owner", "granted", "expires")
-    for block in blocks:
-        fields = dict(re.findall(r"^\s+(?:- )?([a-z_]+):\s*([^\n]*)", block, re.MULTILINE))
-        waiver_id = fields.get("id", "<missing>").strip()
-        if waiver_id in seen:
-            failures.append(f"duplicate waiver id: {waiver_id}")
-        seen.add(waiver_id)
-        for field in required:
-            if not fields.get(field, "").strip():
-                failures.append(f"{waiver_id}: missing {field}")
-        granted = _waiver_date(fields, "granted", "granted date", waiver_id, failures)
-        expires = _waiver_date(fields, "expires", "expiry", waiver_id, failures)
-        if expires is not None and expires < date.today():
-            failures.append(f"{waiver_id}: expired")
-        if granted is not None and expires is not None and expires < granted:
-            failures.append(f"{waiver_id}: expiry precedes granted date")
+    for fields in _parse_waiver_entries(text):
+        failures.extend(_entry_failures(fields, control_ids, seen))
+    return failures
+
+
+def _load_control_ids(standards_dir: Path) -> set[str] | None:
+    """Control IDs from a pinned checkout's controls.yml, or None if unavailable.
+
+    Mirrors `standards_index`'s own non-fatal handling of a checkout that
+    predates `controls.yml` (issue 98/DOC-11): a missing file here degrades
+    waiver control-ID checking to the format-only fallback rather than
+    failing the whole conformance run over the same pin-staleness gap.
+    """
+
+    controls_path = standards_dir / "controls.yml"
+    if not standards_dir.exists() or not controls_path.exists():
+        return None
+    text = controls_path.read_text(encoding="utf-8")
+    ids = set(re.findall(r"id:\s*([A-Z][A-Z0-9]{1,5}-\d{1,3})\s*,", text))
+    return ids or None
+
+
+#: Waiver kinds that can accept a dependency-advisory exception (issue 96).
+#: `npm-audit` is this repository's own local mechanism (scripts/check_npm_audit.py);
+#: `vex` is the portfolio schema's registered kind for the same purpose. Both
+#: are dependency-advisory kinds for the purpose of the §F cross-check below,
+#: regardless of which one the portfolio-wide kind question eventually settles on.
+DEPENDENCY_ADVISORY_KINDS = ("npm-audit", "vex")
+
+
+def _section(text: str, heading: str) -> str:
+    """The body of a `## <heading>` Markdown section, up to the next `## `."""
+
+    match = re.search(re.escape(heading) + r"\n(.*?)(?=\n## |\Z)", text, re.DOTALL)
+    return match.group(1) if match else ""
+
+
+def _bullet(section: str, label: str) -> str | None:
+    """A `- <label>: ...` bullet's text, continuation lines joined in."""
+
+    match = re.search(rf"^- {re.escape(label)}:\s*(.+(?:\n  .+)*)", section, re.MULTILINE)
+    if match is None:
+        return None
+    return " ".join(line.strip() for line in match.group(1).splitlines())
+
+
+def _vex_statement_ids(vex_path: Path) -> set[str]:
+    try:
+        data = json.loads(vex_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    return {
+        entry["id"]
+        for entry in data.get("vulnerabilities", [])
+        if isinstance(entry, dict) and entry.get("id")
+    }
+
+
+def _as_date(value: str) -> date | None:
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _live_dependency_advisory_waivers(waivers_text: str) -> list[dict[str, str]]:
+    """Unexpired waivers.yml entries whose `kind` accepts a dependency advisory."""
+
+    today = date.today()
+    live = []
+    for entry in _parse_waiver_entries(waivers_text):
+        if entry.get("kind") not in DEPENDENCY_ADVISORY_KINDS:
+            continue
+        expires = _as_date(entry.get("expires", ""))
+        if expires is not None and expires >= today:
+            live.append(entry)
+    return live
+
+
+def security_declaration_failures(audits_text: str, waivers_text: str, vex_path: Path) -> list[str]:
+    """Cross-check docs/RESPONSIBLE-TECH-AUDITS.md §F's VEX line against waivers.yml.
+
+    On 2026-08-15 the registry held a live, accepted HIGH dependency waiver
+    (WVR-007) while §F's VEX line still read "N/A today because scans report
+    no unfixable HIGH/CRITICAL dependency CVE" -- both true when the
+    sentence was written, both no longer consistent with each other once
+    WVR-007 was granted, and nothing compared them (issue 96). This is that
+    comparison:
+
+    * If `waivers.yml` holds any live (unexpired) waiver whose `kind` is a
+      dependency-advisory kind (`npm-audit` or `vex`), then `vex.json` must
+      exist, must contain a statement for every such waived advisory id, and
+      the §F VEX line must not say "N/A".
+    * If it holds none, the §F line may say N/A (or may not -- either is
+      consistent with "nothing is currently waived"), and `vex.json`, if
+      present, must not carry a statement for an advisory that is not
+      currently waived: a stale `not_affected` claim for a waiver that has
+      since been retired is its own false claim, the same shape of defect in
+      the other direction.
+    """
+
+    failures: list[str] = []
+    section = _section(audits_text, "## F. Security and supply chain")
+    vex_line = _bullet(section, "VEX")
+    if vex_line is None:
+        return ["docs/RESPONSIBLE-TECH-AUDITS.md §F has no 'VEX:' declaration line"]
+
+    declares_na = bool(re.search(r"\bN/A\b", vex_line))
+    live = _live_dependency_advisory_waivers(waivers_text)
+    live_advisories = sorted({entry["advisory"] for entry in live if entry.get("advisory")})
+
+    if live:
+        ids = ", ".join(entry.get("id", "?") for entry in live)
+        if declares_na:
+            failures.append(
+                f"waivers.yml holds a live dependency-advisory waiver ({ids}) but "
+                f"docs/RESPONSIBLE-TECH-AUDITS.md §F's VEX line still says N/A: {vex_line!r}"
+            )
+        if not vex_path.exists():
+            failures.append(
+                f"waivers.yml holds a live dependency-advisory waiver ({ids}) but "
+                f"{vex_path.name} does not exist"
+            )
+        else:
+            vex_ids = _vex_statement_ids(vex_path)
+            for advisory in live_advisories:
+                if advisory not in vex_ids:
+                    failures.append(
+                        f"{vex_path.name} has no VEX statement for waived advisory {advisory}"
+                    )
+    elif vex_path.exists():
+        stale = _vex_statement_ids(vex_path)
+        if stale:
+            failures.append(
+                f"{vex_path.name} carries statement(s) for {', '.join(sorted(stale))} but "
+                "waivers.yml holds no live dependency-advisory waiver -- a stale VEX "
+                "statement for an advisory that is no longer waived is its own false claim"
+            )
     return failures
 
 
@@ -321,9 +593,10 @@ def main() -> int:
         help=(
             "path to a checked-out ChelseaKR/portfolio-standards (e.g. .standards in the "
             "'portfolio standards' CI job); when given, the required-standards list is "
-            "derived from its controls.yml instead of the vendored fallback, and a "
-            "missing or unreadable checkout is a hard failure rather than a silent "
-            "fallback to the vendored list"
+            "derived from its controls.yml instead of the vendored fallback (a missing "
+            "checkout is a hard failure; one that exists but predates controls.yml warns "
+            "and falls back), and waiver control IDs are validated against the same "
+            "controls.yml instead of format-checked only"
         ),
     )
     args = parser.parse_args()
@@ -347,7 +620,13 @@ def main() -> int:
 
     failures.extend(_link_failures())
     failures.extend(_card_failures())
-    failures.extend(waiver_failures(ROOT / "waivers.yml"))
+
+    waivers_text = (ROOT / "waivers.yml").read_text(encoding="utf-8")
+    control_ids = _load_control_ids(args.standards_dir) if args.standards_dir is not None else None
+    failures.extend(waiver_failures(ROOT / "waivers.yml", control_ids=control_ids))
+
+    audits_text = (ROOT / "docs" / "RESPONSIBLE-TECH-AUDITS.md").read_text(encoding="utf-8")
+    failures.extend(security_declaration_failures(audits_text, waivers_text, ROOT / "vex.json"))
 
     if failures:
         print("repository conformance failed:", file=sys.stderr)
