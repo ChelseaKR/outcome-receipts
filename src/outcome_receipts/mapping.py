@@ -176,7 +176,14 @@ def _candidate(requirement: dict[str, object], columns: tuple[str, ...]) -> Mapp
         "value_sql": value_sql,
         "slice_sql": f"SELECT * FROM data{where}",  # noqa: S608  https://github.com/ChelseaKR/outcome-receipts/issues/52
     }
-    confidence = min((match.confidence for match in matches), default=1.0)
+    # A requirement can reach here with zero field matches: an unfiltered
+    # count_rows requirement maps no logical field at all, so `matches` is
+    # empty and there is nothing the deterministic matcher can vouch for.
+    # `min(..., default=1.0)` reported that as *maximum* confidence -- the
+    # review-queue JSON showed 1.00 for a candidate whose field mapping was
+    # never actually checked. Fail closed: no evidence defaults to the same
+    # 0.0 a blocked candidate carries, not the highest score on the scale.
+    confidence = min((match.confidence for match in matches), default=0.0)
     return MappingCandidate(metric_id, "review_required", confidence, tuple(matches), spec)
 
 
