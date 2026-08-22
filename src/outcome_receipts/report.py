@@ -369,6 +369,21 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
     """Render the committed eval report as Markdown."""
 
     gate_word = "PASS" if report.gate_pass else "FAIL"
+    # A narrative with zero numeric spans scores grounding_rate 1.0 vacuously
+    # (see evaluate.py): no number failed to bind, because there was no
+    # number to bind. That is a legitimate reason for the gate to pass, but
+    # rendering it as "100.0%" or "(observed 100.0%)" reads as a real
+    # measurement over some numbers, when zero numbers were scored. Label the
+    # no-data case honestly instead of letting a vacuous rate stand in for one.
+    grounding_rate_display = (
+        _pct(report.grounding_rate) if report.n_numbers else "N/A (no numeric spans)"
+    )
+    gate_observed = (
+        f"(observed {grounding_rate_display})."
+        if report.n_numbers
+        else "(no numeric spans in the narrative to bind; the gate passes vacuously, not "
+        "on a measured rate)."
+    )
     lines = [
         "# Eval report",
         "",
@@ -408,7 +423,7 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
         "|--------|-------|--------|",
         f"| Numbers in narrative | {report.n_numbers} | |",
         f"| Bound to a receipt | {report.n_bound} | |",
-        f"| **Grounding rate (gated)** | **{_pct(report.grounding_rate)}** "
+        f"| **Grounding rate (gated)** | **{grounding_rate_display}** "
         f"({report.n_bound}/{report.n_numbers}) | {_ci(report.grounding_ci)} |",
         f"| Unverifiable numbers | {report.n_unbound} | |",
         f"| Hallucinated-number rate | {_pct(report.hallucinated_rate)} "
@@ -416,8 +431,7 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
         "",
         "## Gate",
         "",
-        f"Grounding gate (100% required): **{gate_word}** "
-        f"(observed {_pct(report.grounding_rate)}).",
+        f"Grounding gate (100% required): **{gate_word}** {gate_observed}",
         "",
         "".join(
             (
