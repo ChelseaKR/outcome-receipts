@@ -108,6 +108,19 @@ release-hardening work completed before the first public tag.
   genuine `0` and still publishes. Regression tests:
   `tests/test_engine.py::test_null_scalar_fails_closed_instead_of_becoming_zero`
   and the four cases beside it.
+- `receipts diff` no longer prints the literal word `None` for a suppressed
+  figure's before/after value. A schema-2.0 receipt that crossed the
+  suppression threshold between two runs carries `value: null`,
+  `row_count: null`; the reason text and the two-level Markdown fallback both
+  interpolated that straight into an f-string, so an exported diff read
+  `"value None -> 47.0"` next to a real number, and a foreign manifest (`diff`
+  reads two arbitrary JSON files, not only ones this tool produced) missing
+  `display` entirely fell through the same way, or to a silently blank cell
+  when `value` was also absent. Both `diff.py` and `report.py` now route
+  through the same `[SUPPRESSED]` redaction marker `report._withheld` and
+  `trace._withheld` already use. Regression tests:
+  `tests/test_diff.py::test_suppressed_prior_value_reports_marker_not_the_word_none`
+  and the three cases beside it.
 
 ## [0.2.0] - 2026-08-16
 

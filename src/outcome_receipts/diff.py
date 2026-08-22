@@ -22,6 +22,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from outcome_receipts.models import REDACTED_DISPLAY
+
 
 @dataclass(frozen=True)
 class FigureDelta:
@@ -84,6 +86,24 @@ def _index_by_metric_id(manifest: Mapping[str, Any]) -> dict[str, dict[str, Any]
     return index
 
 
+def _reason_value(raw: object) -> str:
+    """Render a raw manifest field for the human-readable "why" text.
+
+    A suppressed receipt's ``value`` and ``row_count`` are ``None``, not zero (see
+    ``docs/schema/receipts.schema.json``): interpolating that straight into an
+    f-string printed the literal word "None" next to a real number, e.g.
+    ``"value None -> 47.0"``, which reads as a measurement rather than as a
+    withheld figure. A field missing entirely -- expected from a manifest this
+    tool did not produce, which is exactly what ``diff`` compares -- is
+    indistinguishable from ``None`` once read with ``.get()``, so both route
+    through the same redaction marker :func:`outcome_receipts.report._withheld`
+    and :func:`outcome_receipts.trace._withheld` already use for a withheld
+    field.
+    """
+
+    return REDACTED_DISPLAY if raw is None else str(raw)
+
+
 def _delta(metric_id: str, prior: Mapping[str, Any], current: Mapping[str, Any]) -> FigureDelta:
     """Compare one metric's prior and current receipts into a :class:`FigureDelta`.
 
@@ -98,9 +118,14 @@ def _delta(metric_id: str, prior: Mapping[str, Any], current: Mapping[str, Any])
 
     reasons: list[str] = []
     if value_changed:
-        reasons.append(f"value {prior.get('value')} -> {current.get('value')}")
+        reasons.append(
+            f"value {_reason_value(prior.get('value'))} -> {_reason_value(current.get('value'))}"
+        )
     if row_count_changed:
-        reasons.append(f"row count {prior.get('row_count')} -> {current.get('row_count')}")
+        reasons.append(
+            f"row count {_reason_value(prior.get('row_count'))} -> "
+            f"{_reason_value(current.get('row_count'))}"
+        )
     if slice_hash_changed:
         reasons.append("slice hash changed")
     if query_changed:
