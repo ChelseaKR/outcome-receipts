@@ -10,6 +10,21 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Added
+- Issue 94: the first real, non-synthetic run of the small-cell suppression
+  engine, over HUD's own published 2024 CoC Point-in-Time subpopulation
+  counts (363 CoCs, 10,890 real cells; `eval/hud/`). No HUD-published
+  numeric small-cell rule exists to validate the shipped CMS-modeled default
+  (threshold 11) against -- confirming a gap `docs/ROADMAP.md` already
+  named -- but applied to subpopulation-shaped data, the default withholds a
+  majority of granular cells (60.7%, vs. ~1% for whole-CoC totals) and
+  complementary suppression is empirically necessary on 95% of CoCs, not a
+  theoretical edge case. Findings, data card, and a test that recomputes
+  every headline number from the committed extract:
+  `docs/audits/hud-coc-suppression-calibration-2026-08-21.md`,
+  `docs/data/hud-coc-pit-subpopulations.md`,
+  `tests/test_hud_suppression_calibration.py`.
+
 ### Changed
 - Every `uv sync --frozen` is now `uv sync --locked`: the `make install` step,
   the Dockerfile's builder stage, and the setup commands in `README.md`,

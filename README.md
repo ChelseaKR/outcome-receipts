@@ -210,7 +210,10 @@ percentages. HUD requires anonymous aggregate publication but does not prescribe
 this numeric floor, so the policy governing a particular report remains the
 operator's responsibility. See the [data card](docs/cards/data-card-reporting.md),
 the [DPIA findings](docs/RESPONSIBLE-TECH-AUDITS.md), and the historic suppression
-ADRs in [docs/decisions](docs/decisions/).
+ADRs in [docs/decisions](docs/decisions/). The default is calibrated against
+real, non-synthetic data: running the engine over HUD's own 2024 CoC
+Point-in-Time subpopulation counts is
+[findings, gated by a recomputation test](docs/audits/hud-coc-suppression-calibration-2026-08-21.md).
 
 A withheld cell is never a zero. In `receipts.json` its receipt carries
 `suppressed: true` and `null` for `value`, `row_count`, `slice_hash`, and
