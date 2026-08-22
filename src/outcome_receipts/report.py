@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from outcome_receipts.charts import Chart
 from outcome_receipts.comparison import ComparisonResult, ReconciliationResult
@@ -125,13 +126,31 @@ def render_reconciliation_table(result: ReconciliationResult, *, locale: Locale 
     return "\n".join(lines)
 
 
+def _receipt_display(receipt: Mapping[str, Any]) -> str:
+    """A receipt's rendered display string, marker-safe for a foreign manifest.
+
+    ``diff`` is exactly the command that reads a manifest this tool did not
+    itself produce, so ``display`` cannot be assumed present. The old fallback
+    -- ``receipt.get("display", receipt.get("value", ""))`` -- read a present
+    but ``None`` ``value`` (a suppressed schema-2.0 figure) as the literal text
+    "None", and a wholly missing ``value`` as a silently blank cell, which
+    reads as "unchanged" rather than "could not be shown". Both cases route
+    through :func:`_withheld` instead, the same marker the receipts section and
+    the trace view already use for a withheld numeric field.
+    """
+
+    if "display" in receipt:
+        return str(receipt["display"])
+    return _withheld(receipt.get("value"))
+
+
 def _delta_display(delta: FigureDelta, key: str) -> str:
     """The display string for one side of a changed figure, blank if absent."""
 
     side = delta.prior if key == "prior" else delta.current
     if side is None:
         return ""
-    return str(side.get("display", side.get("value", "")))
+    return _receipt_display(side)
 
 
 def render_diff_markdown(
@@ -174,16 +193,14 @@ def render_diff_markdown(
         lines.append("")
         for receipt in diff.added:
             metric_id = receipt.get("metric_id", "")
-            display = receipt.get("display", receipt.get("value", ""))
-            lines.append(f"- {metric_id} = {display}")
+            lines.append(f"- {metric_id} = {_receipt_display(receipt)}")
         lines.append("")
     if diff.removed:
         lines.append("### Removed")
         lines.append("")
         for receipt in diff.removed:
             metric_id = receipt.get("metric_id", "")
-            display = receipt.get("display", receipt.get("value", ""))
-            lines.append(f"- {metric_id} = {display}")
+            lines.append(f"- {metric_id} = {_receipt_display(receipt)}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
