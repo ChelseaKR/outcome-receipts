@@ -262,6 +262,25 @@ def compute_figure(
     so a malformed metric fails loudly rather than producing a silent wrong number.
     Also raises ``ValueError`` naming any column a query references that is absent
     from the export, so a bad spec against a messy export fails closed.
+
+    A scalar of SQL ``NULL`` also raises, rather than becoming ``0.0``. This is the
+    same stance ``run_data_checks`` takes below -- a precondition that cannot be
+    evaluated is not a precondition that passed -- applied to the figure itself.
+    An earlier revision coerced ``NULL`` to ``0.0``, and nothing downstream could
+    tell the difference afterwards: ``suppression`` classifies ``value == 0`` as a
+    *true zero* and leaves it published, ``verify`` re-derives the same ``0.0`` and
+    agrees, and the export renders ``"0"``/``"0%"``/``"$0.00"``/``"0 days"`` in the
+    narrative, a zero-height bar in the chart, and ``"value": 0.0`` in the manifest.
+    "We housed people in an average of 0.0 days" is not a cautious reading of an
+    empty cohort; it is a fabricated measurement, and it is the same
+    absence-rendered-as-a-value defect the suppression engine's ``_redact`` was
+    already hardened against. An author who genuinely means "zero when empty"
+    writes ``COALESCE(<expr>, 0)``, as several shipped example specs already do.
+
+    Note the one case this guard cannot catch: SQLite's ``CAST('abc' AS REAL)``
+    evaluates to a real ``0.0``, not ``NULL``, so an unparseable text column is
+    indistinguishable from a true zero by the time the value reaches this
+    function. Guarding that belongs in the loader or an author ``data_check``.
     """
 
     clock = clock or SystemClock()
@@ -274,7 +293,22 @@ def compute_figure(
             f"got {len(value_rows)} rows"
         )
     raw_value = value_rows[0][0]
-    value = float(raw_value) if raw_value is not None else 0.0
+    if raw_value is None:
+        raise ValueError(
+            f"metric {spec.metric_id!r} value_sql returned SQL NULL, not a number. "
+            "NULL is the absence of a value, not the value zero: an aggregate over "
+            "an empty set (AVG/SUM/MAX/MIN), a division by zero, or a NULL join all "
+            "produce it. Publishing it as 0 would assert a measurement the data does "
+            "not support. If zero is genuinely the right answer for an empty set, "
+            "say so explicitly in the spec with COALESCE(<expr>, 0)."
+        )
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"metric {spec.metric_id!r} value_sql returned {raw_value!r}, which is not "
+            "a number; a figure must be a numeric scalar"
+        ) from exc
 
     slice_cursor = _execute(conn, spec.slice_sql, spec)
     slice_rows = slice_cursor.fetchall()

@@ -207,3 +207,118 @@ def test_malformed_metric_raises() -> None:
             compute_figure(conn, bad, clock=FixedClock())
     finally:
         conn.close()
+
+
+# --- SQL NULL is the absence of a value, never the value zero -----------------
+#
+# An earlier revision coerced a NULL scalar to 0.0. Nothing downstream could
+# recover it: suppression reads value == 0 as a *true zero* and publishes it,
+# verify re-derives the same 0.0 and agrees, and the export renders "0"/"0%"/
+# "0 days". These pin the fail-closed behaviour; each one fails on that revision.
+
+
+def test_null_scalar_fails_closed_instead_of_becoming_zero() -> None:
+    """AVG over an empty filtered set is NULL, and must not publish as 0.0."""
+
+    empty_avg = MetricSpec(
+        metric_id="avg_days_to_housing",
+        description="average days to housing for a cohort with no members",
+        value_sql="SELECT AVG(CAST(client_id AS REAL)) FROM data WHERE dest = 'nowhere'",
+        slice_sql="SELECT * FROM data WHERE dest = 'nowhere'",
+        unit="days",
+        decimals=1,
+    )
+    with pytest.raises(ValueError, match="avg_days_to_housing"):
+        compute_figures(ROWS, [empty_avg], clock=FixedClock())
+
+
+def test_null_scalar_error_names_null_and_suggests_coalesce() -> None:
+    """The error has to teach the fix, not just refuse."""
+
+    empty_sum = MetricSpec(
+        metric_id="total_cost",
+        description="total cost over an empty cohort",
+        value_sql="SELECT SUM(CAST(client_id AS REAL)) FROM data WHERE dest = 'nowhere'",
+        slice_sql="SELECT * FROM data WHERE dest = 'nowhere'",
+        unit="currency",
+    )
+    with pytest.raises(ValueError, match="NULL"):
+        compute_figures(ROWS, [empty_sum], clock=FixedClock())
+    with pytest.raises(ValueError, match="COALESCE"):
+        compute_figures(ROWS, [empty_sum], clock=FixedClock())
+
+
+def test_division_by_zero_percentage_fails_closed() -> None:
+    """The shipped examples' own percent shape: NULL when the denominator is 0.
+
+    ``ROUND(100.0 * SUM(...) / COUNT(*))`` over an empty cohort is NULL in
+    SQLite, which previously published as "0%" -- a rate asserted over nobody.
+    """
+
+    rate = MetricSpec(
+        metric_id="permanent_exit_rate",
+        description="permanent exit rate with no one in the denominator",
+        value_sql=(
+            "SELECT ROUND(100.0 * SUM(CASE WHEN dest = 'permanent' THEN 1 ELSE 0 END) "
+            "/ COUNT(*)) FROM data WHERE dest = 'nowhere'"
+        ),
+        slice_sql="SELECT * FROM data WHERE dest = 'nowhere'",
+        unit="percent",
+    )
+    with pytest.raises(ValueError, match="permanent_exit_rate"):
+        compute_figures(ROWS, [rate], clock=FixedClock())
+
+
+def test_explicit_coalesce_still_publishes_a_genuine_zero() -> None:
+    """The author-declared "zero when empty" case must keep working.
+
+    Fail-closed on NULL must not take the legitimate escape hatch with it:
+    an author who means zero says so, and several shipped example specs do.
+    """
+
+    coalesced = MetricSpec(
+        metric_id="total_cost",
+        description="total cost, explicitly zero when the cohort is empty",
+        value_sql=(
+            "SELECT COALESCE(SUM(CAST(client_id AS REAL)), 0) FROM data WHERE dest = 'nowhere'"
+        ),
+        slice_sql="SELECT * FROM data WHERE dest = 'nowhere'",
+        unit="currency",
+    )
+    [figure] = compute_figures(ROWS, [coalesced], clock=FixedClock())
+    assert figure.value == 0.0
+    assert figure.receipt.value == 0.0
+
+
+def test_counting_zero_rows_is_still_a_true_zero() -> None:
+    """COUNT(*) returns 0, not NULL. A genuine zero must stay publishable."""
+
+    [figure] = compute_figures(
+        ROWS,
+        [
+            MetricSpec(
+                metric_id="n",
+                description="rows with an impossible destination",
+                value_sql="SELECT COUNT(*) FROM data WHERE dest = 'nowhere'",
+                slice_sql="SELECT * FROM data WHERE dest = 'nowhere'",
+                unit="count",
+            )
+        ],
+        clock=FixedClock(),
+    )
+    assert figure.value == 0.0
+    assert figure.display == "0"
+
+
+def test_non_numeric_scalar_fails_closed_naming_the_metric() -> None:
+    """A text scalar must not raise a bare float() error that names no metric."""
+
+    texty = MetricSpec(
+        metric_id="not_a_number",
+        description="a value query returning text",
+        value_sql="SELECT dest FROM data LIMIT 1",
+        slice_sql="SELECT * FROM data",
+        unit="count",
+    )
+    with pytest.raises(ValueError, match="not_a_number"):
+        compute_figures(ROWS, [texty], clock=FixedClock())
