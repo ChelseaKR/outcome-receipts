@@ -27,6 +27,7 @@ from outcome_receipts.cli import EXIT_OK, main
 from outcome_receipts.models import EMPTY_SLICE_HASH
 from outcome_receipts.workflows import (
     WorkflowError,
+    _record_disjoint_slice,
     build_rollup,
     verify_workflow_artifact,
 )
@@ -427,6 +428,84 @@ def test_rollup_rejects_a_non_zero_count_over_an_empty_data_slice(tmp_path: Path
             approved_by="Lead agency",
             reproducible=True,
         )
+
+
+def test_disjoint_slice_check_fails_closed_on_a_receipt_missing_every_gate_field() -> None:
+    """The historical defect: a receipt missing ``slice_hash``, ``value``, and
+    ``row_count`` entirely used to default to ``""``, ``0.0``, and ``0`` -- the
+    exact shape of a genuine, verified empty slice -- so it silently passed as
+    "verified empty," was never registered against another partner's slice
+    hash, and its own (unknown, possibly non-zero) count still entered the
+    rollup sum unexamined. `_is_suppressed` already rejects an explicitly
+    withheld receipt before this function runs, so a receipt still missing
+    these fields here is malformed or foreign, and the gate this function
+    exists to run cannot be silently skipped for it.
+    """
+
+    with pytest.raises(WorkflowError, match="alpha slice_hash is required"):
+        _record_disjoint_slice({}, partner="alpha", digest="d1", receipt={"metric_id": "served"})
+
+
+def test_disjoint_slice_check_fails_closed_on_a_receipt_missing_value() -> None:
+    with pytest.raises(WorkflowError, match="alpha value is required"):
+        _record_disjoint_slice(
+            {},
+            partner="alpha",
+            digest="d1",
+            receipt={"metric_id": "served", "slice_hash": "abc123"},
+        )
+
+
+def test_disjoint_slice_check_fails_closed_on_a_receipt_missing_row_count() -> None:
+    with pytest.raises(WorkflowError, match="alpha row_count is required"):
+        _record_disjoint_slice(
+            {},
+            partner="alpha",
+            digest="d1",
+            receipt={"metric_id": "served", "slice_hash": "abc123", "value": 12.0},
+        )
+
+
+def test_disjoint_slice_check_still_accepts_a_genuine_verified_empty_slice() -> None:
+    """The fail-closed field requirement must not over-suppress: a receipt that
+    explicitly reports ``EMPTY_SLICE_HASH`` with a real zero value and row
+    count -- the legitimate shape -- still passes and is not registered as a
+    collision candidate.
+    """
+
+    slices: dict[str, tuple[str, str]] = {}
+
+    _record_disjoint_slice(
+        slices,
+        partner="alpha",
+        digest="d1",
+        receipt={
+            "metric_id": "served",
+            "slice_hash": EMPTY_SLICE_HASH,
+            "value": 0.0,
+            "row_count": 0,
+        },
+    )
+
+    assert slices == {}
+
+
+def test_disjoint_slice_check_still_registers_a_genuine_non_empty_slice() -> None:
+    slices: dict[str, tuple[str, str]] = {}
+
+    _record_disjoint_slice(
+        slices,
+        partner="alpha",
+        digest="d1",
+        receipt={
+            "metric_id": "served",
+            "slice_hash": "abc123",
+            "value": 12.0,
+            "row_count": 12,
+        },
+    )
+
+    assert slices == {"abc123": ("alpha", "d1")}
 
 
 def test_rollup_names_two_bundles_from_one_partner_by_digest(tmp_path: Path) -> None:
