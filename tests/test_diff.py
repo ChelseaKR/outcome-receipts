@@ -16,6 +16,7 @@ from typing import Any
 
 from outcome_receipts.cli import main
 from outcome_receipts.diff import diff_manifests
+from outcome_receipts.models import REDACTED_DISPLAY
 from outcome_receipts.report import render_diff_markdown
 
 
@@ -152,6 +153,102 @@ def test_render_diff_markdown_carries_counts_and_before_after_values() -> None:
     assert "fresh = 3" in md
     assert "### Removed" in md
     assert "dropped = 9" in md
+
+
+def test_suppressed_prior_value_reports_marker_not_the_word_none() -> None:
+    """A cell that crossed the suppression threshold between two runs is a real,
+    reachable transition -- not a foreign-manifest edge case. Its schema-2.0
+    receipt carries ``value: null``, ``row_count: null``. The old code built the
+    reason with a bare f-string, so it read "value None -> 47.0": the literal
+    word "None" printed beside a real number in an exported diff. It must read
+    the same redaction marker the receipts section and the trace view use.
+    """
+
+    prior = _manifest(
+        {
+            "metric_id": "served",
+            "value": None,
+            "row_count": None,
+            "display": REDACTED_DISPLAY,
+            "value_sql": "SELECT AVG(days) FROM data",
+            "slice_hash": None,
+            "computed_at": "2025-01-01T00:00:00Z",
+        }
+    )
+    current = _manifest(
+        _receipt("served", value=47.0, display="47", value_sql="SELECT AVG(days) FROM data")
+    )
+
+    diff = diff_manifests(prior, current)
+
+    assert len(diff.changed) == 1
+    delta = diff.changed[0]
+    assert delta.value_changed
+    assert delta.row_count_changed
+    reasons_text = "; ".join(delta.reasons)
+    assert "None" not in reasons_text
+    assert f"value {REDACTED_DISPLAY} -> 47.0" in delta.reasons
+    assert f"row count {REDACTED_DISPLAY} -> 100" in delta.reasons
+
+
+def test_render_diff_markdown_never_prints_the_word_none_for_a_suppressed_figure() -> None:
+    prior = _manifest(
+        {
+            "metric_id": "served",
+            "value": None,
+            "row_count": None,
+            "display": REDACTED_DISPLAY,
+            "value_sql": "SELECT AVG(days) FROM data",
+            "slice_hash": None,
+            "computed_at": "2025-01-01T00:00:00Z",
+        }
+    )
+    current = _manifest(
+        _receipt("served", value=47.0, display="47", value_sql="SELECT AVG(days) FROM data")
+    )
+
+    diff = diff_manifests(prior, current)
+    md = render_diff_markdown(diff, prior_label="q1", current_label="q2")
+
+    assert "None" not in md
+    assert REDACTED_DISPLAY in md
+    assert "47" in md
+
+
+def test_render_diff_markdown_foreign_manifest_missing_display_falls_back_to_marker() -> None:
+    """``diff`` reads two manifests as plain JSON; it never requires they came
+    from this tool's own ``receipts_manifest``. A receipt missing ``display``
+    entirely -- an older or third-party manifest -- with a null ``value`` used
+    to fall through to ``str(None)``. It must show the same marker, not the
+    literal word "None", and not a silently blank cell that reads as
+    "nothing to report" when something was in fact withheld.
+    """
+
+    prior = _manifest({"metric_id": "housed", "value": None})
+    current = _manifest()
+
+    diff = diff_manifests(prior, current)
+    md = render_diff_markdown(diff, prior_label="q1", current_label="q2")
+
+    assert "### Removed" in md
+    assert "None" not in md
+    assert f"housed = {REDACTED_DISPLAY}" in md
+
+
+def test_render_diff_markdown_foreign_manifest_missing_display_still_shows_a_real_value() -> None:
+    """The marker fallback must not over-suppress: a foreign manifest missing
+    only ``display``, with a genuine numeric ``value``, still shows that value.
+    """
+
+    prior = _manifest()
+    current = _manifest({"metric_id": "housed", "value": 42.0})
+
+    diff = diff_manifests(prior, current)
+    md = render_diff_markdown(diff, prior_label="q1", current_label="q2")
+
+    assert "### Added" in md
+    assert "housed = 42.0" in md
+    assert REDACTED_DISPLAY not in md
 
 
 def test_cli_diff_over_tmp_files_exits_zero(tmp_path: Path, capsys: Any) -> None:
