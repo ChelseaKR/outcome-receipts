@@ -648,6 +648,21 @@ def _required_text(value: object, *, field: str) -> str:
     return text
 
 
+def _required_number(value: object, *, field: str) -> float:
+    """A receipt numeric field that must be present, mirroring `_required_text`.
+
+    A missing key and an explicit `None` both read as `None` through
+    `Mapping.get`, and both fail closed the same way here: neither is a `0.0`
+    the disjointness gate below may safely reason about.
+    """
+
+    if value is None:
+        raise WorkflowError(f"{field} is required")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise WorkflowError(f"{field} must be numeric")
+    return float(value)
+
+
 def _bundle_members(directory: Path) -> dict[str, bytes]:
     return {
         path.relative_to(directory).as_posix(): path.read_bytes()
@@ -1137,12 +1152,22 @@ def _record_disjoint_slice(
     hash it publishes cannot be compared with any other partner's. A receipt that
     reports a non-zero count over an empty slice is therefore refused rather than
     exempted. See ``docs/adr/0004-fail-closed-disjoint-rollup-slice-check.md``.
+
+    ``slice_hash``, ``value``, and ``row_count`` are required, not defaulted. This
+    function runs only after the caller already rejected an explicitly withheld
+    receipt (``_is_suppressed``), so a receipt reaching here that is still missing
+    one of these fields is malformed or foreign, not suppressed. The old code
+    defaulted a missing field to ``""``/``0.0``/``0``, which is exactly the shape
+    of a genuine empty-slice zero -- so a receipt with, say, no ``slice_hash`` key
+    at all sailed through as "verified empty" and was silently exempted from the
+    one duplicate-client check this function exists to run, while its count still
+    entered the rollup sum.
     """
 
-    slice_hash = str(receipt.get("slice_hash", ""))
-    value = float(receipt.get("value", 0.0))
-    row_count = int(receipt.get("row_count", 0))
-    if not slice_hash or slice_hash == EMPTY_SLICE_HASH:
+    slice_hash = _required_text(receipt.get("slice_hash"), field=f"{partner} slice_hash")
+    value = _required_number(receipt.get("value"), field=f"{partner} value")
+    row_count = int(_required_number(receipt.get("row_count"), field=f"{partner} row_count"))
+    if slice_hash == EMPTY_SLICE_HASH:
         if value != 0.0 or row_count != 0:
             raise WorkflowError(
                 f"{partner}: a non-zero count over an empty data slice carries no evidence "
