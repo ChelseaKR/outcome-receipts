@@ -55,6 +55,28 @@ def test_filter_fields_are_mapped_and_sql_literals_are_escaped(tmp_path: Path) -
     assert str(candidate.metric_spec["slice_sql"]).startswith("SELECT * FROM data WHERE")
 
 
+def test_zero_field_matches_reports_minimum_not_maximum_confidence(tmp_path: Path) -> None:
+    """An unfiltered count_rows requirement maps no logical field at all, so
+    the candidate's field_matches is empty. The deterministic matcher never
+    checked anything for this candidate, so it must not report the maximum
+    confidence score (1.00) in the review-queue JSON -- that reads as "fully
+    verified" to a reviewer skimming for the low-confidence rows to check.
+    """
+
+    data, requirements = _files(
+        tmp_path,
+        {
+            "metric_id": "clients_served_total",
+            "aggregation": "count_rows",
+        },
+    )
+    candidate = build_mapping_queue(data, requirements).candidates[0]
+
+    assert candidate.status == "review_required"
+    assert candidate.field_matches == ()
+    assert candidate.confidence == 0.0
+
+
 def test_missing_field_is_blocked_without_metric_spec(tmp_path: Path) -> None:
     data, requirements = _files(
         tmp_path,
