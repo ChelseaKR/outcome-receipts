@@ -93,6 +93,22 @@ release-hardening work completed before the first public tag.
   original 2026-10-15. The `scorecard` workflow's enforced floor ratchets
   from `>= 6.8` to `>= 7.0`.
 
+### Fixed
+- A metric whose `value_sql` returns SQL `NULL` now fails closed in
+  `compute_figure` instead of becoming the number `0.0`. `AVG`/`SUM`/`MIN`/`MAX`
+  over an empty filtered set, a division by a zero denominator, and a NULL join
+  all produce `NULL`, and the old coercion turned each of them into a published
+  measurement: `"0"`, `"0%"`, `"$0.00"` or `"0 days"` in the narrative, a
+  zero-height bar in the chart, `"value": 0.0` in `receipts.json`, and `0` in
+  the trace. Nothing downstream could recover the distinction, because
+  suppression reads `value == 0` as a true zero and leaves it published while
+  `verify` re-derives the same `0.0` and agrees. The engine now raises
+  `ValueError` naming the metric, and the message points at `COALESCE(<expr>, 0)`
+  for authors who do mean zero over an empty set. `COUNT(*)` still returns a
+  genuine `0` and still publishes. Regression tests:
+  `tests/test_engine.py::test_null_scalar_fails_closed_instead_of_becoming_zero`
+  and the four cases beside it.
+
 ## [0.2.0] - 2026-08-16
 
 Pre-1.0, so a breaking change to the receipts-manifest contract lands in a
