@@ -121,6 +121,36 @@ release-hardening work completed before the first public tag.
   `trace._withheld` already use. Regression tests:
   `tests/test_diff.py::test_suppressed_prior_value_reports_marker_not_the_word_none`
   and the three cases beside it.
+- A federated rollup receipt missing `slice_hash`, `value`, or `row_count`
+  entirely used to default to `""`, `0.0`, and `0` in `_record_disjoint_slice`
+  -- the exact shape of a genuine, verified empty slice -- so it silently
+  passed as "verified empty," was never registered against another partner's
+  slice hash, and its own unexamined count still entered the rollup sum,
+  exempting the partner from the one disjointness check
+  `receipts rollup` exists to run. The three fields now go through a
+  `_required_number`/`_required_text` extractor that raises `WorkflowError`
+  naming the field instead of defaulting. Regression tests:
+  `tests/test_rollup_adversarial.py::test_disjoint_slice_check_fails_closed_on_a_receipt_missing_every_gate_field`
+  and the three cases beside it.
+- `receipts map` reported confidence `1.00` -- the maximum score on the
+  scale -- for a candidate whose field mapping was never actually checked.
+  An unfiltered `count_rows` requirement maps zero logical fields, so
+  `_candidate`'s `min(match.confidence for match in matches, default=1.0)`
+  fired its default on an empty sequence, hiding the one review-queue row
+  with no verified evidence behind the highest-looking score. Defaults to
+  `0.0` now, the same floor a `blocked` candidate already carries. Regression
+  test:
+  `tests/test_mapping.py::test_zero_field_matches_reports_minimum_not_maximum_confidence`.
+- The committed `eval.md` wrote `Grounding gate (100% required): PASS
+  (observed 100.0%).` for a narrative with zero numeric spans, indistinguishable
+  from a report that scored real numbers and found all of them grounded. The
+  rate is vacuously `1.0` when there is nothing to bind (`evaluate.py`), which
+  is a legitimate reason for the gate to pass, but `render_eval_markdown` now
+  labels that case honestly -- `N/A (no numeric spans)` and "passes vacuously,
+  not on a measured rate" -- instead of letting the vacuous rate stand in for a
+  measurement. A report that actually scores numbers is unaffected. Regression
+  tests: `tests/test_eval_report_markdown.py` (new; `render_eval_markdown` had
+  no direct test before this change).
 
 ## [0.2.0] - 2026-08-16
 
