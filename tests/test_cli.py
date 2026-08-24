@@ -28,6 +28,7 @@ main = cli.main
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 HOUSING = str(EXAMPLES / "housing-demo" / "report.toml")
 GRANT = str(EXAMPLES / "grant-report" / "report.toml")
+MULTI_FUNDER = str(EXAMPLES / "multi-funder" / "report.toml")
 
 
 def test_run_json_parses_and_reports_a_passing_gate(
@@ -265,6 +266,18 @@ def test_eval_json_reports_the_gate(capsys: pytest.CaptureFixture[str]) -> None:
     assert payload["gate_pass"] is True
     assert payload["n_unbound"] == 0
     assert len(payload["grounding_ci"]) == 2
+
+
+def test_eval_scores_multi_template_spec(capsys: pytest.CaptureFixture[str]) -> None:
+    code = main(["eval", "--config", MULTI_FUNDER, "--json"])
+    assert code == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "eval"
+    assert payload["gate_pass"] is True
+    assert payload["n_numbers"] > 0
+    assert payload["n_bound"] == payload["n_numbers"]
+    assert payload["n_unbound"] == 0
+    assert payload["grounding_rate"] == 1.0
 
 
 def test_exit_codes_are_distinct_constants() -> None:

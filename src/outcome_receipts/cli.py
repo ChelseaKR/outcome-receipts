@@ -982,8 +982,10 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         args.config, reproducible=True, quiet=args.json
     )
     publishable, _hidden = _publishable_and_hidden(figures)
-    narrative = draft(spec.report, publishable)
-    result = ground(narrative, publishable)
+    drafts = _draft_templates(spec, publishable)
+    bound = tuple(span for _t, _n, r in drafts for span in r.bound)
+    unbound = tuple(span for _t, _n, r in drafts for span in r.unbound)
+    result = GroundingResult(bound=bound, unbound=unbound)
     report = evaluate(result)
     markdown = render_eval_markdown(report, dataset=Path(args.config).parent.name)
     if args.out:
