@@ -119,3 +119,28 @@ def test_empty_narrative_grounds_vacuously() -> None:
     result = ground("No numbers here.", figures)
     assert result.ok
     assert result.total == 0
+
+
+def test_leading_dot_decimal_is_matched_and_bound_correctly() -> None:
+    # A bare leading-dot decimal (.75, $.99, -.5) must be captured with its
+    # leading dot so it does not drop the dot and falsely bind an integer figure.
+    spec = MetricSpec(
+        metric_id="clients_served",
+        description="clients served count",
+        value_sql="SELECT 75",
+        slice_sql="SELECT 1",
+        unit="count",
+        decimals=0,
+    )
+    [figure] = compute_figures([{"x": "1"}], [spec], clock=FixedClock())
+    assert figure.display == "75"
+
+    narrative = (
+        "We served 75 clients. Separately, the housing retention rate was "
+        ".75 this quarter, entirely invented and untraceable."
+    )
+    result = ground(narrative, [figure])
+
+    assert not result.ok
+    assert any(span.text == "75" for span in result.bound)
+    assert any(span.text == ".75" for span in result.unbound)

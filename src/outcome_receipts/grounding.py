@@ -82,9 +82,7 @@ from outcome_receipts.models import (
 # so a number that is not a figure (a stray "2024") is unbound and must be removed
 # or made a figure. That strictness is the point.
 _NUMBER = re.compile(
-    r"(?<!\d)\$?[+-]?\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?%?"
-    r"|(?<!\d)\$?[+-]?\d[\d.,]*\d%?"
-    r"|(?<!\d)\$?[+-]?\d%?"
+    r"(?<!\d)\$?[+-]?(?:\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?|\d[\d.,]*\d|\d|[.,]\d+)%?"
 )
 
 _NUMBER_WORD = re.compile(
