@@ -146,12 +146,11 @@ def _plot_box() -> tuple[int, int, int, int]:
 def _scale_max(points: Sequence[ChartPoint]) -> float:
     """The axis maximum, over the points that actually carry a value.
 
-    A withheld point contributes nothing. Including it as a zero -- which is
-    what happened while a suppressed figure's value was ``0.0`` -- let a hidden
-    cell take part in scaling the bars that *are* drawn.
+    A withheld point contributes nothing. Values are evaluated by their absolute
+    magnitude so that a negative delta figure scales the axis appropriately.
     """
 
-    top = max((p.value for p in points if p.value is not None), default=0.0)
+    top = max((abs(p.value) for p in points if p.value is not None), default=0.0)
     return top if top > 0 else 1.0
 
 
@@ -202,7 +201,7 @@ def _bar_svg_body(points: Sequence[ChartPoint], hatch_id: str) -> list[str]:
             body.append(_withheld_label(centre, top, point.display))
             body.append(_axis_label(centre, top, height, point.label))
             continue
-        value = point.value or 0.0
+        value = abs(point.value) if point.value is not None else 0.0
         bar_h = (value / scale) * height if value > 0 else 0.0
         y = top + height - bar_h
         body.append(
@@ -255,7 +254,7 @@ def _line_svg_body(points: Sequence[ChartPoint]) -> list[str]:
         if point.withheld:
             coords.append(None)
             continue
-        value = point.value or 0.0
+        value = abs(point.value) if point.value is not None else 0.0
         coords.append((x, top + height - (value / scale) * height))
 
     for segment in _line_segments(coords):

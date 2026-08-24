@@ -288,3 +288,45 @@ def test_a_withheld_point_carries_no_value_into_the_chart_data() -> None:
     assert chart.points[0].suppressed is True
     assert chart.points[0].withheld is True
     assert chart.data_table.endswith("| withheld | [SUPPRESSED] |")
+
+
+def test_negative_delta_figures_render_with_positive_magnitude_geometry() -> None:
+    """Issue #117: negative values (e.g. delta figures) draw by magnitude instead of collapsing to zero."""
+    figures = [
+        _figure("exits_permanent__delta", -12.0, "12"),
+        _figure("other_metric__delta", 8.0, "8"),
+    ]
+    spec = ChartSpec(
+        chart_id="c1",
+        title="Change by category",
+        kind="bar",
+        metric_ids=("exits_permanent__delta", "other_metric__delta"),
+        labels=("Decreased category", "Increased category"),
+    )
+    chart = render_chart(spec, figures)
+    assert _scale_max(chart.points) == 12.0
+    bars = _bars(chart.svg)
+    assert len(bars) == 2
+    # The negative delta (-12.0) has height corresponding to magnitude 12.0 (248.0 px)
+    assert float(bars[0][3]) == pytest.approx(248.0, abs=0.1)
+    # The positive delta (8.0) has height corresponding to magnitude 8.0 (165.3 px)
+    assert float(bars[1][3]) == pytest.approx(165.33, abs=0.1)
+
+
+def test_line_chart_plots_negative_values_by_magnitude() -> None:
+    figures = [
+        _figure("d1", -10.0, "10"),
+        _figure("d2", 5.0, "5"),
+    ]
+    spec = ChartSpec(
+        chart_id="line_delta",
+        title="Delta Trend",
+        kind="line",
+        metric_ids=("d1", "d2"),
+    )
+    chart = render_chart(spec, figures)
+    assert _scale_max(chart.points) == 10.0
+    # Line chart polyline contains the y-coordinate computed from abs(value)
+    # top = 48, height = 248. For d1 (abs=10/10), y = 48.0. For d2 (abs=5/10), y = 172.0.
+    assert "48.0" in chart.svg
+    assert "172.0" in chart.svg
