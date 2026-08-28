@@ -119,7 +119,13 @@ are not inferred from automated results.
   remains tracked in issue 53. The 2026-07-22 waiver review confirmed that
   identifiers remain quoted, SQL values remain parameterized, mapping candidates
   remain unexecuted, and a no-suppression Semgrep 1.168.0 scan still reports the
-  obsolete Python 3.7 rule against this Python 3.12-only package.
+  obsolete Python 3.7 rule against this Python 3.12-only package. The 2026-08-28
+  review repeated both no-suppression scans: each rule still fires, so neither
+  waiver can be retired. `make hygiene` now also runs
+  `scripts/check_semgrep_waivers.py`, which compares `.semgrep-waivers.yml`
+  against the tree in both directions, so a ledger row cannot outlive the
+  suppression it documents and an undocumented suppression cannot be added.
+  Before it, both of those states passed every gate.
 - VEX: N/A today because scans report no unfixable HIGH/CRITICAL dependency CVE.
   Any future exception requires a CycloneDX VEX and quarterly review.
 
