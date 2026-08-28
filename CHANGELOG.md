@@ -11,6 +11,26 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- The AI-Development Measurement standard's scope declaration and the graduation
+  dates its BASELINE state requires, closing the second open gap the README
+  declared. `docs/ROADMAP.md` gains the `AI-DEV-MEASUREMENT: APPLIES` ledger
+  line the standard asks every repository for, and the DORA and quality-debt
+  numbers move from a prose paragraph into dated rows so each names the date its
+  graduation decision is due (2026-10-11, one quarter from the 2026-07-11
+  collection). A metric may not sit in BASELINE indefinitely; a row with no date
+  is a metric nobody has committed to ever decide about, which the standard
+  treats exactly as an aspirational one. The unreviewed-merge row records that
+  its decision collides with ADR 0002, which holds required approving reviews at
+  zero while there is one maintainer, so gating on it needs a superseding ADR
+  rather than a quiet threshold change. `scripts/check_conformance.py` gains
+  `ai_dev_measurement_failures`, wired into `make hygiene`, which fails when the
+  scope line is absent and when any BASELINE row names no date. Two artifacts
+  the standard also asks for are named as outstanding rather than claimed: the
+  weekly rollup, which is produced at the portfolio level rather than here, and
+  the quarterly seven-capability self-assessment, which is the maintainer
+  answering about her own practice. Regression tests: five in
+  `tests/test_conformance.py`, including
+  `::test_ai_dev_measurement_is_silent_against_the_real_committed_roadmap`.
 - Issue 94: the first real, non-synthetic run of the small-cell suppression
   engine, over HUD's own published 2024 CoC Point-in-Time subpopulation
   counts (363 CoCs, 10,890 real cells; `eval/hud/`). No HUD-published

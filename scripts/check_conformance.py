@@ -672,6 +672,42 @@ def security_declaration_failures(audits_text: str, waivers_text: str, vex_path:
     return failures
 
 
+# The AI-Development Measurement standard asks each repository for two things a
+# document can hold and a check can read: one scope-declaration line in the
+# ROADMAP metrics ledger, and a graduation date on every metric parked in the
+# BASELINE state. A BASELINE row with no date is a metric nobody has committed to
+# ever decide about, which the standard calls a conformance failure for the same
+# reason an aspirational row is one.
+_AI_DEV_DECLARATION_RE = re.compile(r"AI-DEV-MEASUREMENT:\s*(APPLIES|N/A\b)")
+_BASELINE_ROW_RE = re.compile(r"^\|.*\bBASELINE\b.*\|\s*$", re.MULTILINE)
+_ISO_DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def ai_dev_measurement_failures(root: Path) -> list[str]:
+    """Check the measurement standard's two document-level obligations."""
+
+    roadmap_path = root / "docs" / "ROADMAP.md"
+    if not roadmap_path.exists():
+        return ["docs/ROADMAP.md is missing, so the AI-DEV-MEASUREMENT scope cannot be checked"]
+    roadmap = roadmap_path.read_text(encoding="utf-8")
+
+    failures: list[str] = []
+    if _AI_DEV_DECLARATION_RE.search(roadmap) is None:
+        failures.append(
+            "docs/ROADMAP.md carries no 'AI-DEV-MEASUREMENT: APPLIES' or "
+            "'AI-DEV-MEASUREMENT: N/A' scope line in its metrics ledger"
+        )
+    for row in _BASELINE_ROW_RE.findall(roadmap):
+        if _ISO_DATE_RE.search(row) is None:
+            name = row.split("|")[1].strip() if row.count("|") > 1 else row.strip()
+            failures.append(
+                f"docs/ROADMAP.md parks {name!r} in BASELINE with no graduation date; a metric "
+                "may not sit there indefinitely, so the row must name the date its decision "
+                "is due (YYYY-MM-DD)"
+            )
+    return failures
+
+
 def main() -> int:
     """Return nonzero when a required declaration or artifact is missing."""
 
@@ -718,6 +754,7 @@ def main() -> int:
     audits_text = (ROOT / "docs" / "RESPONSIBLE-TECH-AUDITS.md").read_text(encoding="utf-8")
     failures.extend(security_declaration_failures(audits_text, waivers_text, ROOT / "vex.json"))
     failures.extend(doc_staleness_failures(ROOT, date.today()))
+    failures.extend(ai_dev_measurement_failures(ROOT))
 
     if failures:
         print("repository conformance failed:", file=sys.stderr)

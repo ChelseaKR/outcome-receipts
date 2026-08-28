@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from scripts.check_conformance import (
     StandardsIndexError,
     _readme_standards_rows,
     _standards_table_failures,
+    ai_dev_measurement_failures,
     doc_staleness_failures,
     security_declaration_failures,
     standards_index,
@@ -681,3 +683,62 @@ def test_doc_staleness_is_silent_against_the_real_committed_docs() -> None:
     # interval keyword.
     root = Path(__file__).resolve().parents[1]
     assert doc_staleness_failures(root, date.today()) == []
+
+
+# --- The AI-Development Measurement scope line and its BASELINE graduation dates. ---
+
+
+def _roadmap(root: Path, body: str) -> Path:
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "ROADMAP.md").write_text(body, encoding="utf-8")
+    return root
+
+
+def test_ai_dev_measurement_flags_a_missing_scope_declaration() -> None:
+    # The state main was in: the ledger held the delivery numbers but never said
+    # whether the standard applies here, so nobody could tell an unmeasured
+    # repository from an undeclared one.
+    root = _roadmap(Path(tempfile.mkdtemp()), "| Branch coverage | 90% | AUTO |\n")
+
+    failures = ai_dev_measurement_failures(root)
+
+    assert len(failures) == 1
+    assert "carries no 'AI-DEV-MEASUREMENT: APPLIES'" in failures[0]
+
+
+def test_ai_dev_measurement_flags_a_baseline_row_with_no_graduation_date() -> None:
+    # A metric parked in BASELINE with no date is one nobody has committed to
+    # ever decide about, which the standard treats exactly as an aspirational row.
+    root = _roadmap(
+        Path(tempfile.mkdtemp()),
+        "AI-DEV-MEASUREMENT: APPLIES\n"
+        "| Change lead time | 149.8 hours median | BASELINE |\n"
+        "| Churn ratio | 0.074 | BASELINE until 2026-10-11 |\n",
+    )
+
+    failures = ai_dev_measurement_failures(root)
+
+    assert len(failures) == 1
+    assert "'Change lead time'" in failures[0]
+    assert "no graduation date" in failures[0]
+
+
+def test_ai_dev_measurement_accepts_a_declared_na() -> None:
+    root = _roadmap(
+        Path(tempfile.mkdtemp()),
+        "AI-DEV-MEASUREMENT: N/A - no AI tooling participates here, 2026-08-27\n",
+    )
+
+    assert ai_dev_measurement_failures(root) == []
+
+
+def test_ai_dev_measurement_fails_closed_without_a_roadmap() -> None:
+    assert ai_dev_measurement_failures(Path(tempfile.mkdtemp())) == [
+        "docs/ROADMAP.md is missing, so the AI-DEV-MEASUREMENT scope cannot be checked"
+    ]
+
+
+def test_ai_dev_measurement_is_silent_against_the_real_committed_roadmap() -> None:
+    # The one that would have been red on main.
+    root = Path(__file__).resolve().parents[1]
+    assert ai_dev_measurement_failures(root) == []
