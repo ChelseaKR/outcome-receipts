@@ -48,12 +48,24 @@ install-smoke: install
 	docker version --format '{{.Server.Version}}'
 	node -e "const fs=require('node:fs'); const {chromium}=require('playwright'); fs.accessSync(chromium.executablePath(), fs.constants.X_OK)"
 
+# `scripts/` is in scope here on purpose. Every merge-blocking gate in this
+# repository except the test suite is implemented under scripts/, and for a
+# long time those two lines read `src tests`: the code enforcing the other
+# standards was the one directory exempt from the code-quality standard.
 lint:
-	.venv/bin/ruff check src tests
-	.venv/bin/ruff format --check src tests
+	.venv/bin/ruff check src tests scripts
+	.venv/bin/ruff format --check src tests scripts
 
+# Two invocations, not one target list. `pyproject.toml`'s `files` covers src
+# and tests, where the scripts are imported as `scripts.<name>` by the test
+# suite; the second call checks the same files the way they are actually run,
+# as top-level modules on `scripts/`, which is how `scripts/check_waivers.py`
+# resolves `from check_conformance import ...` when standards.yml executes it.
+# One combined run fails with "Source file found twice under different module
+# names", so the choice is two runs or no coverage of scripts at all.
 type:
 	.venv/bin/python -m mypy
+	.venv/bin/python -m mypy --strict scripts
 
 test:
 	.venv/bin/python -m pytest
