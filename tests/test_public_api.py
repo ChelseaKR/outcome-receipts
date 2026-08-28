@@ -7,6 +7,8 @@ using only top-level imports, so integrations never need to reach into submodule
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import outcome_receipts as orx
 
 # The names the package promises as its supported surface. Kept explicit (rather
@@ -90,3 +92,21 @@ def test_end_to_end_flow_via_top_level_only() -> None:
     result = orx.ground(narrative, figures)
     assert result.ok
     assert not result.unbound
+
+
+def test_package_ships_a_py_typed_marker() -> None:
+    """PEP 561: without this file every annotation the package ships is ignored.
+
+    ``mypy --strict`` runs over ``src`` and ``tests`` here, but a downstream
+    consumer -- and this repository's own ``scripts/`` -- gets
+    ``module is installed, but missing library stubs or py.typed marker``
+    and silently loses every type the library declares. The marker is checked
+    beside the imported package rather than at a hardcoded repository path, so
+    an install that drops it fails here too.
+    """
+
+    package_dir = Path(orx.__file__).resolve().parent
+    assert (package_dir / "py.typed").is_file(), (
+        f"{package_dir}/py.typed is missing; the package's annotations are "
+        "unusable downstream until it is restored"
+    )
