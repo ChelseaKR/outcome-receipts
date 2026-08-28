@@ -73,9 +73,15 @@ test:
 		--include="src/outcome_receipts/grounding.py,src/outcome_receipts/engine.py,src/outcome_receipts/suppression.py,src/outcome_receipts/bundle.py,src/outcome_receipts/verify.py" \
 		--fail-under=95
 
+# check_semgrep_waivers.py enforces the invariant `.semgrep-waivers.yml` had
+# only ever asserted in its own header: every ledger row must correspond to a
+# real inline suppression, and every inline suppression must have a row. Before
+# it, a row could outlive the code it documented and an undocumented
+# suppression could be added, with every gate still green.
 hygiene:
 	.venv/bin/python scripts/check_source_hygiene.py
 	.venv/bin/python scripts/check_conformance.py
+	.venv/bin/python scripts/check_semgrep_waivers.py
 
 # Keep ephemeral Python tools on the same interpreter as the locked project. In
 # particular, Semgrep's macOS source distribution does not carry semgrep-core.
