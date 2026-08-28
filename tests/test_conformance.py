@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -11,6 +13,7 @@ from scripts.check_conformance import (
     StandardsIndexError,
     _readme_standards_rows,
     _standards_table_failures,
+    benchmark_claim_failures,
     doc_staleness_failures,
     security_declaration_failures,
     standards_index,
@@ -681,3 +684,85 @@ def test_doc_staleness_is_silent_against_the_real_committed_docs() -> None:
     # interval keyword.
     root = Path(__file__).resolve().parents[1]
     assert doc_staleness_failures(root, date.today()) == []
+
+
+# --- The documented benchmark size, checked against the benchmark that ships. ---
+
+
+def _benchmark_fixture(root: Path, *, cases: int, spanish_from: int, failures: int) -> None:
+    """Write a benchmark file with a known shape, plus the docs the check reads."""
+
+    (root / "eval").mkdir(parents=True, exist_ok=True)
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    lines = []
+    for index in range(cases):
+        lines.append(
+            json.dumps(
+                {
+                    "id": f"case-{index}",
+                    "language": "es" if index >= spanish_from else "en",
+                    "should_pass": index >= failures,
+                }
+            )
+        )
+    (root / "eval" / "grounding-benchmark.jsonl").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+
+
+def test_benchmark_claim_failures_catches_the_stale_count() -> None:
+    # The real drift this check exists for. Both documents said "100 cases,
+    # 50 EN, 50 ES, 50 planted failures" for two months after PR #89 added the
+    # 32-case formatting family, because a prose count is exactly the kind of
+    # claim no gate reads.
+    root = Path(tempfile.mkdtemp())
+    _benchmark_fixture(root, cases=132, spanish_from=66, failures=66)
+    (root / "README.md").write_text("a 100-case bilingual grounding benchmark\n", encoding="utf-8")
+    (root / "docs" / "ROADMAP.md").write_text(
+        "| Bilingual benchmark | 100 committed cases: 50 EN, 50 ES; 50 planted unbound "
+        "failures all rejected | AUTO |\n",
+        encoding="utf-8",
+    )
+
+    failures = benchmark_claim_failures(root)
+
+    assert len(failures) == 2
+    assert "README.md claims a 100-case" in failures[0]
+    assert "holds 132" in failures[0]
+    assert "100 cases / 50 EN / 50 ES / 50 planted failures" in failures[1]
+    assert "132 / 66 / 66 / 66" in failures[1]
+
+
+def test_benchmark_claim_failures_fails_closed_on_an_unreadable_claim() -> None:
+    # A sentence that no longer matches the shape is not evidence that the count
+    # is right. It is a claim the check can no longer read, which is how the
+    # stale one survived, so it fails rather than passing silently.
+    root = Path(tempfile.mkdtemp())
+    _benchmark_fixture(root, cases=4, spanish_from=2, failures=2)
+    (root / "README.md").write_text("a bilingual grounding benchmark of some size\n", "utf-8")
+    (root / "docs" / "ROADMAP.md").write_text("| Bilingual benchmark | lots | AUTO |\n", "utf-8")
+
+    failures = benchmark_claim_failures(root)
+
+    assert len(failures) == 2
+    assert all("cannot be checked" in failure for failure in failures)
+
+
+def test_benchmark_claim_failures_is_silent_when_the_claims_are_true() -> None:
+    root = Path(tempfile.mkdtemp())
+    _benchmark_fixture(root, cases=4, spanish_from=2, failures=2)
+    (root / "README.md").write_text("a 4-case bilingual grounding benchmark\n", encoding="utf-8")
+    (root / "docs" / "ROADMAP.md").write_text(
+        "| Bilingual benchmark | 4 committed cases: 2 EN, 2 ES; 2 planted unbound failures "
+        "all rejected | AUTO |\n",
+        encoding="utf-8",
+    )
+
+    assert benchmark_claim_failures(root) == []
+
+
+def test_benchmark_claim_is_true_of_the_real_committed_repository() -> None:
+    # The one that would have been red on main: the committed README and ROADMAP
+    # against the committed benchmark file.
+    root = Path(__file__).resolve().parents[1]
+    assert benchmark_claim_failures(root) == []

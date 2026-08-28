@@ -672,6 +672,78 @@ def security_declaration_failures(audits_text: str, waivers_text: str, vex_path:
     return failures
 
 
+# The README and the ROADMAP metrics ledger both state the committed grounding
+# benchmark's size. Both went stale the moment PR #89 added the formatting family
+# (32 cases on top of the original 100), and nothing noticed for two months,
+# because a prose count is exactly the kind of claim no gate reads. These regexes
+# pin the sentence shape so the numbers stay machine-readable, and
+# `benchmark_claim_failures` compares them against the committed file.
+_README_BENCHMARK_RE = re.compile(r"(\d+)-case bilingual grounding benchmark")
+_ROADMAP_BENCHMARK_RE = re.compile(
+    r"(\d+) committed cases: (\d+) EN, (\d+) ES; (\d+) planted unbound failures"
+)
+
+
+def _benchmark_counts(path: Path) -> tuple[int, int, int, int]:
+    """``(total, english, spanish, planted failures)`` from the committed file."""
+
+    cases = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    return (
+        len(cases),
+        sum(1 for case in cases if case["language"] == "en"),
+        sum(1 for case in cases if case["language"] == "es"),
+        sum(1 for case in cases if not case["should_pass"]),
+    )
+
+
+def benchmark_claim_failures(root: Path) -> list[str]:
+    """Check the benchmark size the docs state against the benchmark that ships.
+
+    Fails closed on a missing claim as well as a wrong one. A sentence that no
+    longer matches the expected shape is not evidence that the count is right; it
+    is a claim this check can no longer read, which is how the stale one survived.
+    """
+
+    benchmark = root / "eval" / "grounding-benchmark.jsonl"
+    if not benchmark.exists():
+        return [f"{benchmark.name} is missing, so the documented benchmark size cannot be checked"]
+    total, english, spanish, planted = _benchmark_counts(benchmark)
+
+    failures: list[str] = []
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    readme_match = _README_BENCHMARK_RE.search(readme)
+    if readme_match is None:
+        failures.append(
+            "README.md states no benchmark size in the form '<n>-case bilingual grounding "
+            "benchmark', so the claim cannot be checked against eval/grounding-benchmark.jsonl"
+        )
+    elif int(readme_match.group(1)) != total:
+        failures.append(
+            f"README.md claims a {readme_match.group(1)}-case bilingual grounding benchmark; "
+            f"eval/grounding-benchmark.jsonl holds {total}"
+        )
+
+    roadmap = (root / "docs" / "ROADMAP.md").read_text(encoding="utf-8")
+    roadmap_match = _ROADMAP_BENCHMARK_RE.search(roadmap)
+    if roadmap_match is None:
+        failures.append(
+            "docs/ROADMAP.md states no benchmark size in the form '<n> committed cases: <n> EN, "
+            "<n> ES; <n> planted unbound failures', so the claim cannot be checked against "
+            "eval/grounding-benchmark.jsonl"
+        )
+    else:
+        claimed = tuple(int(group) for group in roadmap_match.groups())
+        actual = (total, english, spanish, planted)
+        if claimed != actual:
+            failures.append(
+                "docs/ROADMAP.md claims the benchmark is "
+                f"{claimed[0]} cases / {claimed[1]} EN / {claimed[2]} ES / {claimed[3]} planted "
+                f"failures; eval/grounding-benchmark.jsonl holds "
+                f"{actual[0]} / {actual[1]} / {actual[2]} / {actual[3]}"
+            )
+    return failures
+
+
 def main() -> int:
     """Return nonzero when a required declaration or artifact is missing."""
 
@@ -718,6 +790,7 @@ def main() -> int:
     audits_text = (ROOT / "docs" / "RESPONSIBLE-TECH-AUDITS.md").read_text(encoding="utf-8")
     failures.extend(security_declaration_failures(audits_text, waivers_text, ROOT / "vex.json"))
     failures.extend(doc_staleness_failures(ROOT, date.today()))
+    failures.extend(benchmark_claim_failures(ROOT))
 
     if failures:
         print("repository conformance failed:", file=sys.stderr)

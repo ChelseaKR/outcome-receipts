@@ -119,6 +119,23 @@ release-hardening work completed before the first public tag.
   setuptools copies were the next findings the scanner surfaced. The base
   digest is refreshed to the current multi-arch index. All 11 verify gates
   pass again, with the scan reporting zero findings rather than any waiver.
+- The README and the `docs/ROADMAP.md` metrics ledger both stated the committed
+  grounding benchmark was "100 cases: 50 EN, 50 ES; 50 planted unbound
+  failures". It has held 132 cases, 66 EN, 66 ES and 66 planted failures since
+  PR 89 added the 32-case formatting family on 2026-08-14, and neither document
+  was updated. The numbers were wrong in the two places a reader checks the
+  evidence, in the direction of understating it, and nothing could catch that: a
+  count written in prose is exactly the kind of claim no gate reads. Both are
+  corrected, and `scripts/check_conformance.py` gains
+  `benchmark_claim_failures`, wired into `make hygiene`, which reads the
+  committed `eval/grounding-benchmark.jsonl` and compares the totals against the
+  numbers the two documents state. It fails closed on a claim it cannot parse as
+  well as on one that is wrong, because a sentence that no longer matches the
+  expected shape is not evidence the count is right. Regression tests:
+  `tests/test_conformance.py::test_benchmark_claim_failures_catches_the_stale_count`,
+  `::test_benchmark_claim_failures_fails_closed_on_an_unreadable_claim`,
+  `::test_benchmark_claim_failures_is_silent_when_the_claims_are_true`, and
+  `::test_benchmark_claim_is_true_of_the_real_committed_repository`.
 - A metric whose `value_sql` returns SQL `NULL` now fails closed in
   `compute_figure` instead of becoming the number `0.0`. `AVG`/`SUM`/`MIN`/`MAX`
   over an empty filtered set, a division by a zero denominator, and a NULL join

@@ -161,7 +161,7 @@ The implemented designs and real-world validation gates are recorded in
 |-----------|---------------|------|
 | AI-Evaluation-Standard | APPLIES — optional Bedrock prose drafter; numeric grounding, red-team, cards, and governance tiers; no RAG or judge | REVIEW scope declaration |
 | Grounding rate | 100% of numeric spans bound on exported fixtures; any unbound span blocks | AUTO |
-| Bilingual benchmark | 100 committed cases: 50 EN, 50 ES; 50 planted unbound failures all rejected | AUTO |
+| Bilingual benchmark | 132 committed cases: 66 EN, 66 ES; 66 planted unbound failures all rejected. Checked against the committed file by `scripts/check_conformance.py`, so the count cannot go stale unnoticed again | AUTO |
 | Hallucinated-number rate | Reported with Wilson intervals in `eval/report.md` | AUTO artifact / REVIEW interpretation |
 | LLM judge calibration | N/A — no model judge ships; calibration becomes blocking before one can gate | Declared N/A |
 | Branch coverage | 90% repository floor; integrity-critical module group 95% | AUTO |
