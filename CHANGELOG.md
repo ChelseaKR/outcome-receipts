@@ -109,6 +109,25 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- Issue 116: a decimal written without its leading zero no longer loses its
+  separator and binds an unrelated receipt. Every alternative in the grounding
+  gate's `_NUMBER` pattern required the match to start on a digit, so `.75`
+  matched one character late and came back as the span `75`. That span was
+  then looked up like any integer, so a narrative stating a retention rate of
+  `.75` bound a receipted count of 75 and the gate reported the report fully
+  grounded: a number two orders of magnitude from anything in the data,
+  carrying a receipt for something else. `$.99`, `-.5` and the Spanish-
+  convention `,75` had the same shape. The pattern now consumes a leading
+  `.`/`,` that is not itself preceded by a digit, so `_span_key` sees the whole
+  number and a leading-separator decimal binds only a display written the same
+  way. No display is written that way, because `engine._format` always writes
+  the integer part, so such a span is unbound and blocks export. Ordinary
+  decimals, thousands groups, NBSP grouping, currency, percent and duration
+  spans are unchanged. Regression tests:
+  `tests/test_grounding_gate.py::test_leading_dot_decimal_does_not_bind_the_integer_with_the_same_digits`,
+  `::test_leading_separator_decimals_keep_their_separator_in_the_span`, a
+  passing control beside them, and two new bilingual benchmark shapes
+  (`leading-separator-decimal-for-count`, `sub-one-rate-with-leading-zero`).
 - `make container-verify` failed on two upstream findings, not repo code: the
   pinned `python:3.13-alpine` base ships libcrypto3/libssl3 3.5.7-r0, which
   trivy flags for CVE-2026-14456 (HIGH, fixed in Alpine 3.24 main as

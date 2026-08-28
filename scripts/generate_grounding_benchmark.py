@@ -166,6 +166,30 @@ _FORMATTING: tuple[tuple[str, str, str, str, bool, int], ...] = (
         False,
         1,
     ),
+    # A decimal written without its leading zero, the ordinary style for a rate
+    # in English and in Spanish. The separator used to fall outside the match, so
+    # ".75" was found as the span "75" and bound a receipted count of 75 (issue
+    # #116). It has to be unbound: the receipt says seventy-five, the prose says
+    # three quarters.
+    (
+        "leading-separator-decimal-for-count",
+        "75",
+        "The retention rate was .75 this quarter.",
+        "La tasa de retención fue de ,75 este trimestre.",
+        False,
+        1,
+    ),
+    # The control for the case above. A sub-one rate written the way the engine
+    # writes one still binds, in either convention, so the fix cannot be read as
+    # "the gate stopped matching decimals below one".
+    (
+        "sub-one-rate-with-leading-zero",
+        "0.75",
+        "The rate was 0.75 per household.",
+        "La tasa fue de 0,75 por hogar.",
+        True,
+        0,
+    ),
 )
 
 
