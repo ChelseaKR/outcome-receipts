@@ -8,7 +8,7 @@ A number in a funder report that is wrong or invented is the expensive, sometime
 
 ## What was scored
 
-The **publishable** figure set: the narrative is drafted and grounded after small-cell suppression, so this scores the artifact `receipts run` exports rather than a pre-suppression draft the pipeline would never produce. A suppressed cell renders as `[SUPPRESSED]` and carries no number, so it contributes no span to the denominator. The denominator is therefore the count of numbers that survive suppression, which is smaller than the spec's metric count whenever a report has a small cell.
+The **publishable** figure set, in **every narrative the run would export**: each of the spec's report templates is drafted and grounded after small-cell suppression, so this scores the artifacts `receipts run` exports rather than a pre-suppression draft the pipeline would never produce. A suppressed cell renders as `[SUPPRESSED]` and carries no number, so it contributes no span to the denominator. The denominator is therefore the count of numbers that survive suppression, which is smaller than the spec's metric count whenever a report has a small cell. A spec that names several funder formats is scored across all of them, and a figure written into two of them counts twice: each format is a separate exported document, so each occurrence is its own chance for an ungrounded number to reach a reader.
 
 ## Results
 

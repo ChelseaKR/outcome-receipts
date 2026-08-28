@@ -109,6 +109,32 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- Issue 118: `receipts eval` now scores every narrative the run would export,
+  and refuses to report a pass over nothing. It drafted through
+  `draft(spec.report, ...)`, which fills only the legacy single
+  `[report] template`. A spec that names funder formats under
+  `[[report.templates]]` leaves that field empty, so eval drafted the empty
+  string, found zero numeric spans, and reported `gate_pass: true` with exit 0.
+  That is the shape of `examples/multi-funder/report.toml`, which ships in this
+  repository: both funder narratives carry real figures, and eval had never
+  looked at either. It now drafts through the same `_draft_templates` the
+  export path uses and aggregates the spans across formats, which takes the
+  shipped example from 0 numbers scored to 6. A figure written into two funder
+  narratives counts twice on purpose: `run` exports one document per format, so
+  each occurrence is its own chance for an ungrounded number to reach a reader,
+  and the eval report's "What was scored" section now says so.
+- `receipts eval` exits non-zero when it scored no numeric span at all.
+  `EvalReport.gate_pass` still reports the grounding gate's own verdict, which
+  is a truthful pass over an empty denominator and is what `run` would do with
+  such a spec, but a command whose job is to measure the gate must not hand CI
+  a green from a run that never exercised it. That silent green is how the
+  multi-template hole above stayed invisible. `EvalReport.scored` is the new
+  distinction, `--json` carries it as `scored`, and the committed eval report
+  says in words that an unscored run is not a measurement. Regression tests:
+  `tests/test_cli.py::test_eval_scores_every_funder_template_not_only_the_legacy_field`,
+  `::test_eval_refuses_to_report_a_pass_when_it_scored_no_numbers`, a passing
+  control on the legacy single-template path beside them, and
+  `tests/test_eval_report_markdown.py::test_zero_numeric_spans_says_the_run_is_not_a_measurement`.
 - Issue 117: a chart naming a metric whose value is negative now refuses to
   render instead of drawing the decrease as a zero. A comparison or
   reconciliation delta figure carries the signed change in `Figure.value`, and
