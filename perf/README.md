@@ -53,6 +53,14 @@ measured values, with an explicit `null` for each metric this project has no
 route to measure, never a silent absence) and `direction` (so the comparison is
 mechanical rather than a judgement each time).
 
+The performance score measures 1.00 on a local macOS checkout and 0.99 on a
+GitHub-hosted `ubuntu-latest` runner. The baseline records the higher of the two,
+so the number a regression is measured against is the best the page has been
+observed to do rather than the worst. The runner's 0.99 sits inside the 10% band
+with room to spare, and the absolute floor of 0.90 is asserted separately by
+Lighthouse-CI, so neither half of the gate is flaky and neither is toothless: a
+single kilobyte of script still fails both.
+
 `p95_ms`, `llm_first_token_ms` and `llm_full_response_ms` are `null`: there is no
 hosted route and no model in the default path. They are declared N/A here, and
 the check skips a `null` metric while failing on a metric it measures that the

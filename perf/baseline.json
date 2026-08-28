@@ -2,7 +2,7 @@
   "meta": {
     "commit": "80ee14d230eaaf4dbf60b3142bf83962eec81a3b",
     "date": "2026-08-27",
-    "environment": "make a11y on a GitHub-hosted ubuntu-latest runner and on a local macOS checkout; the audited page is the generated static file out/a11y/trace.html served by Lighthouse-CI's own static server, with no network",
+    "environment": "make a11y on a GitHub-hosted ubuntu-latest runner and on a local macOS checkout; the audited page is the generated static file out/a11y/trace.html served by Lighthouse-CI's own static server, with no network. The performance score is 1.00 locally and 0.99 on the runner (CI run 33139824509), so the baseline records the higher of the two and the 10% band covers the runner's value with room to spare; the absolute floor of 0.90 is asserted separately by Lighthouse-CI itself.",
     "tools": {
       "lhci": "0.15.1",
       "node": "22 (CI) / 26.7.0 (local measurement)",
