@@ -109,6 +109,31 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- Issue 117: a chart naming a metric whose value is negative now refuses to
+  render instead of drawing the decrease as a zero. A comparison or
+  reconciliation delta figure carries the signed change in `Figure.value`, and
+  nothing stopped a `[[charts]]` block from naming one. `_bar_svg_body` took its
+  `else` branch for any value not above zero and emitted `height="0.0"`, flush
+  on the axis baseline, with the magnitude printed directly above it: a bar
+  claiming "no change" beside a receipt reading minus twelve and a label reading
+  12. `_line_svg_body` plotted the same point at `y=668.0` on a canvas 360 high,
+  off the image entirely, and `_scale_max` fell back to an axis maximum of 1.0
+  over a set of decreases. `_points` now raises `ValueError` naming the chart,
+  the metric and the value, before any geometry is computed, so both the bar and
+  the line path are covered from one place. Drawing the magnitude was rejected
+  as a fix and is recorded as such: it makes a decrease of 12 and an increase of
+  12 produce byte-identical geometry and an identical `<title>`. A signed bar
+  from a zero baseline was also rejected for now, because the only text a chart
+  may put on the page is `figure.display`, a delta display is the unsigned
+  magnitude by design, and signed geometry with no signed text equivalent leaves
+  a screen-reader user reading the same "12" for a rise and a fall. Rationale
+  and the path to charting a change properly:
+  `docs/adr/0006-refuse-a-negative-valued-chart-metric.md`. A true zero is
+  unaffected and still draws a zero-height bar. Regression tests:
+  `tests/test_charts.py::test_a_negative_bar_value_is_refused_instead_of_drawn_as_a_zero`,
+  `::test_a_negative_line_value_is_refused_too`,
+  `::test_the_refusal_names_the_value_and_says_what_to_do`, and a passing zero
+  control beside them.
 - Issue 116: a decimal written without its leading zero no longer loses its
   separator and binds an unrelated receipt. Every alternative in the grounding
   gate's `_NUMBER` pattern required the match to start on a digit, so `.75`
