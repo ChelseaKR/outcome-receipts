@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 from datetime import date
@@ -23,14 +24,30 @@ from scripts.check_conformance import (
     waiver_failures,
 )
 
-# A frozen, verbatim copy of the 15 standard-registry lines from the pinned
-# portfolio standards repo's controls.yml, as of the version this repository
-# pins in .standards-version. This is what a real `--standards-dir` checkout
+# A frozen, verbatim copy of the 15 standard-registry lines from the portfolio
+# standards repo's controls.yml. This is what a real `--standards-dir` checkout
 # looks like; the test below proves the vendored FALLBACK_STANDARDS literal
-# (used by the self-contained `make verify`) agrees with it. It is a frozen
-# snapshot, not a live read: keeping it in sync with the real registry is the
-# job of the "portfolio standards" CI job, which runs against the live
-# checkout, not this test's job.
+# (used by the self-contained `make verify`) agrees with it.
+#
+# It is not a snapshot of the version this repository pins, and saying so would
+# be worse than saying nothing. `.standards-version` pins v1.0.1, and
+# controls.yml did not exist yet at v1.0.1; it arrived with FIX-01 on
+# 2026-07-11. So this snapshot is of a later registry than the pin names, and
+# the consequence is worth stating where a reader will meet it: the "portfolio
+# standards" CI job checks the pinned ref out and runs
+# `check_conformance.py --standards-dir .standards` against it, that checkout
+# has no controls.yml, and `standards_index` therefore warns and falls back to
+# the vendored literal. The job passes in a few seconds having compared the
+# README against the same hardcoded list DOC-11 set out to stop trusting.
+#
+# Nothing is currently checking either copy against a live registry. This test
+# compares two copies in this repository, which catches an edit to one of them
+# and nothing else, and that is all it can claim. The live cross-check starts
+# working when `.standards-version` moves to a version that carries
+# controls.yml, which is a deliberate portfolio-pin decision with repository-wide
+# scope, recorded in `standards_index`'s own warning text rather than made here.
+# `test_the_standards_pin_is_named_the_same_way_in_all_three_places` below keeps
+# the pin's three copies from drifting in the meantime.
 _CONTROLS_YML_STANDARDS_SNAPSHOT = """
 standards:
   CQ:   { file: CODE-QUALITY-STANDARD.md,            title: "Code Quality Standard" }
@@ -155,11 +172,16 @@ def test_standards_index_derives_from_a_pinned_checkouts_controls_yml(tmp_path: 
 
 def test_fallback_standards_literal_matches_a_frozen_snapshot_of_the_pinned_index() -> None:
     # Restates the above from the other direction: the vendored fallback list
-    # is not free-standing prose, it is required to equal what a real pinned
-    # checkout's controls.yml derives to. If the portfolio index ever adds,
-    # renames, or retires a standard, this snapshot (and FALLBACK_STANDARDS)
-    # need a deliberate update -- exactly the kind of drift DOC-11 exists to
-    # surface rather than silently outlive.
+    # is not free-standing prose, it is required to equal what a real
+    # controls.yml derives to. If the portfolio index ever adds, renames, or
+    # retires a standard, this snapshot (and FALLBACK_STANDARDS) need a
+    # deliberate update.
+    #
+    # Both copies live in this repository, so this catches an edit to one of
+    # them and cannot catch the portfolio registry moving underneath both. See
+    # the note on _CONTROLS_YML_STANDARDS_SNAPSHOT: the job that was meant to
+    # make that comparison live runs against a pinned checkout with no
+    # controls.yml.
     assert len(FALLBACK_STANDARDS) == 15
     assert {
         "Code Quality",
@@ -912,3 +934,28 @@ def test_schema_version_failures_fails_closed_on_an_unreadable_sentence(tmp_path
         "'The report spec is at `X`, the receipts manifest at `Y`, and the workflow "
         "artifact at `Z`.', so the claim cannot be checked against the code"
     ]
+
+
+def test_the_standards_pin_is_named_the_same_way_in_all_three_places() -> None:
+    """`.standards-version`, the CI checkout ref, and the CI assertion must agree.
+
+    The pin is written three times: once in `.standards-version`, once as the
+    `ref:` the "portfolio standards" job checks the standards repository out at,
+    and once in that job's own `test "$(cat .standards-version)" = "..."` line.
+    Two of those three are inside a workflow file, which no test read.
+
+    Bumping `.standards-version` alone turns the job red on its assertion, which
+    is loud and fine. Bumping the assertion literal alone, or the `ref:` alone,
+    is the quiet one: the job would go on checking out a version nobody declared
+    and reporting green about it. Whichever copy moves, all three move.
+    """
+
+    root = Path(__file__).resolve().parents[1]
+    pinned = (root / ".standards-version").read_text(encoding="utf-8").strip()
+    workflow = (root / ".github" / "workflows" / "standards.yml").read_text(encoding="utf-8")
+
+    checkout_refs = re.findall(r"^\s+ref:\s*(\S+)\s*$", workflow, re.MULTILINE)
+    asserted = re.findall(r'test\s+"\$\(cat \.standards-version\)"\s*=\s*"([^"]+)"', workflow)
+
+    assert checkout_refs == [pinned], (checkout_refs, pinned)
+    assert asserted == [pinned], (asserted, pinned)

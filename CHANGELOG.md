@@ -31,6 +31,27 @@ release-hardening work completed before the first public tag.
   `tests/test_hud_suppression_calibration.py`.
 
 ### Changed
+- `tests/test_conformance.py` no longer describes its frozen `controls.yml`
+  snapshot as coming from "the version this repository pins in
+  `.standards-version`". It does not. The pin is `v1.0.1`, and `controls.yml`
+  did not exist at `v1.0.1`; it arrived with FIX-01 on 2026-07-11. The
+  consequence is now stated where a reader meets the snapshot: the "portfolio
+  standards" CI job checks the pinned ref out and runs
+  `check_conformance.py --standards-dir .standards` against it, that checkout
+  carries no `controls.yml`, and `standards_index` warns and falls back to the
+  vendored literal. The job passes in a few seconds having compared the README
+  against the same hardcoded list DOC-11 set out to stop trusting, so nothing is
+  currently checking either copy against a live registry. The remedy is a
+  `.standards-version` bump, which is a deliberate portfolio-pin decision with
+  repository-wide scope and is not made here. `check_conformance.py` and its
+  behavior are unchanged.
+- `tests/test_conformance.py::test_the_standards_pin_is_named_the_same_way_in_all_three_places`
+  pins the three places the standards version is written: `.standards-version`,
+  the `ref:` the CI job checks the standards repository out at, and that job's
+  own `test "$(cat .standards-version)" = "..."` line. Two of the three live in
+  a workflow file no test read. Bumping `.standards-version` alone turns the job
+  red on its assertion, which is loud; moving the `ref:` alone is the quiet one,
+  and left the job checking out a version nobody declared while reporting green.
 - The export ledger no longer claims to detect "any edit, insertion, deletion,
   or reordering". Deletion from the tail, a full rewrite with recomputed
   hashes, and an export never appended all leave no trace, and the module
