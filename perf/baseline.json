@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "commit": "80ee14d230eaaf4dbf60b3142bf83962eec81a3b",
+    "date": "2026-08-27",
+    "environment": "make a11y on a GitHub-hosted ubuntu-latest runner and on a local macOS checkout; the audited page is the generated static file out/a11y/trace.html served by Lighthouse-CI's own static server, with no network",
+    "tools": {
+      "lhci": "0.15.1",
+      "node": "22 (CI) / 26.7.0 (local measurement)",
+      "k6": null
+    }
+  },
+  "metrics": {
+    "p95_ms": null,
+    "llm_first_token_ms": null,
+    "llm_full_response_ms": null,
+    "lighthouse_performance": 1.0,
+    "js_kb_gzip": 0
+  },
+  "direction": {
+    "p95_ms": "lower_is_better",
+    "llm_first_token_ms": "lower_is_better",
+    "llm_full_response_ms": "lower_is_better",
+    "lighthouse_performance": "higher_is_better",
+    "js_kb_gzip": "lower_is_better"
+  }
+}

@@ -176,6 +176,9 @@ The implemented designs and real-world validation gates are recorded in
 | Lighthouse accessibility | At least 0.90 on generated trace | AUTO |
 | Keyboard/reflow/motion | Native-link path; no overflow at 320px; no residual motion | AUTO + REVIEW |
 | Screen readers | VoiceOver/macOS and NVDA/Windows task reviews not yet executed | REVIEW blocker |
+| Lighthouse performance | 1.00 on the generated trace; floor 0.90, and no more than 10% below the committed `perf/baseline.json` | AUTO |
+| Script bytes on a published artifact | 0; the trace ships no JavaScript and the budget is zero, not the standard's 204,800 | AUTO |
+| Hosted-route latency (k6, PERF-01) | N/A as of 2026-08-27 — no hosted route and no preview environment exists to measure; re-entry trigger is the first hosted surface | Declared N/A |
 | i18n | 51 EN/ES gettext keys, zero missing/fuzzy entries, placeholder parity | AUTO |
 | Data governance | Three current data cards; L3 input ephemeral, L2 output operator-retained | AUTO + REVIEW |
 | Incident response | 0 recorded incidents; label/postmortem and secret runbook armed | REVIEW |

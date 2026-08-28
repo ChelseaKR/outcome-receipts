@@ -61,6 +61,8 @@ def test_make_verify_uses_the_digest_pinned_container_scan() -> None:
         "i18n",
         "security",
         "a11y",
+        # `perf` reads the Lighthouse report `a11y` produced, so it follows it.
+        "perf",
         "cards",
         "eval-check",
         "compat",

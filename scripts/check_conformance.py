@@ -251,6 +251,8 @@ REQUIRED = (
     "docs/data/organization-service-export.md",
     "docs/data/synthetic-fixtures.md",
     "docs/incidents/README.md",
+    "perf/baseline.json",
+    "perf/README.md",
     "docs/schema/report-spec.schema.json",
     "docs/schema/receipts.schema.json",
     "docs/schema/workflow-artifact.schema.json",
