@@ -28,3 +28,15 @@ Direct pushes are structurally blocked and review evidence is explicit, but the
 independence objective remains unmet for maintainer-authored work. The portfolio
 unreviewed-merge metric remains an honest risk signal rather than being disguised
 as an approval that GitHub cannot enforce.
+
+**Note, 2026-08-28.** "Direct pushes are structurally blocked" holds for every
+actor but one. The live ruleset's `bypass_actors` carries the repository owner's
+standing bypass (`RepositoryRole` 5, `bypass_mode: always`), deliberately and
+permanently: an agent once applied a ruleset with no bypass and locked the owner
+out of their own repository, and restoring access took a sweep across eighteen
+repositories. This decision is unchanged by that. The approval count stays at
+zero, the bypass is the way back in when a required check is wedged rather than a
+routine merge path, and it is the only actor permitted to skip these rules --
+`scripts/check_ruleset.py` reports a finding if a second one appears, or if the
+owner's own goes missing from either the live ruleset or a committed file. See
+`docs/rulesets/README.md`, "Why the owner can bypass".

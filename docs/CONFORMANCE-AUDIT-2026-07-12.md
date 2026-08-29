@@ -34,4 +34,15 @@ actors. Default workflow permissions are read-only. Private vulnerability
 reporting is enabled. Release v0.1.0 carries an SBOM and attested build artifacts;
 the next release workflow adds the explicit 1.7 and published-verification gates.
 
+**Correction, 2026-08-28.** "Requires strict status checks without bypass
+actors" above is no longer a true description of the live ruleset, and the
+original wording is kept rather than edited. The live `protect-main` ruleset
+(id `18752852`, last updated 2026-08-26) carries the repository owner's
+standing bypass, `RepositoryRole` 5 with `bypass_mode: always`, deliberately
+and permanently: an agent once applied a ruleset with no bypass and locked the
+owner out of their own repository, and restoring access took a sweep across
+eighteen repositories. An empty `bypass_actors` list is not a stricter gate,
+it is the lockout. Every other statement in this section still holds; see
+`docs/rulesets/README.md`, "Why the owner can bypass".
+
 *Audited: 2026-07-12 · Recheck: next standards bump or quarterly.*

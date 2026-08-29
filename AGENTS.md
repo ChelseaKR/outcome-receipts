@@ -129,7 +129,13 @@ repo commits to:
   SLSA-provenanced releases via OIDC Trusted Publishing as the release path
   lands.
 * **CI/CD.** `make verify` reproduces the full AUTO-GATE set byte-for-byte with
-  CI. No admin bypass on `main`.
+  CI. `main` is protected by an active ruleset whose `bypass_actors` holds
+  exactly the repository owner's standing bypass (`RepositoryRole` 5,
+  `bypass_mode: always`), deliberately and permanently: an agent once applied
+  a ruleset with no bypass and locked the owner out of their own repository,
+  and restoring access took a sweep across eighteen repositories. An empty
+  list there is not a stricter gate, it is the lockout, so never "restore"
+  one. See `docs/rulesets/README.md`, "Why the owner can bypass".
 * **Documentation.** README with a Standards Conformance table (every standard
   marked Applies or N/A-with-reason). MADR-format ADRs in `docs/decisions/`.
   Keep a Changelog. `CITATION.cff`, `SECURITY.md`, `CONTRIBUTING.md`.

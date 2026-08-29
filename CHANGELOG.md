@@ -94,6 +94,34 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- **The committed rulesets recorded a bypass list that would have locked the
+  owner out.** `.github/rulesets/main.json` and `docs/rulesets/main.json` both
+  said `"bypass_actors": []` while the live `protect-main` ruleset (id
+  `18752852`) carries the repository owner's standing bypass, `RepositoryRole`
+  5 with `bypass_mode: always`. That bypass is deliberate and permanent: an
+  agent once applied a ruleset with no bypass and locked the owner out of their
+  own repository, and restoring access took a sweep across eighteen
+  repositories. An empty list is not a stricter gate, it is the lockout -- and
+  `docs/rulesets/README.md` published `gh api -X POST ... --input
+  docs/rulesets/main.json` as the way to apply a ruleset, so following this
+  repository's own documented procedure would have created an active ruleset on
+  the default branch that the owner could not bypass. Both files now record the
+  owner's bypass; the apply step carries a warning to read the field first; and
+  the prose that argued the empty list as a security property is corrected in
+  `docs/rulesets/README.md`, `AGENTS.md`, and WVR-005's rationale in
+  `waivers.yml`. The two dated audits that made the same claim
+  (`docs/audits/openssf-scorecard-2026-07-12.md`,
+  `docs/CONFORMANCE-AUDIT-2026-07-12.md`) keep their original findings and gain
+  a dated correction note rather than a rewrite.
+- New `scripts/check_ruleset.py` and `tests/test_ruleset.py` hold the live
+  ruleset and each committed file **independently** against that one actor,
+  and never compare the two sides to each other: if a future edit emptied a
+  committed file on a day the owner had also been locked out, an equality check
+  would report conformance on exactly the incident the field protects. Both
+  directions are pinned -- a second actor granted a bypass, the owner's bypass
+  gone from the live ruleset, and both sides emptied at once (two findings,
+  never zero) -- along with the reduced API payload that omits `bypass_actors`
+  entirely, which is reported as unread rather than as "no one bypasses".
 - A metric whose `value_sql` returns SQL `NULL` now fails closed in
   `compute_figure` instead of becoming the number `0.0`. `AVG`/`SUM`/`MIN`/`MAX`
   over an empty filtered set, a division by a zero denominator, and a NULL join
