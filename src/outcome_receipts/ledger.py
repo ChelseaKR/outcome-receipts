@@ -3,10 +3,22 @@
 Every successful export writes one line to an append-only JSONL ledger: what
 report was exported, to whom, when, and a hash of the receipts manifest that
 shipped. Each entry carries the ``entry_hash`` of the entry before it, so the
-entries form a chain. Recomputing an entry's hash and checking it against the
-``prev_hash`` of the next entry detects any edit, insertion, deletion, or
-reordering after the fact. The record of what was reported to whom is itself
-receipted.
+entries form a chain. Recomputing each entry's hash and walking the links
+detects an entry edited in place, and an entry inserted, removed, or reordered
+anywhere except at the end of the chain. The record of what was reported to
+whom is itself receipted.
+
+Three tampers leave no trace, and nothing here should be read as claiming
+otherwise. Deleting entries from the tail leaves a shorter chain that still
+verifies, because nothing outside the file records how long the chain should
+be. Rewriting the whole file with recomputed hashes verifies, because the hash
+has no secret in it: the chain proves integrity of what is recorded, never who
+recorded it. And an export that was never appended, because the writer was
+bypassed or the file was swapped before the append, is invisible: a clean
+chain is not evidence of completeness. ``verify-ledger`` states these limits
+next to its PASS line. Closing them would take an out-of-band copy of the
+expected head or entry count, or a keyed signature, neither of which this
+module provides.
 
 The hash construction mirrors the receipt slice hash in ``engine.py``:
 ``blake2b`` with a 32-byte digest over a canonical JSON payload, so the same
@@ -181,8 +193,15 @@ def verify_chain(ledger_path: Path) -> list[str]:
     For each entry: the recomputed ``entry_hash`` must match the stored one (no
     field was edited), the ``prev_hash`` must equal the previous entry's
     ``entry_hash`` (the link holds), and the ``index`` must be contiguous from
-    zero (nothing was inserted, dropped, or reordered). Each problem names the
-    index where the break was found, so a tampered middle entry is located.
+    zero (nothing was inserted, dropped, or reordered in the middle). Each
+    problem names the index where the break was found, so a tampered middle
+    entry is located.
+
+    An empty list means no recorded entry was altered, not that the ledger is
+    complete or authentic: entries deleted from the tail, a wholesale rewrite
+    with recomputed hashes, and an export that was never appended all verify
+    clean. See the module docstring for why, and for what closing those gaps
+    would take.
     """
 
     entries = read_ledger(ledger_path)
