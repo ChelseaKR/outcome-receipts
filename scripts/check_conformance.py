@@ -672,6 +672,228 @@ def security_declaration_failures(audits_text: str, waivers_text: str, vex_path:
     return failures
 
 
+# Three documents state the committed grounding benchmark's size. All three went
+# stale the moment PR #89 added the formatting family (32 cases on top of the
+# original 100), and nothing noticed for two months, because a prose count is
+# exactly the kind of claim no gate reads. These regexes pin the sentence shape so
+# the numbers stay machine-readable, and `benchmark_claim_failures` compares them
+# against the committed file.
+#
+# The digit class is `[0-9]` rather than `\d`. `\d` matches every Unicode decimal
+# digit and `int()` converts them, so a claim written with fullwidth digits would
+# parse and compare equal while reading as an unreadable number on the page. With
+# `[0-9]` such a claim stops matching and the check fails closed instead.
+_README_BENCHMARK_RE = re.compile(r"([0-9]+)-case bilingual grounding benchmark")
+_AUDITS_BENCHMARK_RE = re.compile(r"([0-9]+)-case benchmark includes planted EN/ES failures")
+_ROADMAP_BENCHMARK_RE = re.compile(
+    r"([0-9]+) committed cases: ([0-9]+) EN, ([0-9]+) ES; ([0-9]+) planted unbound failures"
+)
+
+
+def _benchmark_counts(path: Path) -> tuple[int, int, int, int]:
+    """``(total, english, spanish, planted failures)`` from the committed file."""
+
+    cases = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    return (
+        len(cases),
+        sum(1 for case in cases if case["language"] == "en"),
+        sum(1 for case in cases if case["language"] == "es"),
+        sum(1 for case in cases if not case["should_pass"]),
+    )
+
+
+def benchmark_claim_failures(root: Path) -> list[str]:
+    """Check the benchmark size the docs state against the benchmark that ships.
+
+    Fails closed on a missing claim as well as a wrong one. A sentence that no
+    longer matches the expected shape is not evidence that the count is right; it
+    is a claim this check can no longer read, which is how the stale one survived.
+    """
+
+    benchmark = root / "eval" / "grounding-benchmark.jsonl"
+    if not benchmark.exists():
+        return [f"{benchmark.name} is missing, so the documented benchmark size cannot be checked"]
+    total, english, spanish, planted = _benchmark_counts(benchmark)
+
+    failures: list[str] = []
+    for name, pattern, shape in (
+        ("README.md", _README_BENCHMARK_RE, "<n>-case bilingual grounding benchmark"),
+        (
+            "docs/RESPONSIBLE-TECH-AUDITS.md",
+            _AUDITS_BENCHMARK_RE,
+            "<n>-case benchmark includes planted EN/ES failures",
+        ),
+    ):
+        text = (root / name).read_text(encoding="utf-8")
+        match = pattern.search(text)
+        if match is None:
+            failures.append(
+                f"{name} states no benchmark size in the form '{shape}', so the claim "
+                "cannot be checked against eval/grounding-benchmark.jsonl"
+            )
+        elif int(match.group(1)) != total:
+            failures.append(
+                f"{name} claims a {match.group(1)}-case benchmark; "
+                f"eval/grounding-benchmark.jsonl holds {total}"
+            )
+
+    roadmap = (root / "docs" / "ROADMAP.md").read_text(encoding="utf-8")
+    roadmap_match = _ROADMAP_BENCHMARK_RE.search(roadmap)
+    if roadmap_match is None:
+        failures.append(
+            "docs/ROADMAP.md states no benchmark size in the form '<n> committed cases: <n> EN, "
+            "<n> ES; <n> planted unbound failures', so the claim cannot be checked against "
+            "eval/grounding-benchmark.jsonl"
+        )
+    else:
+        claimed = tuple(int(group) for group in roadmap_match.groups())
+        actual = (total, english, spanish, planted)
+        if claimed != actual:
+            failures.append(
+                "docs/ROADMAP.md claims the benchmark is "
+                f"{claimed[0]} cases / {claimed[1]} EN / {claimed[2]} ES / {claimed[3]} planted "
+                f"failures; eval/grounding-benchmark.jsonl holds "
+                f"{actual[0]} / {actual[1]} / {actual[2]} / {actual[3]}"
+            )
+    return failures
+
+
+# `docs/ci-action.md` publishes the composite action's `version` input default in
+# its Inputs table and again in the prose beneath it. `action.yml` bumped that
+# default to v0.2.0 and the documentation kept saying v0.1.0, so a reader copying
+# the table got the wrong CLI. The default lives in exactly one place; these read
+# it from there rather than restating it.
+_ACTION_DEFAULT_RE = re.compile(r'^ {4}default: "([^"]+)"$', re.MULTILINE)
+_DOC_ACTION_DEFAULT_RE = re.compile(r"^\| `version` +\| no +\| `([^`]+)` +\|", re.MULTILINE)
+_DOC_ACTION_PROSE_RE = re.compile(r"defaults to `([^`]+)`, the tag named in")
+
+
+def _action_version_default(action_yml: str) -> str | None:
+    """The `version` input's default, read out of the action's own definition.
+
+    Returns ``None`` when the block cannot be located unambiguously, which the
+    caller reports as a failure. A default this check cannot find is not evidence
+    that the documented one is right.
+    """
+
+    lines = action_yml.splitlines()
+    try:
+        start = lines.index("  version:")
+    except ValueError:
+        return None
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        if line and not line.startswith("   "):
+            break
+        body.append(line)
+    matches = _ACTION_DEFAULT_RE.findall("\n".join(body))
+    return matches[0] if len(matches) == 1 else None
+
+
+def action_default_failures(root: Path) -> list[str]:
+    """Check the action default `docs/ci-action.md` publishes against `action.yml`."""
+
+    action = root / "action.yml"
+    doc = root / "docs" / "ci-action.md"
+    if not action.exists() or not doc.exists():
+        return [
+            "action.yml or docs/ci-action.md is missing, so the published default cannot be checked"
+        ]
+
+    actual = _action_version_default(action.read_text(encoding="utf-8"))
+    if actual is None:
+        return [
+            "action.yml no longer states one unambiguous default for its `version` input, "
+            "so the default docs/ci-action.md publishes cannot be checked against it"
+        ]
+
+    text = doc.read_text(encoding="utf-8")
+    failures: list[str] = []
+    for label, pattern in (
+        ("its Inputs table", _DOC_ACTION_DEFAULT_RE),
+        ("the prose under Pinning", _DOC_ACTION_PROSE_RE),
+    ):
+        match = pattern.search(text)
+        if match is None:
+            failures.append(
+                f"docs/ci-action.md states no `version` default in {label}, so the claim "
+                "cannot be checked against action.yml"
+            )
+        elif match.group(1) != actual:
+            failures.append(
+                f"docs/ci-action.md says in {label} that the action's `version` input "
+                f"defaults to {match.group(1)}; action.yml sets {actual}"
+            )
+    return failures
+
+
+# `docs/SPEC-STABILITY.md` names the current version of all three public
+# contracts in one sentence. Each version has two other homes that ship: the
+# constant the code writes, and the `const` the published JSON Schema pins. All
+# three must agree, and nothing compared them.
+_SCHEMA_CONTRACTS = (
+    ("report spec", "src/outcome_receipts/config.py", "SPEC_SCHEMA_VERSION", "report-spec"),
+    ("receipts manifest", "src/outcome_receipts/models.py", "SCHEMA_VERSION", "receipts"),
+    (
+        "workflow artifact",
+        "src/outcome_receipts/workflows.py",
+        "WORKFLOW_SCHEMA_VERSION",
+        "workflow-artifact",
+    ),
+)
+_SPEC_STABILITY_RE = re.compile(
+    r"The report spec is at `([0-9.]+)`, the receipts manifest at `([0-9.]+)`, and the\n"
+    r"workflow artifact at `([0-9.]+)`\."
+)
+
+
+def _module_constant(path: Path, name: str) -> str | None:
+    match = re.search(rf'^{name} = "([^"]+)"$', path.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def schema_version_failures(root: Path) -> list[str]:
+    """Check the schema versions `docs/SPEC-STABILITY.md` names against code and schemas."""
+
+    failures: list[str] = []
+    actual: list[str | None] = []
+    for label, module, constant, schema_name in _SCHEMA_CONTRACTS:
+        value = _module_constant(root / module, constant)
+        if value is None:
+            failures.append(
+                f"{module} no longer defines {constant}, so the {label} version cannot be checked"
+            )
+        actual.append(value)
+        schema_path = root / "docs" / "schema" / f"{schema_name}.schema.json"
+        pinned = json.loads(schema_path.read_text(encoding="utf-8"))["properties"][
+            "schema_version"
+        ].get("const")
+        if value is not None and pinned != value:
+            failures.append(
+                f"{module} sets {constant} to {value!r} but "
+                f"docs/schema/{schema_name}.schema.json pins schema_version const {pinned!r}"
+            )
+
+    text = (root / "docs" / "SPEC-STABILITY.md").read_text(encoding="utf-8")
+    match = _SPEC_STABILITY_RE.search(text)
+    if match is None:
+        failures.append(
+            "docs/SPEC-STABILITY.md no longer names the three contract versions in the form "
+            "'The report spec is at `X`, the receipts manifest at `Y`, and the workflow "
+            "artifact at `Z`.', so the claim cannot be checked against the code"
+        )
+    else:
+        for (label, module, constant, _schema), claimed, value in zip(
+            _SCHEMA_CONTRACTS, match.groups(), actual, strict=True
+        ):
+            if value is not None and claimed != value:
+                failures.append(
+                    f"docs/SPEC-STABILITY.md says the {label} is at {claimed}; "
+                    f"{module} sets {constant} to {value}"
+                )
+    return failures
+
+
 def main() -> int:
     """Return nonzero when a required declaration or artifact is missing."""
 
@@ -718,6 +940,9 @@ def main() -> int:
     audits_text = (ROOT / "docs" / "RESPONSIBLE-TECH-AUDITS.md").read_text(encoding="utf-8")
     failures.extend(security_declaration_failures(audits_text, waivers_text, ROOT / "vex.json"))
     failures.extend(doc_staleness_failures(ROOT, date.today()))
+    failures.extend(benchmark_claim_failures(ROOT))
+    failures.extend(action_default_failures(ROOT))
+    failures.extend(schema_version_failures(ROOT))
 
     if failures:
         print("repository conformance failed:", file=sys.stderr)

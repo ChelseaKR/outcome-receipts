@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use outcome-receipts, please cite it using this metadata."
 title: "outcome-receipts"
 abstract: >-
-  Drafts funder outcome reports where every number is a receipt. The tool reads a
+  Drafts funder outcome reports where every reported figure is a receipt. The tool reads a
   nonprofit's own service data, computes each required figure with a deterministic
   query, and attaches to that figure a receipt: the exact query, the count of rows
   it drew from, a content hash of that data slice, and a timestamp. It then drafts
