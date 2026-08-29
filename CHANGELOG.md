@@ -94,6 +94,16 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- `make container-verify` failed on two upstream findings, not repo code: the
+  pinned `python:3.13-alpine` base ships libcrypto3/libssl3 3.5.7-r0, which
+  trivy flags for CVE-2026-14456 (HIGH, fixed in Alpine 3.24 main as
+  3.5.8-r0), and even the newest base rebuild still carries the old build.
+  The final stage now installs the fixed packages version-pinned, and removes
+  pip entirely: the runtime is the copied venv, pip exists only for installs
+  this offline image never performs, and pip's vendored msgpack and
+  setuptools copies were the next findings the scanner surfaced. The base
+  digest is refreshed to the current multi-arch index. All 11 verify gates
+  pass again, with the scan reporting zero findings rather than any waiver.
 - A metric whose `value_sql` returns SQL `NULL` now fails closed in
   `compute_figure` instead of becoming the number `0.0`. `AVG`/`SUM`/`MIN`/`MAX`
   over an empty filtered set, a division by a zero denominator, and a NULL join
