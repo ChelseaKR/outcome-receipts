@@ -35,6 +35,30 @@ The absence is announced, not only drawn: the marker carries a ``<title>``, the
 chart's ``<desc>`` names how many points are withheld, and the accessible data
 table already carries ``[SUPPRESSED]`` as text.
 
+A negative value is refused rather than drawn. A comparison or reconciliation
+delta figure carries the *signed* change in ``Figure.value``, and nothing stops
+a ``[[charts]]`` block from naming one, so a metric that decreased arrived here
+as a real, fully receipted, negative number. Both drawing paths assumed
+non-negative: a bar took the ``else`` branch and rendered ``height="0.0"``,
+flush on the baseline with its own label reading ``12`` above it, and a line
+plotted at ``y=668`` on a canvas 360 high, off the image entirely. The bar
+claimed "no change" where the receipt said minus twelve.
+
+Drawing the magnitude instead is not the fix, and it is a worse version of the
+same fault: it makes a decrease of 12 and an increase of 12 produce identical
+geometry and an identical ``<title>``, so the decrease becomes the tallest bar
+on the chart with nothing marking it. A signed bar from a zero baseline would be
+honest geometry, but this module could not label it. The only text a chart may
+put on the page is ``figure.display``, so that the grounding gate verifies a
+chart exactly as it verifies prose, and a delta figure's display is its
+*unsigned magnitude* by design (``comparison._magnitude_display``), with the
+direction carried as a word on ``ComparisonRow``, which a chart never receives.
+Signed geometry with no signed text equivalent would leave a screen-reader user
+reading the same "12" for a rise and a fall. So ``_points`` raises, naming the
+chart, the metric, and the value, and the report fails to build rather than
+building a picture that is wrong. Zero is unaffected: a true zero is a real
+value and still draws a zero-height bar on the baseline.
+
 Pure standard library: the SVG is assembled as text, so the project keeps its
 zero-dependency, offline posture.
 """
@@ -116,14 +140,25 @@ def _points(spec: ChartSpec, by_id: Mapping[str, Figure]) -> tuple[ChartPoint, .
         if metric_id not in by_id:
             raise KeyError(f"chart {spec.chart_id!r} references unknown metric {metric_id!r}")
         figure = by_id[metric_id]
-        points.append(
-            ChartPoint(
-                label=spec.label_for(index),
-                value=figure.value,
-                display=figure.display,
-                suppressed=figure.receipt.suppressed,
-            )
+        point = ChartPoint(
+            label=spec.label_for(index),
+            value=figure.value,
+            display=figure.display,
+            suppressed=figure.receipt.suppressed,
         )
+        if not point.withheld and point.value is not None and point.value < 0:
+            raise ValueError(
+                f"chart {spec.chart_id!r} references metric {metric_id!r}, whose value is "
+                f"{point.value}. A chart here draws a magnitude upward from a zero floor and "
+                "has no way to render a sign: the only text it may put on the page is the "
+                "figure display, and a signed figure's display is its unsigned magnitude "
+                "(comparison._magnitude_display), with the direction carried as a word on the "
+                "comparison row, which a chart never sees. Drawing it anyway put a decrease "
+                "of 12 on the axis floor with the number 12 printed above it. Chart the two "
+                "period figures instead of their delta, or read the direction from the "
+                "comparison table, which states it in words."
+            )
+        points.append(point)
     return tuple(points)
 
 
@@ -149,6 +184,12 @@ def _scale_max(points: Sequence[ChartPoint]) -> float:
     A withheld point contributes nothing. Including it as a zero -- which is
     what happened while a suppressed figure's value was ``0.0`` -- let a hidden
     cell take part in scaling the bars that *are* drawn.
+
+    Every drawable value reaching here is zero or greater, because ``_points``
+    refuses a negative one outright, so the ``top <= 0`` fallback below means
+    "every drawable value is exactly zero" and not "the largest value is a
+    negative number". While a negative could reach here, the fallback silently
+    scaled a set of decreases against an axis maximum of 1.0.
     """
 
     top = max((p.value for p in points if p.value is not None), default=0.0)
