@@ -75,12 +75,18 @@ def load_ruleset(path: Path) -> dict[str, Any]:
     """One ruleset document, or a failure. Never a silently empty document."""
     if not path.is_file():
         pytest.fail(f"{path} is missing; the committed ruleset is what this checks")
+    # Bound before the try, so the parse failing cannot leave the name unset. `pytest.fail`
+    # raises, so the `isinstance` below is not reached after a JSONDecodeError; binding
+    # `None` first means that even if it somehow were, the next check refuses rather than
+    # reading an unset name. CodeQL's py/uninitialized-local-variable found the earlier
+    # shape, which is the kind of "cannot happen" this module exists to distrust.
+    loaded: Any = None
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         pytest.fail(f"{path} is not parseable JSON, so nothing can vouch for it: {exc}")
     if not isinstance(loaded, dict):
-        pytest.fail(f"{path} is not a JSON object")
+        pytest.fail(f"{path} is not a JSON object, so nothing can vouch for it: {loaded!r}")
     return loaded
 
 
