@@ -404,7 +404,7 @@ pinning guidance.
 | `receipts eval` | Score grounding behavior on a configured fixture. |
 | `receipts verify` | Recompute receipt values and hashes, or verify an entire exported bundle with `--bundle`. |
 | `receipts verify-bundle` | Recompute `bundle.json` member digests and an optional keyed signature. |
-| `receipts verify-ledger` | Re-hash the append-only export ledger and detect a broken chain. |
+| `receipts verify-ledger` | Re-hash the append-only export ledger and detect an entry edited, inserted, reordered, or removed mid-chain. It cannot detect entries deleted from the end, a rewrite that recomputes every hash, or an export never appended; its PASS output lists exactly that. |
 | `receipts diff` | Explain added, removed, or changed figures between two manifests. |
 | `receipts restate` | Link a verified prior bundle to a receipted restatement and named approval. |
 | `receipts migrate-check` | Compare reviewed metrics across two schema-variant exports. Each metric is `equivalent`, `changed`, or `indeterminate` (withheld by suppression on one side, so no comparison is possible). |

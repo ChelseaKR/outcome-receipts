@@ -6,12 +6,21 @@ correct prev_hash linkage, and verify_chain returns no problems) and the failing
 case (a middle entry edited on disk makes verify_chain report the break at that
 entry's index). A fixed clock keeps timestamps deterministic, the same way the
 receipt tests do, so the ledger is byte-for-byte reproducible.
+
+The blind spots are pinned too, on hand-tampered fixtures, so the documented
+limits stay true rather than assumed: entries deleted from the tail verify
+clean, and a wholesale rewrite with recomputed hashes verifies clean. If either
+of those tests ever fails, the ledger has grown a completeness or authorship
+check, and the module docstring, the CLI's "not proven" lines, and the README
+row must all be updated in the same change.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+
+import pytest
 
 from outcome_receipts.cli import main
 from outcome_receipts.clock import FixedClock
@@ -154,3 +163,118 @@ def test_cli_verify_ledger_passes_then_fails_on_tamper(tmp_path: Path) -> None:
     record["recipient"] = "someone else"
     ledger.write_text(json.dumps(record) + "\n", encoding="utf-8")
     assert main(["verify-ledger", "--ledger", str(ledger)]) == 1
+
+
+def test_deleting_the_middle_entry_is_detected(tmp_path: Path) -> None:
+    ledger = tmp_path / "export-ledger.jsonl"
+    append_export(ledger, "Q1 report", MANIFEST_A, "Funder A", clock=_clock())
+    append_export(ledger, "Q2 report", MANIFEST_B, "Funder A", clock=_clock())
+    append_export(ledger, "Q3 report", MANIFEST_C, None, clock=_clock())
+
+    lines = ledger.read_text(encoding="utf-8").splitlines()
+    ledger.write_text("\n".join([lines[0], lines[2]]) + "\n", encoding="utf-8")
+
+    problems = verify_chain(ledger)
+    assert any("not contiguous" in problem for problem in problems)
+    assert any("prev_hash does not link" in problem for problem in problems)
+
+
+def test_reordering_entries_is_detected(tmp_path: Path) -> None:
+    ledger = tmp_path / "export-ledger.jsonl"
+    append_export(ledger, "Q1 report", MANIFEST_A, "Funder A", clock=_clock())
+    append_export(ledger, "Q2 report", MANIFEST_B, "Funder A", clock=_clock())
+
+    lines = ledger.read_text(encoding="utf-8").splitlines()
+    ledger.write_text("\n".join([lines[1], lines[0]]) + "\n", encoding="utf-8")
+
+    assert verify_chain(ledger) != []
+
+
+def test_blind_spot_entries_deleted_from_the_tail_verify_clean(tmp_path: Path) -> None:
+    """Documented limit, not desired behavior: truncation from the end is invisible.
+
+    Nothing outside the file records how long the chain should be, so a chain
+    with its last entries cut off is indistinguishable from a chain that simply
+    stopped there. The module docstring, the CLI PASS output, and the README all
+    state this; this test keeps them honest in both directions.
+    """
+    ledger = tmp_path / "export-ledger.jsonl"
+    append_export(ledger, "Q1 report", MANIFEST_A, "Funder A", clock=_clock())
+    append_export(ledger, "Q2 report", MANIFEST_B, "Funder A", clock=_clock())
+    append_export(ledger, "Q3 report", MANIFEST_C, None, clock=_clock())
+
+    lines = ledger.read_text(encoding="utf-8").splitlines()
+    ledger.write_text("\n".join(lines[:2]) + "\n", encoding="utf-8")
+
+    assert verify_chain(ledger) == []
+    assert len(read_ledger(ledger)) == 2
+
+
+def test_blind_spot_a_wholesale_rewrite_with_recomputed_hashes_verifies_clean(
+    tmp_path: Path,
+) -> None:
+    """Documented limit: the hash has no secret, so a full rewrite is clean.
+
+    The attacker needs nothing but this module's own public code to fabricate a
+    self-consistent chain with different content. The chain proves integrity of
+    what is recorded, never who recorded it or that it is the original record.
+    """
+    ledger = tmp_path / "export-ledger.jsonl"
+    append_export(ledger, "Q1 report", MANIFEST_A, "Funder A", clock=_clock())
+    append_export(ledger, "Q2 report", MANIFEST_B, "Funder A", clock=_clock())
+
+    rewritten = tmp_path / "rewritten.jsonl"
+    append_export(rewritten, "Faked Q1", '{"receipts": []}', "Funder B", clock=_clock())
+    append_export(rewritten, "Faked Q2", '{"receipts": []}', "Funder B", clock=_clock())
+
+    ledger.write_text(rewritten.read_text(encoding="utf-8"), encoding="utf-8")
+    assert verify_chain(ledger) == []
+
+
+def test_cli_verify_ledger_pass_output_states_what_is_not_proven(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ledger = tmp_path / "export-ledger.jsonl"
+    append_export(ledger, "Q1 report", MANIFEST_A, "Funder A", clock=_clock())
+
+    assert main(["verify-ledger", "--ledger", str(ledger)]) == 0
+    out = capsys.readouterr().out
+    assert "not proven:" in out
+    assert "deleted from the end" in out
+    assert "never appended" in out
+    assert "no secret" in out
+
+
+def test_cli_verify_ledger_json_reports_entries_and_not_proven(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ledger = tmp_path / "export-ledger.jsonl"
+    append_export(ledger, "Q1 report", MANIFEST_A, "Funder A", clock=_clock())
+    append_export(ledger, "Q2 report", MANIFEST_B, None, clock=_clock())
+
+    assert main(["verify-ledger", "--ledger", str(ledger), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["entries"] == 2
+    assert payload["not_proven"]
+
+
+def test_cli_verify_ledger_fails_closed_on_a_missing_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A mistyped --ledger path must not report PASS over nothing.
+
+    read_ledger treating an absent file as empty is the writer's convenience;
+    the verifier fails closed instead, in the portfolio's own words: a check
+    that read nothing has verified nothing.
+    """
+    missing = tmp_path / "no-such-ledger.jsonl"
+    assert main(["verify-ledger", "--ledger", str(missing)]) == 1
+    err = capsys.readouterr().err
+    assert "no ledger file" in err
+
+    assert main(["verify-ledger", "--ledger", str(missing), "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["entries"] == 0
+    assert any("no ledger file" in problem for problem in payload["problems"])

@@ -11,6 +11,11 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- `verify-ledger` blind-spot tests on hand-tampered fixtures: entries deleted
+  from the tail verify clean, and a wholesale rewrite with recomputed hashes
+  verifies clean. Both are documented limits of a keyless hash chain; the tests
+  keep the documentation honest in both directions. Middle-entry deletion and
+  reordering, which the chain does detect, are now pinned too.
 - Issue 94: the first real, non-synthetic run of the small-cell suppression
   engine, over HUD's own published 2024 CoC Point-in-Time subpopulation
   counts (363 CoCs, 10,890 real cells; `eval/hud/`). No HUD-published
@@ -26,6 +31,16 @@ release-hardening work completed before the first public tag.
   `tests/test_hud_suppression_calibration.py`.
 
 ### Changed
+- The export ledger no longer claims to detect "any edit, insertion, deletion,
+  or reordering". Deletion from the tail, a full rewrite with recomputed
+  hashes, and an export never appended all leave no trace, and the module
+  docstring, the ADR, and the README row now say so. `verify-ledger` prints
+  the entry count and three "not proven" lines beside PASS, and its `--json`
+  output carries `entries` and `not_proven`, so a clean chain can no longer
+  read as proof of completeness or authorship. `verify-ledger` also now fails
+  closed on a missing file: an absent ledger used to verify as an empty chain
+  and report PASS, so a mistyped `--ledger` path was a green check that had
+  read nothing.
 - Every `uv sync --frozen` is now `uv sync --locked`: the `make install` step,
   the Dockerfile's builder stage, and the setup commands in `README.md`,
   `AGENTS.md`, and `docs/drafting.md`. `uv lock --check` was already the drift

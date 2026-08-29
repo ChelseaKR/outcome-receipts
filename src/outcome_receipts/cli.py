@@ -70,7 +70,7 @@ from outcome_receipts.draft import draft, draft_template
 from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import EvalReport, evaluate
 from outcome_receipts.grounding import audit_narrative, ground
-from outcome_receipts.ledger import LedgerEntry, append_export, verify_chain
+from outcome_receipts.ledger import LedgerEntry, append_export, read_ledger, verify_chain
 from outcome_receipts.mapping import build_mapping_queue
 from outcome_receipts.model_draft import (
     DraftingPolicyError,
@@ -823,9 +823,48 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return EXIT_VERIFY_FAIL
 
 
+# What a clean chain does not prove. The chain has no secret and nothing
+# outside the file records its expected length, so these three tampers verify
+# clean; the PASS output states them so a reader cannot take PASS for more
+# than it is. tests/test_ledger.py pins each one with a hand-tampered fixture.
+_LEDGER_PASS_LIMITS = (
+    "entries deleted from the end leave a shorter chain that still verifies",
+    "a rewrite of the whole file with recomputed hashes verifies; the chain"
+    " has no secret and proves integrity of what is recorded, not authorship",
+    "an export that was never appended leaves no trace; PASS is not evidence of completeness",
+)
+
+
 def _cmd_verify_ledger(args: argparse.Namespace) -> int:
     ledger_path = Path(args.ledger)
+
+    # Fail closed on a missing file. read_ledger treats an absent ledger as
+    # empty, which is right for the writer (first export creates the file) and
+    # wrong for a verifier: a mistyped --ledger path would otherwise report
+    # PASS over nothing. A check that read no file has verified no chain.
+    if not ledger_path.exists():
+        if args.json:
+            _emit_json(
+                {
+                    "command": "verify-ledger",
+                    "ok": False,
+                    "ledger": str(ledger_path),
+                    "entries": 0,
+                    "problems": [f"no ledger file at {ledger_path}"],
+                    "not_proven": list(_LEDGER_PASS_LIMITS),
+                }
+            )
+            return EXIT_VERIFY_FAIL
+        print(f"export ledger: {ledger_path}", file=sys.stderr)
+        print(
+            "\nverify-ledger: FAIL — no ledger file at that path; a check that"
+            " read nothing has verified nothing",
+            file=sys.stderr,
+        )
+        return EXIT_VERIFY_FAIL
+
     problems = verify_chain(ledger_path)
+    n_entries = len(read_ledger(ledger_path))
 
     if args.json:
         _emit_json(
@@ -833,14 +872,21 @@ def _cmd_verify_ledger(args: argparse.Namespace) -> int:
                 "command": "verify-ledger",
                 "ok": not problems,
                 "ledger": str(ledger_path),
+                "entries": n_entries,
                 "problems": list(problems),
+                "not_proven": list(_LEDGER_PASS_LIMITS),
             }
         )
         return EXIT_OK if not problems else EXIT_VERIFY_FAIL
 
     if not problems:
         print(f"export ledger: {ledger_path}")
-        print("verify-ledger: PASS — the export chain is intact")
+        print(
+            f"verify-ledger: PASS — all {n_entries} recorded entries re-verify;"
+            " nothing was edited, inserted, reordered, or removed mid-chain"
+        )
+        for limit in _LEDGER_PASS_LIMITS:
+            print(f"  not proven: {limit}")
         return EXIT_OK
     print(f"export ledger: {ledger_path}", file=sys.stderr)
     for problem in problems:
