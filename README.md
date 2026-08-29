@@ -494,7 +494,7 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Observability | Applies — Tier C local CLI; no service telemetry or SLO surface, with explicit operational and incident runbooks |
 | Accessibility | Applies — axe, pa11y, Lighthouse, reflow, and reduced-motion gates cover generated HTML; the ACR records manual VoiceOver/NVDA evidence status |
 | Internationalization & Localization | Applies — packaged gettext catalogs with EN/ES key and placeholder parity; operational CLI messages remain English |
-| AI Evaluation | Applies to optional Bedrock drafting — 132-case bilingual grounding benchmark, generated cards, red-team and governance artifacts; no judge ships |
+| AI Evaluation | Applies to optional Bedrock drafting — 136-case bilingual grounding benchmark, generated cards, red-team and governance artifacts; no judge ships |
 | Documentation | Applies — pinned standards, current root docs, canonical ADR log, data/incident/operations artifacts, and conformance checks |
 | Quality & Metrics | Applies — Definition of Done, committed eval with Wilson intervals, fail-closed gates, and project metrics ledger |
 | Incident Response | Applies — severity/label convention, private disclosure, secret-leak runbook, and committed-postmortem requirement |
