@@ -837,6 +837,32 @@ _LEDGER_PASS_LIMITS = (
 
 def _cmd_verify_ledger(args: argparse.Namespace) -> int:
     ledger_path = Path(args.ledger)
+
+    # Fail closed on a missing file. read_ledger treats an absent ledger as
+    # empty, which is right for the writer (first export creates the file) and
+    # wrong for a verifier: a mistyped --ledger path would otherwise report
+    # PASS over nothing. A check that read no file has verified no chain.
+    if not ledger_path.exists():
+        if args.json:
+            _emit_json(
+                {
+                    "command": "verify-ledger",
+                    "ok": False,
+                    "ledger": str(ledger_path),
+                    "entries": 0,
+                    "problems": [f"no ledger file at {ledger_path}"],
+                    "not_proven": list(_LEDGER_PASS_LIMITS),
+                }
+            )
+            return EXIT_VERIFY_FAIL
+        print(f"export ledger: {ledger_path}", file=sys.stderr)
+        print(
+            "\nverify-ledger: FAIL — no ledger file at that path; a check that"
+            " read nothing has verified nothing",
+            file=sys.stderr,
+        )
+        return EXIT_VERIFY_FAIL
+
     problems = verify_chain(ledger_path)
     n_entries = len(read_ledger(ledger_path))
 

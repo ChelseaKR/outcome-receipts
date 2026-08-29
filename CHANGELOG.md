@@ -37,7 +37,10 @@ release-hardening work completed before the first public tag.
   docstring, the ADR, and the README row now say so. `verify-ledger` prints
   the entry count and three "not proven" lines beside PASS, and its `--json`
   output carries `entries` and `not_proven`, so a clean chain can no longer
-  read as proof of completeness or authorship.
+  read as proof of completeness or authorship. `verify-ledger` also now fails
+  closed on a missing file: an absent ledger used to verify as an empty chain
+  and report PASS, so a mistyped `--ledger` path was a green check that had
+  read nothing.
 - Every `uv sync --frozen` is now `uv sync --locked`: the `make install` step,
   the Dockerfile's builder stage, and the setup commands in `README.md`,
   `AGENTS.md`, and `docs/drafting.md`. `uv lock --check` was already the drift

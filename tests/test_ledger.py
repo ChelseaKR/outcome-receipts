@@ -257,3 +257,24 @@ def test_cli_verify_ledger_json_reports_entries_and_not_proven(
     assert payload["ok"] is True
     assert payload["entries"] == 2
     assert payload["not_proven"]
+
+
+def test_cli_verify_ledger_fails_closed_on_a_missing_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A mistyped --ledger path must not report PASS over nothing.
+
+    read_ledger treating an absent file as empty is the writer's convenience;
+    the verifier fails closed instead, in the portfolio's own words: a check
+    that read nothing has verified nothing.
+    """
+    missing = tmp_path / "no-such-ledger.jsonl"
+    assert main(["verify-ledger", "--ledger", str(missing)]) == 1
+    err = capsys.readouterr().err
+    assert "no ledger file" in err
+
+    assert main(["verify-ledger", "--ledger", str(missing), "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["entries"] == 0
+    assert any("no ledger file" in problem for problem in payload["problems"])
