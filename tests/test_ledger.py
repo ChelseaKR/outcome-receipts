@@ -20,6 +20,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from outcome_receipts.cli import main
 from outcome_receipts.clock import FixedClock
 from outcome_receipts.ledger import (
@@ -229,7 +231,9 @@ def test_blind_spot_a_wholesale_rewrite_with_recomputed_hashes_verifies_clean(
     assert verify_chain(ledger) == []
 
 
-def test_cli_verify_ledger_pass_output_states_what_is_not_proven(tmp_path: Path, capsys) -> None:
+def test_cli_verify_ledger_pass_output_states_what_is_not_proven(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     ledger = tmp_path / "export-ledger.jsonl"
     append_export(ledger, "Q1 report", MANIFEST_A, "Funder A", clock=_clock())
 
@@ -241,7 +245,9 @@ def test_cli_verify_ledger_pass_output_states_what_is_not_proven(tmp_path: Path,
     assert "no secret" in out
 
 
-def test_cli_verify_ledger_json_reports_entries_and_not_proven(tmp_path: Path, capsys) -> None:
+def test_cli_verify_ledger_json_reports_entries_and_not_proven(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     ledger = tmp_path / "export-ledger.jsonl"
     append_export(ledger, "Q1 report", MANIFEST_A, "Funder A", clock=_clock())
     append_export(ledger, "Q2 report", MANIFEST_B, None, clock=_clock())
