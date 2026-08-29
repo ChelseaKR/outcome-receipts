@@ -54,7 +54,7 @@ GitHub workflow files checked:
 
 ## Trust Boundaries
 
-- Every number in a report must trace to a receipt (the exact query, row count, and a hash of the data slice). The grounding gate is fail-closed: a number without a receipt blocks the export instead of passing through.
+- Every number a report claims must trace to a receipt (the exact query, row count, and a hash of the data slice): the drafted narrative, and any chart, comparison, or reconciliation claim. The grounding gate is fail-closed: a number in one of those claims without a receipt blocks the export instead of passing through. The receipt metadata printed alongside a claim (timestamps, row counts, slice hashes, and query text) is not itself gated.
 - No number comes from a model. The deterministic engine computes every figure; the optional drafting seam (v0.3, off by default) only writes prose around already-receipted figures.
 - Verification is part of the output contract: `receipts verify` re-derives every figure from the spec and cited data, while `receipts verify-workflow` validates workflow versions, relationships, digests, aggregate-only fields, and receipt-composed lineage. Each export appends to a hash-chained ledger so the reporting history is tamper-evident.
 - A derived workflow value is labeled `receipt_composed`; it cannot be mistaken

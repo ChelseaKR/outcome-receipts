@@ -283,9 +283,13 @@ def render_report(
     provenance and receipts.
 
     When ``provenance`` is given, a standard provenance block is embedded before
-    the receipts, stating that no number was written by a model and that the gate
-    bound every number before export. The receipts section then lists each figure
-    with its plain-language definition and the receipt that backs it.
+    the receipts, stating that no figure was written by a model and that the gate
+    bound every number in the report's claims before export. The receipts section
+    then lists each figure with its plain-language definition and the receipt that
+    backs it. That section, and the provenance block itself, print row counts,
+    slice hashes, timestamps, and query text; those numerals are receipt metadata
+    and were never in the gate's scope, so grounding a whole rendered report
+    rather than its narrative region reports them as unbound.
     """
 
     copy = get_copy(locale)

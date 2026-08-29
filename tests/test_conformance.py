@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -13,8 +14,10 @@ from scripts.check_conformance import (
     StandardsIndexError,
     _readme_standards_rows,
     _standards_table_failures,
+    action_default_failures,
     benchmark_claim_failures,
     doc_staleness_failures,
+    schema_version_failures,
     security_declaration_failures,
     standards_index,
     waiver_failures,
@@ -694,6 +697,9 @@ def _benchmark_fixture(root: Path, *, cases: int, spanish_from: int, failures: i
 
     (root / "eval").mkdir(parents=True, exist_ok=True)
     (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "RESPONSIBLE-TECH-AUDITS.md").write_text(
+        f"the {cases}-case benchmark includes planted EN/ES failures.\n", encoding="utf-8"
+    )
     lines = []
     for index in range(cases):
         lines.append(
@@ -718,6 +724,9 @@ def test_benchmark_claim_failures_catches_the_stale_count() -> None:
     root = Path(tempfile.mkdtemp())
     _benchmark_fixture(root, cases=132, spanish_from=66, failures=66)
     (root / "README.md").write_text("a 100-case bilingual grounding benchmark\n", encoding="utf-8")
+    (root / "docs" / "RESPONSIBLE-TECH-AUDITS.md").write_text(
+        "the 100-case benchmark includes planted EN/ES failures.\n", encoding="utf-8"
+    )
     (root / "docs" / "ROADMAP.md").write_text(
         "| Bilingual benchmark | 100 committed cases: 50 EN, 50 ES; 50 planted unbound "
         "failures all rejected | AUTO |\n",
@@ -726,11 +735,13 @@ def test_benchmark_claim_failures_catches_the_stale_count() -> None:
 
     failures = benchmark_claim_failures(root)
 
-    assert len(failures) == 2
+    assert len(failures) == 3
     assert "README.md claims a 100-case" in failures[0]
     assert "holds 132" in failures[0]
-    assert "100 cases / 50 EN / 50 ES / 50 planted failures" in failures[1]
-    assert "132 / 66 / 66 / 66" in failures[1]
+    assert "docs/RESPONSIBLE-TECH-AUDITS.md claims a 100-case" in failures[1]
+    assert "holds 132" in failures[1]
+    assert "100 cases / 50 EN / 50 ES / 50 planted failures" in failures[2]
+    assert "132 / 66 / 66 / 66" in failures[2]
 
 
 def test_benchmark_claim_failures_fails_closed_on_an_unreadable_claim() -> None:
@@ -740,16 +751,39 @@ def test_benchmark_claim_failures_fails_closed_on_an_unreadable_claim() -> None:
     root = Path(tempfile.mkdtemp())
     _benchmark_fixture(root, cases=4, spanish_from=2, failures=2)
     (root / "README.md").write_text("a bilingual grounding benchmark of some size\n", "utf-8")
+    (root / "docs" / "RESPONSIBLE-TECH-AUDITS.md").write_text("the benchmark has cases\n", "utf-8")
     (root / "docs" / "ROADMAP.md").write_text("| Bilingual benchmark | lots | AUTO |\n", "utf-8")
 
     failures = benchmark_claim_failures(root)
 
-    assert len(failures) == 2
+    assert len(failures) == 3
     assert all("cannot be checked" in failure for failure in failures)
+
+
+def test_benchmark_claim_failures_rejects_a_count_written_in_exotic_digits() -> None:
+    # `\d` matches every Unicode decimal digit and `int()` converts them, so a
+    # count written in fullwidth digits would have parsed and compared equal.
+    # `[0-9]` makes it unreadable instead, which fails closed.
+    root = Path(tempfile.mkdtemp())
+    _benchmark_fixture(root, cases=4, spanish_from=2, failures=2)
+    (root / "README.md").write_text("a \uff14-case bilingual grounding benchmark\n", "utf-8")
+    (root / "docs" / "ROADMAP.md").write_text(
+        "| Bilingual benchmark | 4 committed cases: 2 EN, 2 ES; 2 planted unbound failures "
+        "all rejected | AUTO |\n",
+        encoding="utf-8",
+    )
+
+    failures = benchmark_claim_failures(root)
+
+    assert failures == [
+        "README.md states no benchmark size in the form '<n>-case bilingual grounding "
+        "benchmark', so the claim cannot be checked against eval/grounding-benchmark.jsonl"
+    ]
 
 
 def test_benchmark_claim_failures_is_silent_when_the_claims_are_true() -> None:
     root = Path(tempfile.mkdtemp())
+    # The fixture writes a matching docs/RESPONSIBLE-TECH-AUDITS.md.
     _benchmark_fixture(root, cases=4, spanish_from=2, failures=2)
     (root / "README.md").write_text("a 4-case bilingual grounding benchmark\n", encoding="utf-8")
     (root / "docs" / "ROADMAP.md").write_text(
@@ -766,3 +800,115 @@ def test_benchmark_claim_is_true_of_the_real_committed_repository() -> None:
     # against the committed benchmark file.
     root = Path(__file__).resolve().parents[1]
     assert benchmark_claim_failures(root) == []
+
+
+# --- The published action default, and the three schema versions. ---
+
+
+def _action_fixture(root: Path, *, actual: str, table: str, prose: str) -> None:
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "action.yml").write_text(
+        "inputs:\n"
+        "  config:\n"
+        "    required: true\n"
+        "  version:\n"
+        "    description: >-\n"
+        "      Package version to install.\n"
+        "    required: false\n"
+        f'    default: "{actual}"\n',
+        encoding="utf-8",
+    )
+    (root / "docs" / "ci-action.md").write_text(
+        f"| `version`  | no       | `{table}` | Git ref to install. |\n"
+        f"\n- **The `version` input** defaults to `{prose}`, the tag named in "
+        "[`action.yml`](../action.yml).\n",
+        encoding="utf-8",
+    )
+
+
+def test_action_default_failures_catches_documentation_left_on_the_old_tag() -> None:
+    # The real drift: action.yml moved to v0.2.0 and docs/ci-action.md kept
+    # publishing v0.1.0 in its Inputs table and "the first released tag" in the
+    # prose, so a reader copying the table installed the wrong CLI.
+    root = Path(tempfile.mkdtemp())
+    _action_fixture(root, actual="v0.2.0", table="v0.1.0", prose="v0.1.0")
+
+    failures = action_default_failures(root)
+
+    assert len(failures) == 2
+    assert "its Inputs table" in failures[0]
+    assert "defaults to v0.1.0; action.yml sets v0.2.0" in failures[0]
+    assert "the prose under Pinning" in failures[1]
+
+
+def test_action_default_failures_fails_closed_on_an_unreadable_action() -> None:
+    # Two defaults inside the version block, or none, means the check cannot tell
+    # which one ships. That is not evidence the documented default is right.
+    root = Path(tempfile.mkdtemp())
+    _action_fixture(root, actual="v0.2.0", table="v0.2.0", prose="v0.2.0")
+    (root / "action.yml").write_text("inputs:\n  config:\n    required: true\n", encoding="utf-8")
+
+    failures = action_default_failures(root)
+
+    assert failures == [
+        "action.yml no longer states one unambiguous default for its `version` input, "
+        "so the default docs/ci-action.md publishes cannot be checked against it"
+    ]
+
+
+def test_action_default_failures_is_silent_when_the_documentation_agrees() -> None:
+    root = Path(tempfile.mkdtemp())
+    _action_fixture(root, actual="v0.2.0", table="v0.2.0", prose="v0.2.0")
+
+    assert action_default_failures(root) == []
+
+
+def test_action_default_is_true_of_the_real_committed_repository() -> None:
+    root = Path(__file__).resolve().parents[1]
+    assert action_default_failures(root) == []
+
+
+def test_schema_versions_are_true_of_the_real_committed_repository() -> None:
+    # Three homes per contract: the constant the code writes, the `const` the
+    # published JSON Schema pins, and the sentence docs/SPEC-STABILITY.md states.
+    # Nothing compared them before.
+    root = Path(__file__).resolve().parents[1]
+    assert schema_version_failures(root) == []
+
+
+def test_schema_version_failures_catches_a_bumped_constant(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    shutil.copytree(root / "src", tmp_path / "src")
+    shutil.copytree(root / "docs" / "schema", tmp_path / "docs" / "schema")
+    (tmp_path / "docs" / "SPEC-STABILITY.md").write_text(
+        (root / "docs" / "SPEC-STABILITY.md").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    models = tmp_path / "src" / "outcome_receipts" / "models.py"
+    models.write_text(
+        models.read_text(encoding="utf-8").replace(
+            'SCHEMA_VERSION = "2.0"', 'SCHEMA_VERSION = "3.0"'
+        ),
+        encoding="utf-8",
+    )
+
+    failures = schema_version_failures(tmp_path)
+
+    assert any("receipts.schema.json pins schema_version const '2.0'" in f for f in failures)
+    assert any("receipts manifest is at 2.0" in f for f in failures)
+
+
+def test_schema_version_failures_fails_closed_on_an_unreadable_sentence(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    shutil.copytree(root / "src", tmp_path / "src")
+    shutil.copytree(root / "docs" / "schema", tmp_path / "docs" / "schema")
+    (tmp_path / "docs" / "SPEC-STABILITY.md").write_text(
+        "The contracts are versioned somewhere else now.\n", encoding="utf-8"
+    )
+
+    failures = schema_version_failures(tmp_path)
+
+    assert failures == [
+        "docs/SPEC-STABILITY.md no longer names the three contract versions in the form "
+        "'The report spec is at `X`, the receipts manifest at `Y`, and the workflow "
+        "artifact at `Z`.', so the claim cannot be checked against the code"
+    ]

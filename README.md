@@ -6,13 +6,21 @@
 
 ![Outcome Receipts: deterministic SQL to receipt to grounding gate to verified report](docs/assets/social-preview.png)
 
-Draft funder outcome reports where **every number is a receipt**. The tool reads
-a nonprofit's own service data, computes each required figure with a deterministic
-query, and attaches to that figure a receipt: the exact query, the count of rows
-it drew from, a content hash of that data slice, and a timestamp. It then drafts
-a narrative around the receipted figures and runs fail-closed grounding gates
-before and after suppression. Export is refused if any displayed number does not
-trace to a receipt.
+Draft funder outcome reports where **every reported figure is a receipt**. The
+tool reads a nonprofit's own service data, computes each required figure with a
+deterministic query, and attaches to that figure a receipt: the exact query, the
+count of rows it drew from, a content hash of that data slice, and a timestamp.
+It then drafts a narrative around the receipted figures and runs fail-closed
+grounding gates before and after suppression. Export is refused if any number in
+the drafted narrative, or in a chart, comparison, or reconciliation claim, does
+not trace to a receipt.
+
+The gate reads those narrative and structured claims. It does not read every
+numeral in an exported file: the receipts section, the provenance block, and the
+trace page also print timestamps, row counts, slice hashes, and the text of each
+query, and those are receipt metadata rather than reported figures. Running the
+gate over a whole exported `report.md` reports them as unbound, which is the
+scope working as specified and not a gate failure.
 
 > **Status: Beta.** The current tagged release is `v0.2.0`; `v0.1.0` was the
 > first. The default path is
@@ -370,8 +378,9 @@ report, none of which puts a model near a number.
   its value and definition, then the receipt behind each (the query, the row count,
   the slice hash, the timestamp). It opens offline and needs no SQL or Python.
 * **A provenance statement.** Every export embeds a short, standard block stating
-  that each number was computed by a deterministic query, that no figure was
-  written by a model, and that the grounding gate bound every number before export.
+  that each figure was computed by a deterministic query, that no figure was
+  written by a model, and that the grounding gate bound every number in the
+  report's claims before export.
   The same attestation goes into the manifest as a machine-readable record, which
   separately names the deterministic or Bedrock narrative drafter used.
 

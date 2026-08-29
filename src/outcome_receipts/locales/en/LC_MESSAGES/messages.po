@@ -101,7 +101,7 @@ msgid "provenance_heading"
 msgstr "## Provenance"
 
 msgid "provenance_statement"
-msgstr "Every number in this report was computed by a deterministic SQL query over the organization's own service data. No figure was written by a language model. Each figure carries a receipt below: the exact query, the count of rows it drew from, a content hash of that data slice, and a timestamp."
+msgstr "Every figure in this report was computed by a deterministic SQL query over the organization's own service data. No figure was written by a language model. Each figure carries a receipt below: the exact query, the count of rows it drew from, a content hash of that data slice, and a timestamp. The other numbers printed here, including those timestamps, row counts, hashes, and the numerals inside the queries and definitions, are receipt metadata rather than reported figures."
 
 msgid "provenance_gate_pass_template"
 msgstr "Before this report was exported, the grounding gate bound all {bound} of its numbers to a receipt; a number that traced to no receipt would have blocked the export."

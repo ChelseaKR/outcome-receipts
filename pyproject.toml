@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "outcome-receipts"
 version = "0.2.0"
-description = "Draft funder outcome reports where every number is a receipt, with a fail-closed grounding gate."
+description = "Draft funder outcome reports where every reported figure is a receipt, with a fail-closed grounding gate."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }

@@ -119,23 +119,63 @@ release-hardening work completed before the first public tag.
   setuptools copies were the next findings the scanner surfaced. The base
   digest is refreshed to the current multi-arch index. All 11 verify gates
   pass again, with the scan reporting zero findings rather than any waiver.
-- The README and the `docs/ROADMAP.md` metrics ledger both stated the committed
-  grounding benchmark was "100 cases: 50 EN, 50 ES; 50 planted unbound
-  failures". It has held 132 cases, 66 EN, 66 ES and 66 planted failures since
-  PR 89 added the 32-case formatting family on 2026-08-14, and neither document
-  was updated. The numbers were wrong in the two places a reader checks the
+- The README, the `docs/ROADMAP.md` metrics ledger, and
+  `docs/RESPONSIBLE-TECH-AUDITS.md` all stated the committed grounding benchmark
+  was 100 cases, the ROADMAP adding "50 EN, 50 ES; 50 planted unbound failures".
+  It has held 132 cases, 66 EN, 66 ES and 66 planted failures since PR 89 added
+  the 32-case formatting family on 2026-08-15, and none of the three was
+  updated. The numbers were wrong in the three places a reader checks the
   evidence, in the direction of understating it, and nothing could catch that: a
-  count written in prose is exactly the kind of claim no gate reads. Both are
-  corrected, and `scripts/check_conformance.py` gains
+  count written in prose is exactly the kind of claim no gate reads. All three
+  are corrected, and `scripts/check_conformance.py` gains
   `benchmark_claim_failures`, wired into `make hygiene`, which reads the
   committed `eval/grounding-benchmark.jsonl` and compares the totals against the
-  numbers the two documents state. It fails closed on a claim it cannot parse as
+  numbers the documents state. It fails closed on a claim it cannot parse as
   well as on one that is wrong, because a sentence that no longer matches the
-  expected shape is not evidence the count is right. Regression tests:
+  expected shape is not evidence the count is right, and it matches `[0-9]`
+  rather than `\d` so a count written in fullwidth digits fails closed instead of
+  parsing. Regression tests:
   `tests/test_conformance.py::test_benchmark_claim_failures_catches_the_stale_count`,
   `::test_benchmark_claim_failures_fails_closed_on_an_unreadable_claim`,
+  `::test_benchmark_claim_failures_rejects_a_count_written_in_exotic_digits`,
   `::test_benchmark_claim_failures_is_silent_when_the_claims_are_true`, and
   `::test_benchmark_claim_is_true_of_the_real_committed_repository`.
+- "Every number is a receipt" promised more than the gate delivers, and the
+  project's own exports falsified it. Running the shipped gate over the
+  artifacts `make build-html` writes gives `out/a11y/report.md` 3 bound and 61
+  unbound, and `out/a11y/trace.html` 4 bound and 124 unbound. Those unbound
+  spans are export timestamps, row counts, slice hashes, and the numerals inside
+  the printed queries and definitions. They were never in the gate's scope:
+  `receipts run` grounds the drafted narrative and the chart, comparison, and
+  reconciliation claims, which is what `verify.py::_report_narrative` already
+  documented and what README line 289 already said. The headline said otherwise
+  in the GitHub description, `README.md`, `DEFINITION_OF_DONE.md`,
+  `docs/PROJECT-SCOPE.md`, `AGENTS.md`, `CITATION.cff`, `pyproject.toml`, and
+  the shipped `provenance_statement` string that prints inside every export. All
+  of them now state the scope the gate actually enforces, and the README and the
+  provenance block name the exception rather than leaving a reader to discover
+  it. `tests/test_provenance.py::test_the_gate_covers_the_claims_not_every_numeral_in_the_file`
+  pins both halves: clean over the narrative region, not clean over the whole
+  rendered file. The Spanish `provenance_statement` was rewritten alongside the
+  English so no locale keeps asserting what the English no longer says. The
+  msgid is a stable key rather than the source text, so gettext could not have
+  marked it fuzzy and nothing would have caught the drift. Per
+  `docs/I18N.md`'s translation review policy this Spanish is a draft and still
+  needs the human review step before it is final copy. Changing the copy changes
+  the bytes of an exported `report.md`, so the two bundle digests in
+  `tests/fixtures/compat/v1/workflow-artifacts.json` are regenerated. No schema,
+  receipt, or figure changed, and the frozen `v0.1.0` manifest still re-derives.
+- `docs/ci-action.md` published the composite action's `version` input default
+  as `v0.1.0` in its Inputs table and as "the first released tag" in the prose
+  beneath it. `action.yml` sets `v0.2.0`, so a reader copying the table pinned
+  the wrong CLI. Both are corrected against `action.yml`, and
+  `action_default_failures` reads the default out of the action definition
+  rather than restating it.
+- Nothing compared the three public schema versions across their three homes:
+  the constant the code writes, the `const` the published JSON Schema pins, and
+  the sentence `docs/SPEC-STABILITY.md` states. All three agree today;
+  `schema_version_failures` is what keeps them agreeing, and fails closed when
+  the sentence stops being readable.
 - A metric whose `value_sql` returns SQL `NULL` now fails closed in
   `compute_figure` instead of becoming the number `0.0`. `AVG`/`SUM`/`MIN`/`MAX`
   over an empty filtered set, a division by a zero denominator, and a NULL join
