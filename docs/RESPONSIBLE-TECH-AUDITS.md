@@ -83,7 +83,7 @@ and ledger verification fail closed on drift.
 
 The generated model and data cards describe the Bedrock boundary, limitations,
 out-of-scope uses, and bilingual gate evidence. The committed eval reports Wilson
-confidence intervals, and the 132-case benchmark includes planted EN/ES failures.
+confidence intervals, and the 136-case benchmark includes planted EN/ES failures.
 No model judge ships, so judge calibration is explicitly N/A until one is added.
 
 ## E. Accessibility
