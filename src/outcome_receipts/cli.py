@@ -939,6 +939,7 @@ def _eval_payload(report: EvalReport, *, out: str | None) -> dict[str, object]:
     return {
         "command": "eval",
         "gate_pass": report.gate_pass,
+        "scored": report.scored,
         "n_numbers": report.n_numbers,
         "n_bound": report.n_bound,
         "n_unbound": report.n_unbound,
@@ -1021,29 +1022,71 @@ def _cmd_verify_bundle(args: argparse.Namespace) -> int:
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
-    # Score the artifact the pipeline actually exports. Drafting and grounding
-    # against the raw figures measured a narrative `run` would never produce:
-    # one whose numbers include the cells suppression withholds.
+    """Score the gate over every narrative the pipeline would export.
+
+    Two things are scored, and they are scored the way `run` produces them.
+
+    The figures are the *publishable* set. Drafting and grounding against the raw
+    figures measured a narrative `run` would never produce: one whose numbers
+    include the cells suppression withholds.
+
+    The narratives are *all* of `spec.report.effective_templates`, drafted
+    through the same `_draft_templates` the export path uses. This used to call
+    `draft(spec.report, ...)`, which fills only the legacy single
+    `[report] template`. A spec that names funder formats under
+    `[[report.templates]]` leaves that field empty, so eval drafted the empty
+    string, found no numbers, and reported a pass over nothing. That is the shape
+    of `examples/multi-funder/report.toml`, which ships here, and whose two
+    funder narratives carry real figures eval never looked at.
+
+    A figure written into two funder narratives is counted twice, and that is the
+    intended denominator, not an artifact to correct. `run` exports one report
+    per format, each a separate document a separate funder reads, so each
+    occurrence is its own opportunity for an ungrounded number to reach someone.
+    Scoring the distinct figures instead would report a smaller population than
+    the one the gate actually has to hold, and would make the measurement depend
+    on how many formats happen to share a metric.
+    """
+
     spec, _rows, figures, _comparison, _reconciliation = _compute_all(
         args.config, reproducible=True, quiet=args.json
     )
     publishable, _hidden = _publishable_and_hidden(figures)
-    narrative = draft(spec.report, publishable)
-    result = ground(narrative, publishable)
+    drafts = _draft_templates(spec, publishable)
+    result = GroundingResult(
+        bound=tuple(span for _t, _n, one in drafts for span in one.bound),
+        unbound=tuple(span for _t, _n, one in drafts for span in one.unbound),
+    )
     report = evaluate(result)
     markdown = render_eval_markdown(report, dataset=Path(args.config).parent.name)
     if args.out:
         Path(args.out).write_text(markdown, encoding="utf-8")
 
+    # An eval that scored no number has measured nothing, and this command exists
+    # to measure. `gate_pass` is still true and still reported, because it is
+    # true: nothing failed to bind. But exiting 0 on it hands CI a green from a
+    # run that never exercised the gate, which is how the multi-template hole
+    # above stayed invisible. `render_eval_markdown` already refuses to print the
+    # vacuous rate as an observed measurement; the exit code agrees with it now.
+    exit_code = EXIT_OK if report.gate_pass and report.scored else EXIT_VERIFY_FAIL
+
     if args.json:
         _emit_json(_eval_payload(report, out=args.out or None))
-        return EXIT_OK if report.gate_pass else EXIT_VERIFY_FAIL
+        return exit_code
 
     if args.out:
         print(f"wrote eval report: {args.out}")
     else:
         print(markdown)
-    return EXIT_OK if report.gate_pass else EXIT_VERIFY_FAIL
+    if not report.scored:
+        print(
+            "\neval: FAIL — no numeric span was scored, so this run is not a "
+            "measurement of the grounding gate. Check that the report spec's "
+            "templates render figures and that suppression has not withheld all "
+            "of them.",
+            file=sys.stderr,
+        )
+    return exit_code
 
 
 def _cmd_init(args: argparse.Namespace) -> int:

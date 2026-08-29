@@ -45,6 +45,21 @@ class EvalReport:
         # Fail-closed: a single unbound number fails the gate.
         return self.n_unbound == 0
 
+    @property
+    def scored(self) -> bool:
+        """Whether this report measured anything at all.
+
+        ``gate_pass`` answers "did any number fail to bind", and over an empty
+        denominator the honest answer is no, so it passes. That is the right
+        answer for the export path: a narrative with no numbers has no number to
+        invent, and ``receipts run`` exports it. It is not an answer about the
+        gate's behaviour, because the gate was never exercised. Keeping the two
+        apart is what lets a caller say "the gate passed" and "this run is not
+        evidence that it works" at the same time, both truthfully.
+        """
+
+        return self.n_numbers > 0
+
 
 def evaluate(result: GroundingResult) -> EvalReport:
     """Score a grounding result into the committed eval metrics."""
