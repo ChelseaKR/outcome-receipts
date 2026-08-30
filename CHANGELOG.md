@@ -11,6 +11,28 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- The Performance standard's artifacts, closing the open gap the README
+  declared. `perf/baseline.json` is the committed comparand the standard's
+  10%-regression rule needs, with `meta` provenance, an explicit `null` for
+  every metric this project has no route to measure, and a per-metric direction
+  so the comparison is mechanical. `perf/README.md` records the budgets and
+  which controls apply: k6 latency is declared N/A with its reason, there being
+  no hosted route and no preview environment, rather than skipped. The single
+  `lighthouserc.cjs` now asserts `categories:performance` at 0.9 alongside the
+  accessibility score, and a script-transfer budget of zero bytes on the
+  generated trace, which is tighter than the standard's 204,800 on purpose: the
+  trace is a static document a funder opens, the project ships no web
+  application, and at 204,800 the assertion could not fail until 200 KB of
+  JavaScript had already reached a funder's browser. `scripts/check_perf_baseline.py`
+  (`make perf`, wired into `make verify` after `a11y`) is the regression half.
+  It reads the report `a11y` produced rather than measuring twice, because the
+  standard requires one Lighthouse config per repository, and it refuses a
+  report older than the trace it would be scored against, or no report at all,
+  so a failed Lighthouse run cannot leave a stale green behind it. Proven able
+  to fail against the real toolchain: a 1 KB script injected into
+  `out/a11y/trace.html` takes the measurement to 0.411 KB and fails both the
+  Lighthouse assertion and the baseline check. Twelve tests in
+  `tests/test_perf_baseline.py`.
 - `verify-ledger` blind-spot tests on hand-tampered fixtures: entries deleted
   from the tail verify clean, and a wholesale rewrite with recomputed hashes
   verifies clean. Both are documented limits of a keyless hash chain; the tests

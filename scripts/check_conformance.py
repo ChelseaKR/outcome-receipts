@@ -187,14 +187,19 @@ def doc_staleness_failures(root: Path, today: date) -> list[str]:
     happened to be this repository's own gates, only the portfolio-wide
     parser if it were ever pointed here.
 
-    Scoped to `_repo_markdown_files` (root `*.md` plus everything under
-    `docs/`, the same set `_link_failures` walks), not every Markdown file in
-    the tree -- `node_modules` and `.venv` carry vendored READMEs this check
-    has no business grading.
+    Scoped to `_stamped_markdown_files`: root `*.md`, everything under `docs/`,
+    and the other directories in this repository that carry authored prose with
+    a currency stamp. Not every Markdown file in the tree -- `node_modules` and
+    `.venv` carry vendored READMEs this check has no business grading.
+
+    `perf/README.md` is why this is a wider set than `_link_failures` walks. It
+    shipped a `Last verified:` line and a `Recheck cadence:` line that no gate
+    read, so the stamp was decorative: it could go years stale and stay green.
+    A stamp nothing reads is a claim nothing checks.
     """
 
     failures: list[str] = []
-    for path in _repo_markdown_files(root):
+    for path in _stamped_markdown_files(root):
         text = path.read_text(encoding="utf-8")
         verified_match = LAST_VERIFIED_RE.search(text)
         if verified_match is None:
@@ -251,6 +256,8 @@ REQUIRED = (
     "docs/data/organization-service-export.md",
     "docs/data/synthetic-fixtures.md",
     "docs/incidents/README.md",
+    "perf/baseline.json",
+    "perf/README.md",
     "docs/schema/report-spec.schema.json",
     "docs/schema/receipts.schema.json",
     "docs/schema/workflow-artifact.schema.json",
@@ -317,6 +324,21 @@ def _repo_markdown_files(root: Path) -> list[Path]:
     not vendored trees like `node_modules` or `.venv`."""
 
     return sorted((*root.glob("*.md"), *root.joinpath("docs").rglob("*.md")))
+
+
+# Directories beyond root and `docs/` that hold this repository's own authored
+# prose. A currency stamp in one of them is a claim, and this is the list that
+# makes it a checked one.
+_STAMPED_DIRS = ("perf",)
+
+
+def _stamped_markdown_files(root: Path) -> list[Path]:
+    """`_repo_markdown_files` plus the other directories carrying authored prose."""
+
+    extra: list[Path] = []
+    for name in _STAMPED_DIRS:
+        extra.extend(root.joinpath(name).rglob("*.md"))
+    return sorted({*_repo_markdown_files(root), *extra})
 
 
 def _link_failures() -> list[str]:
@@ -790,6 +812,73 @@ def _action_version_default(action_yml: str) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
+# The ROADMAP publishes the two live performance numbers in prose, beside an AUTO
+# label that asserts a gate checks them. `perf/baseline.json` is where they are
+# actually receipted, and nothing compared the two: the row could say 0.42 while
+# the baseline said 1.0 and every gate stayed green. `[0-9]` rather than `\d`, for
+# the reason `benchmark_claim_failures` states.
+_ROADMAP_LIGHTHOUSE_RE = re.compile(
+    r"\| Lighthouse performance \| ([0-9]+(?:\.[0-9]+)?) on the generated trace"
+)
+_ROADMAP_JS_BYTES_RE = re.compile(r"\| Script bytes on a published artifact \| ([0-9]+);")
+
+
+def perf_claim_failures(root: Path) -> list[str]:
+    """Check the performance figures docs/ROADMAP.md publishes against perf/baseline.json.
+
+    Fails closed on a claim it cannot read as well as on one that is wrong. A row
+    labelled AUTO states that something checks it; before this, nothing did.
+    """
+
+    baseline_path = root / "perf" / "baseline.json"
+    if not baseline_path.exists():
+        return [
+            "perf/baseline.json is missing, so the performance figures docs/ROADMAP.md "
+            "publishes cannot be checked"
+        ]
+    try:
+        metrics = json.loads(baseline_path.read_text(encoding="utf-8"))["metrics"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        return [f"perf/baseline.json cannot be read as a metrics object ({exc}), so the "
+                "performance figures docs/ROADMAP.md publishes cannot be checked"]
+
+    roadmap = (root / "docs" / "ROADMAP.md").read_text(encoding="utf-8")
+    failures: list[str] = []
+    for label, pattern, key, shape in (
+        (
+            "Lighthouse performance",
+            _ROADMAP_LIGHTHOUSE_RE,
+            "lighthouse_performance",
+            "<n> on the generated trace",
+        ),
+        (
+            "Script bytes on a published artifact",
+            _ROADMAP_JS_BYTES_RE,
+            "js_kb_gzip",
+            "<n>;",
+        ),
+    ):
+        match = pattern.search(roadmap)
+        if match is None:
+            failures.append(
+                f"docs/ROADMAP.md states no {label!r} figure in the form '{shape}', so the "
+                "claim cannot be checked against perf/baseline.json"
+            )
+            continue
+        recorded = metrics.get(key)
+        if recorded is None:
+            failures.append(
+                f"perf/baseline.json records no {key!r}, so the {label!r} figure "
+                "docs/ROADMAP.md publishes cannot be checked"
+            )
+        elif float(match.group(1)) != float(recorded):
+            failures.append(
+                f"docs/ROADMAP.md publishes {label!r} as {match.group(1)}; "
+                f"perf/baseline.json records {recorded}"
+            )
+    return failures
+
+
 def action_default_failures(root: Path) -> list[str]:
     """Check the action default `docs/ci-action.md` publishes against `action.yml`."""
 
@@ -941,6 +1030,7 @@ def main() -> int:
     failures.extend(security_declaration_failures(audits_text, waivers_text, ROOT / "vex.json"))
     failures.extend(doc_staleness_failures(ROOT, date.today()))
     failures.extend(benchmark_claim_failures(ROOT))
+    failures.extend(perf_claim_failures(ROOT))
     failures.extend(action_default_failures(ROOT))
     failures.extend(schema_version_failures(ROOT))
 

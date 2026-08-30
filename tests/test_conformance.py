@@ -18,6 +18,7 @@ from scripts.check_conformance import (
     action_default_failures,
     benchmark_claim_failures,
     doc_staleness_failures,
+    perf_claim_failures,
     schema_version_failures,
     security_declaration_failures,
     standards_index,
@@ -959,3 +960,98 @@ def test_the_standards_pin_is_named_the_same_way_in_all_three_places() -> None:
 
     assert checkout_refs == [pinned], (checkout_refs, pinned)
     assert asserted == [pinned], (asserted, pinned)
+
+
+# --- The published performance figures, checked against the committed baseline. ---
+
+
+def _perf_fixture(
+    root: Path, *, lighthouse: object, js_kb: object, claimed_lh: str, claimed_js: str
+) -> None:
+    """Write a baseline and the ROADMAP row that publishes its two numbers."""
+
+    (root / "perf").mkdir(parents=True, exist_ok=True)
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "perf" / "baseline.json").write_text(
+        json.dumps({"metrics": {"lighthouse_performance": lighthouse, "js_kb_gzip": js_kb}}),
+        encoding="utf-8",
+    )
+    (root / "docs" / "ROADMAP.md").write_text(
+        f"| Lighthouse performance | {claimed_lh} on the generated trace; floor 0.90 | AUTO |\n"
+        f"| Script bytes on a published artifact | {claimed_js}; the trace ships no JavaScript "
+        "| AUTO |\n",
+        encoding="utf-8",
+    )
+
+
+def test_perf_claim_failures_catches_a_figure_that_drifted_from_the_baseline() -> None:
+    # The row is labelled AUTO, which says a gate checks it. Before this check,
+    # the ROADMAP could publish 0.42 while perf/baseline.json recorded 1.0 and
+    # every gate stayed green.
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=1.0, js_kb=0, claimed_lh="0.42", claimed_js="0")
+
+    failures = perf_claim_failures(root)
+
+    assert len(failures) == 1
+    assert "publishes 'Lighthouse performance' as 0.42" in failures[0]
+    assert "records 1.0" in failures[0]
+
+
+def test_perf_claim_failures_catches_a_baseline_that_moved_under_the_prose() -> None:
+    # The other direction: the measurement is re-recorded and the prose is left
+    # behind. Same defect, opposite cause.
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=0.87, js_kb=0, claimed_lh="1.00", claimed_js="0")
+
+    failures = perf_claim_failures(root)
+
+    assert len(failures) == 1
+    assert "records 0.87" in failures[0]
+
+
+def test_perf_claim_failures_fails_closed_on_a_missing_baseline() -> None:
+    # A check that read nothing has verified nothing.
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=1.0, js_kb=0, claimed_lh="1.00", claimed_js="0")
+    (root / "perf" / "baseline.json").unlink()
+
+    assert perf_claim_failures(root) == [
+        "perf/baseline.json is missing, so the performance figures docs/ROADMAP.md "
+        "publishes cannot be checked"
+    ]
+
+
+def test_perf_claim_failures_fails_closed_on_an_unreadable_claim() -> None:
+    # A row that no longer states a number is not evidence the number is right.
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=1.0, js_kb=0, claimed_lh="1.00", claimed_js="0")
+    (root / "docs" / "ROADMAP.md").write_text(
+        "| Lighthouse performance | good, mostly | AUTO |\n", encoding="utf-8"
+    )
+
+    failures = perf_claim_failures(root)
+
+    assert len(failures) == 2
+    assert all("cannot be checked against perf/baseline.json" in failure for failure in failures)
+
+
+def test_perf_claim_failures_is_silent_when_the_figures_agree() -> None:
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=1.0, js_kb=0, claimed_lh="1.00", claimed_js="0")
+
+    assert perf_claim_failures(root) == []
+
+
+def test_perf_claim_is_true_of_the_real_committed_repository() -> None:
+    root = Path(__file__).resolve().parents[1]
+    assert perf_claim_failures(root) == []
+
+
+def test_the_perf_readme_currency_stamp_is_actually_read() -> None:
+    # perf/README.md sits outside root and docs/, so the staleness scan did not
+    # see it and its stamp was decorative. It is in scope now.
+    root = Path(__file__).resolve().parents[1]
+    assert (root / "perf" / "README.md").exists()
+    stale = doc_staleness_failures(root, date(2099, 1, 1))
+    assert any("perf/README.md" in failure for failure in stale)

@@ -499,7 +499,7 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Quality & Metrics | Applies — Definition of Done, committed eval with Wilson intervals, fail-closed gates, and project metrics ledger |
 | Incident Response | Applies — severity/label convention, private disclosure, secret-leak runbook, and committed-postmortem requirement |
 | Data Governance | Applies — L3 ephemeral input and L2 aggregate-output cards, retention boundary, lineage, and verified recovery procedure |
-| Performance | Applies — no performance budget or benchmark is committed in this repository yet; recorded here as an open gap, not as an exemption |
+| Performance | Applies — Lighthouse performance score and a zero-byte script budget on the generated trace, asserted from the one repository Lighthouse config, plus a committed `perf/baseline.json` and a direction-aware 10% regression gate (`make perf`); k6 latency is N/A with reason, there being no hosted route, and the reason is recorded in [perf/README.md](perf/README.md) rather than skipped |
 | AI-Development Measurement | Applies — no measurement artifact is committed in this repository yet; recorded here as an open gap, not as an exemption |
 
 ## License
