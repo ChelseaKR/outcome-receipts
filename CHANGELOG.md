@@ -401,6 +401,28 @@ release-hardening work completed before the first public tag.
   suppression it does not have. Directives are now read from real comment
   tokens. The marker scan stays line-based, because a marker left in a docstring
   is still one left behind, and `scripts/` is in scope for both.
+- **Five documents still described `main` as having no bypass actor.** The
+  committed ruleset and `docs/rulesets/README.md` were corrected when the
+  duplicate ruleset file was removed, but the claim survived in `AGENTS.md`
+  ("No admin bypass on `main`"), WVR-005's rationale in `waivers.yml`, and
+  three dated documents: `docs/CONFORMANCE-AUDIT-2026-07-12.md`,
+  `docs/audits/openssf-scorecard-2026-07-12.md`, and ADR 0002 ("direct pushes
+  are structurally blocked"). The live `protect-main` ruleset carries the
+  repository owner's standing bypass, `RepositoryRole` 5 with
+  `bypass_mode: always`, deliberately and permanently: an agent once applied a
+  ruleset with no bypass and locked the owner out of their own repository, and
+  restoring access took a sweep across eighteen repositories. An empty list is
+  not a stricter gate, it is the lockout, so a reader who trusted any of these
+  five and "restored" the empty list would be repeating the incident. `AGENTS.md`
+  and `waivers.yml` are corrected outright, being live instructions rather than
+  records. The three dated documents keep their original findings and gain a
+  dated correction note, because a record of what was believed on 2026-07-12 is
+  worth more than a silently amended one -- and the correction says why the
+  Scorecard number is unaffected, since Branch-Protection is capped here on the
+  solo-maintainer approval count (WVR-005), not on bypass actors.
+- `tests/test_ruleset_lockout.py` now pins those five corrections, so the claim
+  cannot drift back in the document a reader actually opens. It failed against
+  each of the five as they stood.
 - A metric whose `value_sql` returns SQL `NULL` now fails closed in
   `compute_figure` instead of becoming the number `0.0`. `AVG`/`SUM`/`MIN`/`MAX`
   over an empty filtered set, a division by a zero denominator, and a NULL join
