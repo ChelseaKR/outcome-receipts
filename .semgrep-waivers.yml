@@ -16,7 +16,7 @@ waivers:
     locations:
       - src/outcome_receipts/copy.py (packaged gettext catalog loading)
     added: 2026-07-12
-    last_reviewed: 2026-07-22
+    last_reviewed: 2026-08-28
     tracking_issue: https://github.com/ChelseaKR/outcome-receipts/issues/53
     reason: >
       The rule protects Python versions below 3.7. This package requires Python
@@ -24,12 +24,15 @@ waivers:
       packaged gettext catalogs without filesystem-path assumptions. A scan with
       nosemgrep disabled confirmed again on 2026-07-22 that Semgrep 1.168.0's
       combined p/default and p/python profile still reports this rule, so the
-      waiver remains necessary.
+      waiver remains necessary. 2026-08-28 review: repeated with the suppression
+      deleted. Semgrep 1.168.0 ran 320 rules over the file and reported this one
+      finding, at copy.py:8, so the waiver is still load-bearing and issue 53
+      cannot be closed yet.
   - rule_id: sqlalchemy-execute-raw-query
     locations:
       - src/outcome_receipts/engine.py (load_table, CREATE TABLE)
     added: 2026-07-10
-    last_reviewed: 2026-07-22
+    last_reviewed: 2026-08-28
     tracking_issue: https://github.com/ChelseaKR/outcome-receipts/issues/52
     reason: >
       Same false positive already documented for ruff's S608 on this function: `table` defaults
@@ -42,4 +45,10 @@ waivers:
       LoaderError — so the waiver covers the single remaining CREATE TABLE call.
       2026-07-22 review: every identifier still passes through _quote_ident, values
       still use sqlite parameters, comparison SQL still composes author-reviewed
-      MetricSpec queries, and mapping SQL remains an unexecuted review candidate.)
+      MetricSpec queries, and mapping SQL remains an unexecuted review candidate.
+      2026-08-28 review: repeated with the suppression deleted. The rule still
+      fires at engine.py:109. The same line also draws
+      python.lang.security.audit.formatted-sql-query, which is WARNING severity
+      and therefore outside the ERROR floor `make security-semgrep` blocks on;
+      it is recorded here because it is not covered by this waiver and a
+      reviewer raising that floor would meet it.)

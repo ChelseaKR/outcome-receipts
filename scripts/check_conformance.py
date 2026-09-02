@@ -395,7 +395,22 @@ def _waiver_date(
 #: The portfolio waiver schema's allowed `kind` values (WAIVERS-SCHEMA.md),
 #: mirrored from the portfolio-wide lint's VALID_KINDS so the two cannot
 #: silently diverge on what a waiver is allowed to claim to be.
-VALID_KINDS = ("semgrep", "vex", "pa11y", "na-in-flight", "other")
+PORTFOLIO_KINDS = ("semgrep", "vex", "pa11y", "na-in-flight", "other")
+
+#: This repository's own additional kind. `scripts/check_npm_audit.py` accepts a
+#: Node dependency advisory only from a waiver whose `kind` is exactly its
+#: `KIND` constant, and that string is not one the portfolio schema registers.
+#: Leaving it out of the allowed set made the two linters contradict each other:
+#: the only kind the npm gate can honour was a kind this one rejected, so the
+#: registry could never hold a usable npm-audit waiver, and the `npm-audit` arm
+#: of `DEPENDENCY_ADVISORY_KINDS` below could never fire against the real file.
+#: WVR-007, retired 2026-08-15, was the last such waiver; VALID_KINDS arrived
+#: 2026-08-21, so nothing had exercised the combination since.
+#: `test_valid_kinds_contains_the_kind_the_npm_audit_gate_requires` keeps this
+#: tied to `check_npm_audit.KIND` rather than to a second copy of the string.
+LOCAL_KINDS = ("npm-audit",)
+
+VALID_KINDS = PORTFOLIO_KINDS + LOCAL_KINDS
 
 #: WAIVERS-SCHEMA.md's waiver-id shape.
 WAIVER_ID_RE = re.compile(r"^WVR-\d{3,}$")

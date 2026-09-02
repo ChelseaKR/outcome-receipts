@@ -38,6 +38,31 @@ release-hardening work completed before the first public tag.
   verifies clean. Both are documented limits of a keyless hash chain; the tests
   keep the documentation honest in both directions. Middle-entry deletion and
   reordering, which the chain does detect, are now pinned too.
+- `scripts/check_semgrep_waivers.py`, run by `make hygiene`: `.semgrep-waivers.yml`
+  is now compared against the tree in both directions. Its header had asserted
+  since July that every entry there must have a matching inline suppression in
+  the code, and nothing checked it, so a row could outlive the suppression it
+  documented and an undocumented suppression could be added with every gate
+  still green. Both states were reproduced against the real repository, and in
+  both of them `check_source_hygiene.py` and `check_conformance.py` exited 0.
+  Python files are read through `tokenize`, so a directive quoted in a docstring
+  or a test fixture is not counted as a live suppression.
+  `tests/test_semgrep_ledger.py` covers a row with no suppression behind it, a
+  suppression with no row in front of it, a row naming a file that does not
+  carry it, an unqualified suppression, a missing field, an unparseable date,
+  and a missing ledger.
+- `src/outcome_receipts/py.typed`. Without the PEP 561 marker, every annotation
+  the package ships is discarded by a downstream type checker, and by this
+  repository's own `scripts/`, where mypy reported `module is installed, but
+  missing library stubs or py.typed marker` for all three modules that import
+  `outcome_receipts`. `tests/test_public_api.py` looks for the marker beside the
+  imported package, so an install that drops it fails as well.
+- `tests/test_source_hygiene.py`. `scripts/check_source_hygiene.py` had run on
+  every commit with no test of its own, so nothing distinguished "reported
+  nothing because the repository is clean" from "reported nothing because it
+  stopped looking".
+- `tests/test_gate_scope.py`, which fails if `make lint` or `make type` is
+  narrowed back to a scope that skips `scripts/`.
 - The AI-Development Measurement standard's scope declaration and the graduation
   dates its BASELINE state requires, closing the second open gap the README
   declared. `docs/ROADMAP.md` gains the `AI-DEV-MEASUREMENT: APPLIES` ledger
@@ -115,6 +140,13 @@ release-hardening work completed before the first public tag.
   closed on a missing file: an absent ledger used to verify as an empty chain
   and report PASS, so a mistyped `--ledger` path was a green check that had
   read nothing.
+- `.semgrep-waivers.yml`: both waivers re-reviewed on 2026-08-28 by deleting
+  each suppression and re-running the pinned scanner against the file. Both
+  rules still fire, so neither waiver can be retired and issue 53 stays open.
+  The `sqlalchemy-execute-raw-query` entry also now records
+  `python.lang.security.audit.formatted-sql-query`, which fires on the same line
+  at WARNING severity and so sits outside the ERROR floor
+  `make security-semgrep` blocks on.
 - Every `uv sync --frozen` is now `uv sync --locked`: the `make install` step,
   the Dockerfile's builder stage, and the setup commands in `README.md`,
   `AGENTS.md`, and `docs/drafting.md`. `uv lock --check` was already the drift
@@ -320,6 +352,31 @@ release-hardening work completed before the first public tag.
   the sentence `docs/SPEC-STABILITY.md` states. All three agree today;
   `schema_version_failures` is what keeps them agreeing, and fails closed when
   the sentence stops being readable.
+- `scripts/check_conformance.py` allowed no waiver kind that
+  `scripts/check_npm_audit.py` could honour. The npm gate accepts a Node
+  dependency advisory only from a waiver whose `kind` is `npm-audit`, and
+  `VALID_KINDS` did not list that string, so granting one would make
+  `make security-npm` accept the advisory while `make hygiene` rejected the
+  registry in the same `make verify` run. The `npm-audit` arm of
+  `DEPENDENCY_ADVISORY_KINDS`, which drives the issue-96 VEX cross-check, could
+  therefore never fire against a registry this repository would accept, and the
+  four tests written against that fixture described a state its sibling gate
+  rejects. Nothing had exercised the combination: WVR-007, the only npm-audit
+  waiver ever granted here, was retired on 2026-08-15, and `VALID_KINDS` arrived
+  on 2026-08-21. `test_valid_kinds_contains_the_kind_the_npm_audit_gate_requires`
+  reads the constant from `check_npm_audit` instead of restating it.
+- `make lint` and `make type` now cover `scripts/`. Every merge-blocking gate
+  except the test suite is implemented in that directory, and neither tool
+  looked at it. An unused import, a shadowed name and a type error injected into
+  `scripts/check_source_hygiene.py` passed `ruff check src tests` and the
+  config-driven `mypy` with exit 0. Type checking runs as two invocations,
+  because one combined run cannot resolve the same file as both
+  `check_conformance` and `scripts.check_conformance`.
+- `scripts/check_source_hygiene.py` read suppression directives out of string
+  literals, so a test that exercises suppression handling was flagged for a
+  suppression it does not have. Directives are now read from real comment
+  tokens. The marker scan stays line-based, because a marker left in a docstring
+  is still one left behind, and `scripts/` is in scope for both.
 - A metric whose `value_sql` returns SQL `NULL` now fails closed in
   `compute_figure` instead of becoming the number `0.0`. `AVG`/`SUM`/`MIN`/`MAX`
   over an empty filtered set, a division by a zero denominator, and a NULL join
