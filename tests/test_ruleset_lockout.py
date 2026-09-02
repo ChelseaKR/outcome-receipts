@@ -189,3 +189,77 @@ def test_the_ruleset_readme_names_the_bypass_the_files_carry() -> None:
     doc = (ROOT / "docs" / "rulesets" / "README.md").read_text(encoding="utf-8")
     for fragment in ('"actor_id": 5', "RepositoryRole", "always"):
         assert fragment in doc, f"docs/rulesets/README.md does not name {fragment!r}"
+
+
+# --- The claim, in the five other documents that made it. ---
+#
+# Correcting the ruleset file and the README beside it left the same claim
+# standing in five places a reader is at least as likely to open: the agent
+# instructions, a waiver rationale, two dated audits and an ADR. A person who
+# trusted any of them and "restored" the empty bypass list would be repeating
+# the incident the field exists to prevent, and nothing in this repository read
+# those documents at all.
+#
+# Two kinds of correction, and the difference is deliberate. `AGENTS.md` and
+# `waivers.yml` are live instructions, so they are corrected outright. The three
+# dated documents are records of what was believed on a stated day, so they keep
+# their original findings and carry a dated note instead -- a record silently
+# amended is worth less than one that shows its own correction.
+
+#: (path, wording that must no longer stand, wording the correction must supply).
+#: The retracted phrases are the exact wording each document carried, so putting
+#: one back turns this red. `None` means the document is a dated record whose
+#: original finding stays: it is corrected by the note beside it, never by an
+#: edit, and `test_the_dated_records_keep_their_original_findings` below is the
+#: half that enforces that direction.
+_BYPASS_CLAIM_CORRECTIONS = (
+    ("AGENTS.md", "no admin bypass on `main`", "bypass_mode: always"),
+    ("waivers.yml", "strict checks, and no bypass", "one bypass"),
+    ("docs/CONFORMANCE-AUDIT-2026-07-12.md", None, "**Correction, 2026-08-28.**"),
+    ("docs/audits/openssf-scorecard-2026-07-12.md", None, "**Correction, 2026-08-28.**"),
+    ("docs/adr/0002-solo-maintainer-review-count.md", None, "**Note, 2026-08-28.**"),
+)
+
+
+@pytest.mark.parametrize(("name", "retracted", "required"), _BYPASS_CLAIM_CORRECTIONS)
+def test_no_document_still_claims_main_has_no_bypass_actor(
+    name: str, retracted: str | None, required: str
+) -> None:
+    path = ROOT / name
+    if not path.is_file():
+        pytest.fail(f"{name} is missing; this test reads a document that must exist")
+    text = path.read_text(encoding="utf-8")
+
+    if retracted is not None:
+        assert retracted.lower() not in text.lower(), (
+            f"{name} still asserts {retracted!r}. The live ruleset carries the owner's "
+            f"standing bypass {OWNER_BYPASS}; an empty list is not a stricter gate, it is "
+            "the lockout."
+        )
+    assert required.lower() in text.lower(), (
+        f"{name} no longer carries {required!r}, so the correction to its bypass claim "
+        "has been dropped"
+    )
+
+
+def test_the_dated_records_keep_their_original_findings() -> None:
+    """A dated audit is corrected by a note, never by an edit.
+
+    The positive control for the test above: it would also pass if someone
+    deleted the original sentence and left only the correction, which would make
+    the note describe a claim no longer in the document and quietly rewrite what
+    was found on 2026-07-12.
+    """
+    audit = (ROOT / "docs" / "audits" / "openssf-scorecard-2026-07-12.md").read_text(
+        encoding="utf-8"
+    )
+    assert "and no bypass" in audit, (
+        "the Branch-Protection row's original wording was edited away rather than "
+        "corrected by the dated note beneath it"
+    )
+    conformance = (ROOT / "docs" / "CONFORMANCE-AUDIT-2026-07-12.md").read_text(encoding="utf-8")
+    assert "without bypass" in conformance
+    adr = (ROOT / "docs" / "adr" / "0002-solo-maintainer-review-count.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Direct pushes are structurally blocked" in adr

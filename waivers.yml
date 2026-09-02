@@ -34,7 +34,9 @@ waivers:
     reason: >-
       OpenSSF Branch-Protection scores 4 because GitHub cannot count the sole
       maintainer's self-review. The live ruleset still requires pull requests,
-      signed linear history, resolved threads, strict checks, and no bypass.
+      signed linear history, resolved threads, and strict checks. Its one bypass
+      actor is the repository owner, kept deliberately and permanently after an
+      agent's no-bypass ruleset locked the owner out (docs/rulesets/README.md).
       ADR 0002 requires raising the review count when a second maintainer exists.
     owner: chelseakr
     granted: 2026-07-12
