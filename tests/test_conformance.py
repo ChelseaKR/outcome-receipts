@@ -18,6 +18,7 @@ from scripts.check_conformance import (
     _readme_standards_rows,
     _standards_table_failures,
     action_default_failures,
+    ai_dev_measurement_failures,
     benchmark_claim_failures,
     doc_staleness_failures,
     perf_claim_failures,
@@ -1114,3 +1115,134 @@ def test_the_perf_readme_currency_stamp_is_actually_read() -> None:
     assert (root / "perf" / "README.md").exists()
     stale = doc_staleness_failures(root, date(2099, 1, 1))
     assert any("perf/README.md" in failure for failure in stale)
+
+
+# --- The AI-Development Measurement scope line and its BASELINE graduation dates. ---
+
+
+def _roadmap(body: str) -> Path:
+    root = Path(tempfile.mkdtemp())
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "ROADMAP.md").write_text(body, encoding="utf-8")
+    return root
+
+
+_TODAY = date(2026, 9, 1)
+
+
+def test_ai_dev_measurement_flags_a_missing_scope_declaration() -> None:
+    # The state main was in: the ledger held the delivery numbers but never said
+    # whether the standard applies here, so nobody could tell an unmeasured
+    # repository from an undeclared one.
+    root = _roadmap("| Branch coverage | 90% | AUTO |\n")
+
+    failures = ai_dev_measurement_failures(root, _TODAY)
+
+    assert len(failures) == 1
+    assert "carries no 'AI-DEV-MEASUREMENT: APPLIES'" in failures[0]
+
+
+def test_ai_dev_measurement_flags_a_baseline_row_with_no_graduation_date() -> None:
+    # A metric parked in BASELINE with no date is one nobody has committed to
+    # ever decide about, which the standard treats exactly as an aspirational row.
+    root = _roadmap(
+        "AI-DEV-MEASUREMENT: APPLIES\n"
+        "| Change lead time | 149.8 hours median | BASELINE |\n"
+        "| Churn ratio | 0.074 | BASELINE until 2026-10-11 |\n"
+    )
+
+    failures = ai_dev_measurement_failures(root, _TODAY)
+
+    assert len(failures) == 1
+    assert "'Change lead time'" in failures[0]
+    assert "no graduation date" in failures[0]
+
+
+def test_a_measurement_date_elsewhere_in_the_row_is_not_a_graduation_date() -> None:
+    # The first bug this check shipped with. Every row in the real ledger states
+    # the date its number was measured, so a row-wide date search finds one on
+    # every row and the undated-BASELINE arm could never fire against the
+    # document it exists to read. The date has to come out of the gate cell.
+    root = _roadmap(
+        "AI-DEV-MEASUREMENT: APPLIES\n"
+        "| Change lead time | 149.8 hours median, collected 2026-07-11 | BASELINE |\n"
+    )
+
+    failures = ai_dev_measurement_failures(root, _TODAY)
+
+    assert len(failures) == 1
+    assert "'Change lead time'" in failures[0]
+    assert "no graduation date" in failures[0]
+
+
+def test_a_graduation_date_that_has_passed_is_a_failure() -> None:
+    # The second bug, and the one that made this a check that stops being able
+    # to fail. Asking only whether a date is present means every dated row goes
+    # permanently green the day after the date it printed, which is the metric
+    # sitting in BASELINE indefinitely -- the exact condition the undated arm's
+    # own failure message says must not be possible.
+    root = _roadmap(
+        "AI-DEV-MEASUREMENT: APPLIES\n| Churn ratio | 0.074 | BASELINE until 2026-10-11 |\n"
+    )
+
+    assert ai_dev_measurement_failures(root, date(2026, 10, 11)) == []
+
+    overdue = ai_dev_measurement_failures(root, date(2026, 10, 12))
+    assert len(overdue) == 1
+    assert "'Churn ratio'" in overdue[0]
+    assert "passed on 2026-10-12" in overdue[0]
+
+
+def test_an_unreadable_graduation_date_fails_rather_than_passing() -> None:
+    # A date-shaped string that is not a date is not evidence the decision is
+    # scheduled; it is a claim this check cannot read.
+    root = _roadmap(
+        "AI-DEV-MEASUREMENT: APPLIES\n| Churn ratio | 0.074 | BASELINE until 2026-13-40 |\n"
+    )
+
+    failures = ai_dev_measurement_failures(root, _TODAY)
+
+    assert len(failures) == 1
+    assert "not a real date" in failures[0]
+
+
+def test_ai_dev_measurement_accepts_a_declared_na() -> None:
+    root = _roadmap("AI-DEV-MEASUREMENT: N/A - no AI tooling participates here, 2026-08-27\n")
+
+    assert ai_dev_measurement_failures(root, _TODAY) == []
+
+
+def test_ai_dev_measurement_fails_closed_without_a_roadmap() -> None:
+    assert ai_dev_measurement_failures(Path(tempfile.mkdtemp()), _TODAY) == [
+        "docs/ROADMAP.md is missing, so the AI-DEV-MEASUREMENT scope cannot be checked"
+    ]
+
+
+def test_ai_dev_measurement_is_silent_against_the_real_committed_roadmap() -> None:
+    # The one that would have been red on main. Pinned to a fixed day rather
+    # than date.today(), so this asserts the ledger is conformant rather than
+    # quietly turning into a countdown to 2026-10-11; the gate itself runs on
+    # the real date, which is where the countdown belongs.
+    root = Path(__file__).resolve().parents[1]
+    assert ai_dev_measurement_failures(root, _TODAY) == []
+
+
+def test_every_baseline_row_in_the_real_roadmap_will_fail_once_its_date_passes() -> None:
+    # The real ledger read through the real check: on 2026-10-12 every row that
+    # is parked in BASELINE today reports overdue. Without this, "the gate can
+    # fail" would be a claim about a fixture rather than about the document.
+    root = Path(__file__).resolve().parents[1]
+    roadmap = (root / "docs" / "ROADMAP.md").read_text(encoding="utf-8")
+    parked = [
+        line
+        for line in roadmap.splitlines()
+        if line.startswith("|")
+        and line.rstrip().endswith("|")
+        and "BASELINE" in line.split("|")[-2]
+    ]
+    assert parked, "the ledger records no BASELINE rows, so this test proves nothing"
+
+    overdue = ai_dev_measurement_failures(root, date(2026, 10, 12))
+
+    assert len(overdue) == len(parked)
+    assert all("passed on 2026-10-12" in failure for failure in overdue)
