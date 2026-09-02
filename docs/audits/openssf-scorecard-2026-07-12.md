@@ -27,7 +27,7 @@ locked the owner out of their own repository, and restoring access took a
 sweep across eighteen repositories. The finding is left as it was written
 rather than edited, and the score is unaffected: Scorecard caps
 Branch-Protection here on the solo-maintainer approval count (WVR-005), not on
-bypass actors. See `docs/rulesets/README.md`, "Why the owner can bypass". The
+bypass actors. See `docs/rulesets/README.md`. The
 same correction applies to the same claim in
 `docs/CONFORMANCE-AUDIT-2026-07-12.md`.
 

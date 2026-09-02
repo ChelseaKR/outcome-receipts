@@ -288,3 +288,90 @@ def test_a_withheld_point_carries_no_value_into_the_chart_data() -> None:
     assert chart.points[0].suppressed is True
     assert chart.points[0].withheld is True
     assert chart.data_table.endswith("| withheld | [SUPPRESSED] |")
+
+
+# --- Real negative values: a decrease is not a zero, and it is not a magnitude. ---
+
+
+def _delta_figures() -> list[Figure]:
+    """Two comparison-shaped delta figures: signed value, magnitude-only display.
+
+    This is exactly what ``comparison.compute_comparison`` produces. ``value``
+    carries the signed change and ``display`` is ``_magnitude_display``, the
+    absolute change, because the direction is reported as a word on
+    ``ComparisonRow`` rather than as a sign in the figure. Nothing stops a
+    ``[[charts]]`` block from naming one: the delta figures are ordinary members
+    of the flat figure list a run builds.
+    """
+
+    return [_figure("exits_permanent__delta", -12.0, "12"), _figure("intake__delta", 8.0, "8")]
+
+
+def test_a_negative_bar_value_is_refused_instead_of_drawn_as_a_zero() -> None:
+    # A decrease of 12 used to draw as height="0.0", flush on the baseline, with
+    # its own text label and <title> both correctly reading 12. The bar claimed
+    # "no change" while the receipt said -12 and the label said 12.
+    spec = ChartSpec(
+        chart_id="change",
+        title="Change by category",
+        kind="bar",
+        metric_ids=("exits_permanent__delta", "intake__delta"),
+        labels=("Decreased", "Increased"),
+    )
+    with pytest.raises(ValueError, match="exits_permanent__delta"):
+        render_chart(spec, _delta_figures())
+
+
+def test_a_negative_line_value_is_refused_too() -> None:
+    # The line path put the same point at y=668.0 on a canvas 360 high: outside
+    # the image entirely, with a polyline running off the bottom to reach it.
+    spec = ChartSpec(
+        chart_id="change-line",
+        title="Change over time",
+        kind="line",
+        metric_ids=("exits_permanent__delta", "intake__delta"),
+        labels=("Decreased", "Increased"),
+    )
+    with pytest.raises(ValueError, match="exits_permanent__delta"):
+        render_chart(spec, _delta_figures())
+
+
+def test_the_refusal_names_the_value_and_says_what_to_do() -> None:
+    # The author has to be able to act on it, so the message carries the metric,
+    # the value, and the reason a chart cannot render a signed figure: the only
+    # string a chart may draw is the figure display, and a delta display is the
+    # unsigned magnitude by design.
+    spec = ChartSpec(
+        chart_id="change",
+        title="Change by category",
+        kind="bar",
+        metric_ids=("exits_permanent__delta",),
+        labels=("Decreased",),
+    )
+    with pytest.raises(ValueError) as excinfo:
+        render_chart(spec, _delta_figures())
+
+    message = str(excinfo.value)
+    assert "'change'" in message
+    assert "exits_permanent__delta" in message
+    assert "-12" in message
+
+
+def test_a_true_zero_still_draws_and_is_not_refused() -> None:
+    # The control. Zero is a real, publishable value and draws a zero-height bar
+    # on the baseline, which is the truthful geometry for it. It passes before and
+    # after the refusal, so a red result above is the negative-value defect and
+    # not a check that swallowed the zero case with it.
+    spec = ChartSpec(
+        chart_id="zero",
+        title="Exits by destination",
+        kind="bar",
+        metric_ids=("none", "some"),
+        labels=("None", "Some"),
+    )
+    figures = [_figure("none", 0.0, "0"), _figure("some", 4.0, "4")]
+
+    chart = render_chart(spec, figures)
+
+    assert 'height="0.0"' in chart.svg
+    assert [point.value for point in chart.points] == [0.0, 4.0]

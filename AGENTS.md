@@ -5,8 +5,8 @@
 
 ## What this is
 
-`outcome-receipts` drafts a funder outcome report in which **every number is a
-receipt**. It connects to a nonprofit's own service data, computes each required
+`outcome-receipts` drafts a funder outcome report in which **every reported
+figure is a receipt**. It connects to a nonprofit's own service data, computes each required
 figure with a deterministic query, and attaches to that figure a receipt: the
 exact query, the row count, a content hash of the data slice it was computed
 from, and a timestamp. A drafting step writes narrative prose around the
@@ -135,7 +135,7 @@ repo commits to:
   a ruleset with no bypass and locked the owner out of their own repository,
   and restoring access took a sweep across eighteen repositories. An empty
   list there is not a stricter gate, it is the lockout, so never "restore"
-  one. See `docs/rulesets/README.md`, "Why the owner can bypass".
+  one. See `docs/rulesets/README.md`.
 * **Documentation.** README with a Standards Conformance table (every standard
   marked Applies or N/A-with-reason). MADR-format ADRs in `docs/decisions/`.
   Keep a Changelog. `CITATION.cff`, `SECURITY.md`, `CONTRIBUTING.md`.

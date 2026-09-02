@@ -2,29 +2,57 @@
 
 from __future__ import annotations
 
+import json
+import re
+import shutil
+import tempfile
 from datetime import date
 from pathlib import Path
 
 import pytest
 from scripts.check_conformance import (
+    DEPENDENCY_ADVISORY_KINDS,
     FALLBACK_STANDARDS,
+    VALID_KINDS,
     StandardsIndexError,
     _readme_standards_rows,
     _standards_table_failures,
+    action_default_failures,
+    ai_dev_measurement_failures,
+    benchmark_claim_failures,
     doc_staleness_failures,
+    perf_claim_failures,
+    schema_version_failures,
     security_declaration_failures,
     standards_index,
     waiver_failures,
 )
+from scripts.check_npm_audit import KIND as NPM_AUDIT_KIND
 
-# A frozen, verbatim copy of the 15 standard-registry lines from the pinned
-# portfolio standards repo's controls.yml, as of the version this repository
-# pins in .standards-version. This is what a real `--standards-dir` checkout
+# A frozen, verbatim copy of the 15 standard-registry lines from the portfolio
+# standards repo's controls.yml. This is what a real `--standards-dir` checkout
 # looks like; the test below proves the vendored FALLBACK_STANDARDS literal
-# (used by the self-contained `make verify`) agrees with it. It is a frozen
-# snapshot, not a live read: keeping it in sync with the real registry is the
-# job of the "portfolio standards" CI job, which runs against the live
-# checkout, not this test's job.
+# (used by the self-contained `make verify`) agrees with it.
+#
+# It is not a snapshot of the version this repository pins, and saying so would
+# be worse than saying nothing. `.standards-version` pins v1.0.1, and
+# controls.yml did not exist yet at v1.0.1; it arrived with FIX-01 on
+# 2026-07-11. So this snapshot is of a later registry than the pin names, and
+# the consequence is worth stating where a reader will meet it: the "portfolio
+# standards" CI job checks the pinned ref out and runs
+# `check_conformance.py --standards-dir .standards` against it, that checkout
+# has no controls.yml, and `standards_index` therefore warns and falls back to
+# the vendored literal. The job passes in a few seconds having compared the
+# README against the same hardcoded list DOC-11 set out to stop trusting.
+#
+# Nothing is currently checking either copy against a live registry. This test
+# compares two copies in this repository, which catches an edit to one of them
+# and nothing else, and that is all it can claim. The live cross-check starts
+# working when `.standards-version` moves to a version that carries
+# controls.yml, which is a deliberate portfolio-pin decision with repository-wide
+# scope, recorded in `standards_index`'s own warning text rather than made here.
+# `test_the_standards_pin_is_named_the_same_way_in_all_three_places` below keeps
+# the pin's three copies from drifting in the meantime.
 _CONTROLS_YML_STANDARDS_SNAPSHOT = """
 standards:
   CQ:   { file: CODE-QUALITY-STANDARD.md,            title: "Code Quality Standard" }
@@ -149,11 +177,16 @@ def test_standards_index_derives_from_a_pinned_checkouts_controls_yml(tmp_path: 
 
 def test_fallback_standards_literal_matches_a_frozen_snapshot_of_the_pinned_index() -> None:
     # Restates the above from the other direction: the vendored fallback list
-    # is not free-standing prose, it is required to equal what a real pinned
-    # checkout's controls.yml derives to. If the portfolio index ever adds,
-    # renames, or retires a standard, this snapshot (and FALLBACK_STANDARDS)
-    # need a deliberate update -- exactly the kind of drift DOC-11 exists to
-    # surface rather than silently outlive.
+    # is not free-standing prose, it is required to equal what a real
+    # controls.yml derives to. If the portfolio index ever adds, renames, or
+    # retires a standard, this snapshot (and FALLBACK_STANDARDS) need a
+    # deliberate update.
+    #
+    # Both copies live in this repository, so this catches an edit to one of
+    # them and cannot catch the portfolio registry moving underneath both. See
+    # the note on _CONTROLS_YML_STANDARDS_SNAPSHOT: the job that was meant to
+    # make that comparison live runs against a pinned checkout with no
+    # controls.yml.
     assert len(FALLBACK_STANDARDS) == 15
     assert {
         "Code Quality",
@@ -584,6 +617,62 @@ def test_security_declaration_ignores_an_expired_dependency_waiver() -> None:
 
 
 # ---------------------------------------------------------------------------
+# The two waiver linters have to agree on what a waiver may be. They did not.
+# `scripts/check_npm_audit.py` accepts a Node dependency advisory only from a
+# waiver whose kind is exactly its `KIND`; `VALID_KINDS` here did not list that
+# string, so the only kind the npm gate could honour was one this gate rejected.
+# A registry holding the fixture above -- the one four §F tests are written
+# against -- failed `waiver_failures` with "unknown kind", which means the
+# `npm-audit` arm of DEPENDENCY_ADVISORY_KINDS could never fire against a
+# registry this repository would accept. Nothing caught it because WVR-007, the
+# only npm-audit waiver ever granted here, was retired on 2026-08-15 and
+# VALID_KINDS was introduced on 2026-08-21.
+# ---------------------------------------------------------------------------
+
+
+def test_valid_kinds_contains_the_kind_the_npm_audit_gate_requires() -> None:
+    # Read from check_npm_audit rather than restated, so the two constants
+    # cannot drift apart again without this failing.
+    assert NPM_AUDIT_KIND in VALID_KINDS, (
+        f"scripts/check_npm_audit.py accepts a dependency advisory only from a "
+        f"{NPM_AUDIT_KIND!r} waiver, but the waiver lint rejects that kind, so "
+        "no npm-audit waiver can ever be valid in this repository"
+    )
+
+
+def test_every_dependency_advisory_kind_is_a_kind_the_waiver_lint_accepts() -> None:
+    # security_declaration_failures branches on these kinds. A kind the schema
+    # check rejects makes its branch unreachable for the real waivers.yml.
+    unusable = [kind for kind in DEPENDENCY_ADVISORY_KINDS if kind not in VALID_KINDS]
+    assert unusable == [], (
+        f"{unusable} drive the §F VEX cross-check but are rejected by the waiver "
+        "schema check, so that arm can never fire against the committed registry"
+    )
+
+
+def test_the_npm_audit_fixture_registry_is_one_the_waiver_lint_accepts(tmp_path: Path) -> None:
+    # The same text four §F tests are written against, put through the sibling
+    # gate that runs on the same file in the same `make hygiene` invocation.
+    registry = tmp_path / "waivers.yml"
+    registry.write_text(_waivers_with_live_npm_audit_waiver(), encoding="utf-8")
+
+    assert waiver_failures(registry) == []
+
+
+def test_the_waiver_lint_still_rejects_a_near_miss_of_the_local_kind(tmp_path: Path) -> None:
+    # Accepting `npm-audit` must not have turned the kind check into a rubber
+    # stamp: an underscore instead of a hyphen is still an unknown kind, and
+    # check_npm_audit.py would not honour it either.
+    registry = tmp_path / "waivers.yml"
+    registry.write_text(
+        _waivers_with_live_npm_audit_waiver().replace("kind: npm-audit", "kind: npm_audit"),
+        encoding="utf-8",
+    )
+
+    assert any("unknown kind 'npm_audit'" in failure for failure in waiver_failures(registry))
+
+
+# ---------------------------------------------------------------------------
 # Issue 93/DOC-15: this repository's own `Last verified:` stamps were never
 # mechanically checked -- the portfolio's own staleness parser only scans the
 # vendored `.standards` checkout -- and all fourteen used a `Recheck:` label
@@ -681,3 +770,479 @@ def test_doc_staleness_is_silent_against_the_real_committed_docs() -> None:
     # interval keyword.
     root = Path(__file__).resolve().parents[1]
     assert doc_staleness_failures(root, date.today()) == []
+
+
+# --- The documented benchmark size, checked against the benchmark that ships. ---
+
+
+def _benchmark_fixture(root: Path, *, cases: int, spanish_from: int, failures: int) -> None:
+    """Write a benchmark file with a known shape, plus the docs the check reads."""
+
+    (root / "eval").mkdir(parents=True, exist_ok=True)
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "RESPONSIBLE-TECH-AUDITS.md").write_text(
+        f"the {cases}-case benchmark includes planted EN/ES failures.\n", encoding="utf-8"
+    )
+    lines = []
+    for index in range(cases):
+        lines.append(
+            json.dumps(
+                {
+                    "id": f"case-{index}",
+                    "language": "es" if index >= spanish_from else "en",
+                    "should_pass": index >= failures,
+                }
+            )
+        )
+    (root / "eval" / "grounding-benchmark.jsonl").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+
+
+def test_benchmark_claim_failures_catches_the_stale_count() -> None:
+    # The real drift this check exists for. Both documents said "100 cases,
+    # 50 EN, 50 ES, 50 planted failures" for two months after PR #89 added the
+    # 32-case formatting family, because a prose count is exactly the kind of
+    # claim no gate reads.
+    root = Path(tempfile.mkdtemp())
+    _benchmark_fixture(root, cases=132, spanish_from=66, failures=66)
+    (root / "README.md").write_text("a 100-case bilingual grounding benchmark\n", encoding="utf-8")
+    (root / "docs" / "RESPONSIBLE-TECH-AUDITS.md").write_text(
+        "the 100-case benchmark includes planted EN/ES failures.\n", encoding="utf-8"
+    )
+    (root / "docs" / "ROADMAP.md").write_text(
+        "| Bilingual benchmark | 100 committed cases: 50 EN, 50 ES; 50 planted unbound "
+        "failures all rejected | AUTO |\n",
+        encoding="utf-8",
+    )
+
+    failures = benchmark_claim_failures(root)
+
+    assert len(failures) == 3
+    assert "README.md claims a 100-case" in failures[0]
+    assert "holds 132" in failures[0]
+    assert "docs/RESPONSIBLE-TECH-AUDITS.md claims a 100-case" in failures[1]
+    assert "holds 132" in failures[1]
+    assert "100 cases / 50 EN / 50 ES / 50 planted failures" in failures[2]
+    assert "132 / 66 / 66 / 66" in failures[2]
+
+
+def test_benchmark_claim_failures_fails_closed_on_an_unreadable_claim() -> None:
+    # A sentence that no longer matches the shape is not evidence that the count
+    # is right. It is a claim the check can no longer read, which is how the
+    # stale one survived, so it fails rather than passing silently.
+    root = Path(tempfile.mkdtemp())
+    _benchmark_fixture(root, cases=4, spanish_from=2, failures=2)
+    (root / "README.md").write_text("a bilingual grounding benchmark of some size\n", "utf-8")
+    (root / "docs" / "RESPONSIBLE-TECH-AUDITS.md").write_text("the benchmark has cases\n", "utf-8")
+    (root / "docs" / "ROADMAP.md").write_text("| Bilingual benchmark | lots | AUTO |\n", "utf-8")
+
+    failures = benchmark_claim_failures(root)
+
+    assert len(failures) == 3
+    assert all("cannot be checked" in failure for failure in failures)
+
+
+def test_benchmark_claim_failures_rejects_a_count_written_in_exotic_digits() -> None:
+    # `\d` matches every Unicode decimal digit and `int()` converts them, so a
+    # count written in fullwidth digits would have parsed and compared equal.
+    # `[0-9]` makes it unreadable instead, which fails closed.
+    root = Path(tempfile.mkdtemp())
+    _benchmark_fixture(root, cases=4, spanish_from=2, failures=2)
+    (root / "README.md").write_text("a \uff14-case bilingual grounding benchmark\n", "utf-8")
+    (root / "docs" / "ROADMAP.md").write_text(
+        "| Bilingual benchmark | 4 committed cases: 2 EN, 2 ES; 2 planted unbound failures "
+        "all rejected | AUTO |\n",
+        encoding="utf-8",
+    )
+
+    failures = benchmark_claim_failures(root)
+
+    assert failures == [
+        "README.md states no benchmark size in the form '<n>-case bilingual grounding "
+        "benchmark', so the claim cannot be checked against eval/grounding-benchmark.jsonl"
+    ]
+
+
+def test_benchmark_claim_failures_is_silent_when_the_claims_are_true() -> None:
+    root = Path(tempfile.mkdtemp())
+    # The fixture writes a matching docs/RESPONSIBLE-TECH-AUDITS.md.
+    _benchmark_fixture(root, cases=4, spanish_from=2, failures=2)
+    (root / "README.md").write_text("a 4-case bilingual grounding benchmark\n", encoding="utf-8")
+    (root / "docs" / "ROADMAP.md").write_text(
+        "| Bilingual benchmark | 4 committed cases: 2 EN, 2 ES; 2 planted unbound failures "
+        "all rejected | AUTO |\n",
+        encoding="utf-8",
+    )
+
+    assert benchmark_claim_failures(root) == []
+
+
+def test_benchmark_claim_is_true_of_the_real_committed_repository() -> None:
+    # The one that would have been red on main: the committed README and ROADMAP
+    # against the committed benchmark file.
+    root = Path(__file__).resolve().parents[1]
+    assert benchmark_claim_failures(root) == []
+
+
+# --- The published action default, and the three schema versions. ---
+
+
+def _action_fixture(root: Path, *, actual: str, table: str, prose: str) -> None:
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "action.yml").write_text(
+        "inputs:\n"
+        "  config:\n"
+        "    required: true\n"
+        "  version:\n"
+        "    description: >-\n"
+        "      Package version to install.\n"
+        "    required: false\n"
+        f'    default: "{actual}"\n',
+        encoding="utf-8",
+    )
+    (root / "docs" / "ci-action.md").write_text(
+        f"| `version`  | no       | `{table}` | Git ref to install. |\n"
+        f"\n- **The `version` input** defaults to `{prose}`, the tag named in "
+        "[`action.yml`](../action.yml).\n",
+        encoding="utf-8",
+    )
+
+
+def test_action_default_failures_catches_documentation_left_on_the_old_tag() -> None:
+    # The real drift: action.yml moved to v0.2.0 and docs/ci-action.md kept
+    # publishing v0.1.0 in its Inputs table and "the first released tag" in the
+    # prose, so a reader copying the table installed the wrong CLI.
+    root = Path(tempfile.mkdtemp())
+    _action_fixture(root, actual="v0.2.0", table="v0.1.0", prose="v0.1.0")
+
+    failures = action_default_failures(root)
+
+    assert len(failures) == 2
+    assert "its Inputs table" in failures[0]
+    assert "defaults to v0.1.0; action.yml sets v0.2.0" in failures[0]
+    assert "the prose under Pinning" in failures[1]
+
+
+def test_action_default_failures_fails_closed_on_an_unreadable_action() -> None:
+    # Two defaults inside the version block, or none, means the check cannot tell
+    # which one ships. That is not evidence the documented default is right.
+    root = Path(tempfile.mkdtemp())
+    _action_fixture(root, actual="v0.2.0", table="v0.2.0", prose="v0.2.0")
+    (root / "action.yml").write_text("inputs:\n  config:\n    required: true\n", encoding="utf-8")
+
+    failures = action_default_failures(root)
+
+    assert failures == [
+        "action.yml no longer states one unambiguous default for its `version` input, "
+        "so the default docs/ci-action.md publishes cannot be checked against it"
+    ]
+
+
+def test_action_default_failures_is_silent_when_the_documentation_agrees() -> None:
+    root = Path(tempfile.mkdtemp())
+    _action_fixture(root, actual="v0.2.0", table="v0.2.0", prose="v0.2.0")
+
+    assert action_default_failures(root) == []
+
+
+def test_action_default_is_true_of_the_real_committed_repository() -> None:
+    root = Path(__file__).resolve().parents[1]
+    assert action_default_failures(root) == []
+
+
+def test_schema_versions_are_true_of_the_real_committed_repository() -> None:
+    # Three homes per contract: the constant the code writes, the `const` the
+    # published JSON Schema pins, and the sentence docs/SPEC-STABILITY.md states.
+    # Nothing compared them before.
+    root = Path(__file__).resolve().parents[1]
+    assert schema_version_failures(root) == []
+
+
+def test_schema_version_failures_catches_a_bumped_constant(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    shutil.copytree(root / "src", tmp_path / "src")
+    shutil.copytree(root / "docs" / "schema", tmp_path / "docs" / "schema")
+    (tmp_path / "docs" / "SPEC-STABILITY.md").write_text(
+        (root / "docs" / "SPEC-STABILITY.md").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    models = tmp_path / "src" / "outcome_receipts" / "models.py"
+    models.write_text(
+        models.read_text(encoding="utf-8").replace(
+            'SCHEMA_VERSION = "2.0"', 'SCHEMA_VERSION = "3.0"'
+        ),
+        encoding="utf-8",
+    )
+
+    failures = schema_version_failures(tmp_path)
+
+    assert any("receipts.schema.json pins schema_version const '2.0'" in f for f in failures)
+    assert any("receipts manifest is at 2.0" in f for f in failures)
+
+
+def test_schema_version_failures_fails_closed_on_an_unreadable_sentence(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    shutil.copytree(root / "src", tmp_path / "src")
+    shutil.copytree(root / "docs" / "schema", tmp_path / "docs" / "schema")
+    (tmp_path / "docs" / "SPEC-STABILITY.md").write_text(
+        "The contracts are versioned somewhere else now.\n", encoding="utf-8"
+    )
+
+    failures = schema_version_failures(tmp_path)
+
+    assert failures == [
+        "docs/SPEC-STABILITY.md no longer names the three contract versions in the form "
+        "'The report spec is at `X`, the receipts manifest at `Y`, and the workflow "
+        "artifact at `Z`.', so the claim cannot be checked against the code"
+    ]
+
+
+def test_the_standards_pin_is_named_the_same_way_in_all_three_places() -> None:
+    """`.standards-version`, the CI checkout ref, and the CI assertion must agree.
+
+    The pin is written three times: once in `.standards-version`, once as the
+    `ref:` the "portfolio standards" job checks the standards repository out at,
+    and once in that job's own `test "$(cat .standards-version)" = "..."` line.
+    Two of those three are inside a workflow file, which no test read.
+
+    Bumping `.standards-version` alone turns the job red on its assertion, which
+    is loud and fine. Bumping the assertion literal alone, or the `ref:` alone,
+    is the quiet one: the job would go on checking out a version nobody declared
+    and reporting green about it. Whichever copy moves, all three move.
+    """
+
+    root = Path(__file__).resolve().parents[1]
+    pinned = (root / ".standards-version").read_text(encoding="utf-8").strip()
+    workflow = (root / ".github" / "workflows" / "standards.yml").read_text(encoding="utf-8")
+
+    checkout_refs = re.findall(r"^\s+ref:\s*(\S+)\s*$", workflow, re.MULTILINE)
+    asserted = re.findall(r'test\s+"\$\(cat \.standards-version\)"\s*=\s*"([^"]+)"', workflow)
+
+    assert checkout_refs == [pinned], (checkout_refs, pinned)
+    assert asserted == [pinned], (asserted, pinned)
+
+
+# --- The published performance figures, checked against the committed baseline. ---
+
+
+def _perf_fixture(
+    root: Path, *, lighthouse: object, js_kb: object, claimed_lh: str, claimed_js: str
+) -> None:
+    """Write a baseline and the ROADMAP row that publishes its two numbers."""
+
+    (root / "perf").mkdir(parents=True, exist_ok=True)
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "perf" / "baseline.json").write_text(
+        json.dumps({"metrics": {"lighthouse_performance": lighthouse, "js_kb_gzip": js_kb}}),
+        encoding="utf-8",
+    )
+    (root / "docs" / "ROADMAP.md").write_text(
+        f"| Lighthouse performance | {claimed_lh} on the generated trace; floor 0.90 | AUTO |\n"
+        f"| Script bytes on a published artifact | {claimed_js}; the trace ships no JavaScript "
+        "| AUTO |\n",
+        encoding="utf-8",
+    )
+
+
+def test_perf_claim_failures_catches_a_figure_that_drifted_from_the_baseline() -> None:
+    # The row is labelled AUTO, which says a gate checks it. Before this check,
+    # the ROADMAP could publish 0.42 while perf/baseline.json recorded 1.0 and
+    # every gate stayed green.
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=1.0, js_kb=0, claimed_lh="0.42", claimed_js="0")
+
+    failures = perf_claim_failures(root)
+
+    assert len(failures) == 1
+    assert "publishes 'Lighthouse performance' as 0.42" in failures[0]
+    assert "records 1.0" in failures[0]
+
+
+def test_perf_claim_failures_catches_a_baseline_that_moved_under_the_prose() -> None:
+    # The other direction: the measurement is re-recorded and the prose is left
+    # behind. Same defect, opposite cause.
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=0.87, js_kb=0, claimed_lh="1.00", claimed_js="0")
+
+    failures = perf_claim_failures(root)
+
+    assert len(failures) == 1
+    assert "records 0.87" in failures[0]
+
+
+def test_perf_claim_failures_fails_closed_on_a_missing_baseline() -> None:
+    # A check that read nothing has verified nothing.
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=1.0, js_kb=0, claimed_lh="1.00", claimed_js="0")
+    (root / "perf" / "baseline.json").unlink()
+
+    assert perf_claim_failures(root) == [
+        "perf/baseline.json is missing, so the performance figures docs/ROADMAP.md "
+        "publishes cannot be checked"
+    ]
+
+
+def test_perf_claim_failures_fails_closed_on_an_unreadable_claim() -> None:
+    # A row that no longer states a number is not evidence the number is right.
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=1.0, js_kb=0, claimed_lh="1.00", claimed_js="0")
+    (root / "docs" / "ROADMAP.md").write_text(
+        "| Lighthouse performance | good, mostly | AUTO |\n", encoding="utf-8"
+    )
+
+    failures = perf_claim_failures(root)
+
+    assert len(failures) == 2
+    assert all("cannot be checked against perf/baseline.json" in failure for failure in failures)
+
+
+def test_perf_claim_failures_is_silent_when_the_figures_agree() -> None:
+    root = Path(tempfile.mkdtemp())
+    _perf_fixture(root, lighthouse=1.0, js_kb=0, claimed_lh="1.00", claimed_js="0")
+
+    assert perf_claim_failures(root) == []
+
+
+def test_perf_claim_is_true_of_the_real_committed_repository() -> None:
+    root = Path(__file__).resolve().parents[1]
+    assert perf_claim_failures(root) == []
+
+
+def test_the_perf_readme_currency_stamp_is_actually_read() -> None:
+    # perf/README.md sits outside root and docs/, so the staleness scan did not
+    # see it and its stamp was decorative. It is in scope now.
+    root = Path(__file__).resolve().parents[1]
+    assert (root / "perf" / "README.md").exists()
+    stale = doc_staleness_failures(root, date(2099, 1, 1))
+    assert any("perf/README.md" in failure for failure in stale)
+
+
+# --- The AI-Development Measurement scope line and its BASELINE graduation dates. ---
+
+
+def _roadmap(body: str) -> Path:
+    root = Path(tempfile.mkdtemp())
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "ROADMAP.md").write_text(body, encoding="utf-8")
+    return root
+
+
+_TODAY = date(2026, 9, 1)
+
+
+def test_ai_dev_measurement_flags_a_missing_scope_declaration() -> None:
+    # The state main was in: the ledger held the delivery numbers but never said
+    # whether the standard applies here, so nobody could tell an unmeasured
+    # repository from an undeclared one.
+    root = _roadmap("| Branch coverage | 90% | AUTO |\n")
+
+    failures = ai_dev_measurement_failures(root, _TODAY)
+
+    assert len(failures) == 1
+    assert "carries no 'AI-DEV-MEASUREMENT: APPLIES'" in failures[0]
+
+
+def test_ai_dev_measurement_flags_a_baseline_row_with_no_graduation_date() -> None:
+    # A metric parked in BASELINE with no date is one nobody has committed to
+    # ever decide about, which the standard treats exactly as an aspirational row.
+    root = _roadmap(
+        "AI-DEV-MEASUREMENT: APPLIES\n"
+        "| Change lead time | 149.8 hours median | BASELINE |\n"
+        "| Churn ratio | 0.074 | BASELINE until 2026-10-11 |\n"
+    )
+
+    failures = ai_dev_measurement_failures(root, _TODAY)
+
+    assert len(failures) == 1
+    assert "'Change lead time'" in failures[0]
+    assert "no graduation date" in failures[0]
+
+
+def test_a_measurement_date_elsewhere_in_the_row_is_not_a_graduation_date() -> None:
+    # The first bug this check shipped with. Every row in the real ledger states
+    # the date its number was measured, so a row-wide date search finds one on
+    # every row and the undated-BASELINE arm could never fire against the
+    # document it exists to read. The date has to come out of the gate cell.
+    root = _roadmap(
+        "AI-DEV-MEASUREMENT: APPLIES\n"
+        "| Change lead time | 149.8 hours median, collected 2026-07-11 | BASELINE |\n"
+    )
+
+    failures = ai_dev_measurement_failures(root, _TODAY)
+
+    assert len(failures) == 1
+    assert "'Change lead time'" in failures[0]
+    assert "no graduation date" in failures[0]
+
+
+def test_a_graduation_date_that_has_passed_is_a_failure() -> None:
+    # The second bug, and the one that made this a check that stops being able
+    # to fail. Asking only whether a date is present means every dated row goes
+    # permanently green the day after the date it printed, which is the metric
+    # sitting in BASELINE indefinitely -- the exact condition the undated arm's
+    # own failure message says must not be possible.
+    root = _roadmap(
+        "AI-DEV-MEASUREMENT: APPLIES\n| Churn ratio | 0.074 | BASELINE until 2026-10-11 |\n"
+    )
+
+    assert ai_dev_measurement_failures(root, date(2026, 10, 11)) == []
+
+    overdue = ai_dev_measurement_failures(root, date(2026, 10, 12))
+    assert len(overdue) == 1
+    assert "'Churn ratio'" in overdue[0]
+    assert "passed on 2026-10-12" in overdue[0]
+
+
+def test_an_unreadable_graduation_date_fails_rather_than_passing() -> None:
+    # A date-shaped string that is not a date is not evidence the decision is
+    # scheduled; it is a claim this check cannot read.
+    root = _roadmap(
+        "AI-DEV-MEASUREMENT: APPLIES\n| Churn ratio | 0.074 | BASELINE until 2026-13-40 |\n"
+    )
+
+    failures = ai_dev_measurement_failures(root, _TODAY)
+
+    assert len(failures) == 1
+    assert "not a real date" in failures[0]
+
+
+def test_ai_dev_measurement_accepts_a_declared_na() -> None:
+    root = _roadmap("AI-DEV-MEASUREMENT: N/A - no AI tooling participates here, 2026-08-27\n")
+
+    assert ai_dev_measurement_failures(root, _TODAY) == []
+
+
+def test_ai_dev_measurement_fails_closed_without_a_roadmap() -> None:
+    assert ai_dev_measurement_failures(Path(tempfile.mkdtemp()), _TODAY) == [
+        "docs/ROADMAP.md is missing, so the AI-DEV-MEASUREMENT scope cannot be checked"
+    ]
+
+
+def test_ai_dev_measurement_is_silent_against_the_real_committed_roadmap() -> None:
+    # The one that would have been red on main. Pinned to a fixed day rather
+    # than date.today(), so this asserts the ledger is conformant rather than
+    # quietly turning into a countdown to 2026-10-11; the gate itself runs on
+    # the real date, which is where the countdown belongs.
+    root = Path(__file__).resolve().parents[1]
+    assert ai_dev_measurement_failures(root, _TODAY) == []
+
+
+def test_every_baseline_row_in_the_real_roadmap_will_fail_once_its_date_passes() -> None:
+    # The real ledger read through the real check: on 2026-10-12 every row that
+    # is parked in BASELINE today reports overdue. Without this, "the gate can
+    # fail" would be a claim about a fixture rather than about the document.
+    root = Path(__file__).resolve().parents[1]
+    roadmap = (root / "docs" / "ROADMAP.md").read_text(encoding="utf-8")
+    parked = [
+        line
+        for line in roadmap.splitlines()
+        if line.startswith("|")
+        and line.rstrip().endswith("|")
+        and "BASELINE" in line.split("|")[-2]
+    ]
+    assert parked, "the ledger records no BASELINE rows, so this test proves nothing"
+
+    overdue = ai_dev_measurement_failures(root, date(2026, 10, 12))
+
+    assert len(overdue) == len(parked)
+    assert all("passed on 2026-10-12" in failure for failure in overdue)

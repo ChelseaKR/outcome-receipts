@@ -80,7 +80,7 @@
       "kind": "restatement",
       "reason": "Synthetic late records were accepted.",
       "relationship": {
-        "bundle_digest": "492b77b07f8d529b0503d21ebd7ffb35c6a139c4c48ccf905dbfd790010dc9b0",
+        "bundle_digest": "45763dcfbfbe23c6258fe89a226f213308c2ee5f14d5fd400d0fff049f86e7dc",
         "type": "supersedes"
       },
       "removed": [],
@@ -391,11 +391,11 @@
       "approved_by": "Compatibility fixture reviewer",
       "inputs": [
         {
-          "bundle_digest": "492b77b07f8d529b0503d21ebd7ffb35c6a139c4c48ccf905dbfd790010dc9b0",
+          "bundle_digest": "45763dcfbfbe23c6258fe89a226f213308c2ee5f14d5fd400d0fff049f86e7dc",
           "partner": "Partner A"
         },
         {
-          "bundle_digest": "0d68773a5419c639947342b3f505ea475caa889eafcba440a3dedccc0d036a8f",
+          "bundle_digest": "c0d095e4ff4cc36659178cbd03e3d9b78232684ba60601c67bbd4e2b6017f05a",
           "partner": "Partner B"
         }
       ],

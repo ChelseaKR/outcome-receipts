@@ -1,126 +1,105 @@
 # Branch rulesets (exported artifacts)
 
-`main.json` is the ruleset of record for the `main` branch (CICD-12): PRs
-required, the three `ci.yml` checks (`verify`, `security`, `accessibility`)
-required and up to date, stale reviews dismissed on push, review threads
-resolved, force-pushes and deletions blocked, linear history, signed commits,
-and **exactly one bypass actor, the repository owner** (`RepositoryRole` 5,
-`bypass_mode: always`) — deliberately and permanently. Read "Why the owner can
-bypass" below before touching that field.
+The ruleset of record for `main` (CICD-12) is
+[`.github/rulesets/main.json`](../../.github/rulesets/main.json). It is the export of the
+ruleset GitHub is actually enforcing, and it is the only committed ruleset file in this
+repository. This directory keeps the reasoning; it no longer keeps a second copy of the
+ruleset.
 
-`required_approving_review_count` is `0` deliberately: this is a
-single-maintainer repository and GitHub does not count self-approval, so a
-count of 1 would deadlock every merge. Raise it to 1 the day a second
-maintainer exists.
+## What is applied, measured rather than intended
 
-## Two committed files, and which one describes the repository
+Read on **2026-08-29** from `GET /repos/ChelseaKR/outcome-receipts/rulesets/18752852`:
 
-There are two ruleset definitions in this repository and they are not copies of
-each other:
+| Field | Value |
+|---|---|
+| `name` | `protect-main` |
+| `enforcement` | `active` |
+| `conditions.ref_name.include` | `["refs/heads/main"]` |
+| `updated_at` | `2026-08-26T21:27:51.877-07:00` |
+| `bypass_actors` | `[{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }]` |
+| `current_user_can_bypass` | `"always"` |
 
-| File | `name` | `ref_name.include` | Required contexts |
-|---|---|---|---|
-| `.github/rulesets/main.json` | `protect-main` | `refs/heads/main` | six |
-| `docs/rulesets/main.json` (this one) | `main` | `~DEFAULT_BRANCH` | three |
+Rules: `deletion`, `non_fast_forward`, `required_linear_history`, `required_signatures`,
+`pull_request` (0 approvals, stale reviews dismissed, threads resolved, `squash` and
+`rebase`), and `required_status_checks` (strict) over six contexts:
 
-The commit record explains the split. This file landed first, on 2026-07-11
-(#39), and the CHANGELOG entry that added it calls it "the intended full branch
-ruleset for `main`", whose "pull-request, review, linear-history, and
-signed-commit rules remain recorded here for a future multi-maintainer policy
-update" — written when the live ruleset enforced less than the file did.
-`.github/rulesets/main.json` landed two days later, on 2026-07-13 (#54), named
-after the ruleset that had by then actually been applied and listing the six
-contexts it really requires. This file was never retired, and neither file
-mentions the other.
+`verify` · `security (pip-audit · osv-scanner · gitleaks · zizmor)` ·
+`accessibility (pa11y, WCAG2AA, trace.html)` · `dogfood-action` ·
+`codeql (python · actions)` · `portfolio standards conformance`
 
-**`.github/rulesets/main.json` is the one that matches the live ruleset**
-(id `18752852`, `protect-main`, `enforcement: active`). Read it to learn what
-protects `main` today. This file stays committed because it is what the CICD-12
-remediation reviewed and because the rules it carries beyond the live set
-record an intent that has not been withdrawn — but it is an intent, not a
-description.
+`.github/rulesets/main.json` mirrors all of that.
 
-Both files now record the owner's bypass, because a file that omits it is a
-lockout waiting for whoever applies it, whichever of the two they reach for.
+## Two things this file used to say that were wrong
 
-## Why the owner can bypass
+**"No bypass actors (admins included)."** That was the doctrine, and it is reversed here
+rather than quietly dropped, because the reasoning is what needs correcting and not just
+the sentence. An empty `bypass_actors` is not a stricter gate. It is a lockout. This
+profile requires a pull request, six contexts, a strict up-to-date policy, signed commits
+and linear history; with no bypass actor, one wedged check leaves the sole maintainer
+unable to merge, unable to push, and unable to delete the ruleset that is blocking them.
+An agent applied a no-bypass ruleset elsewhere in this portfolio and restoring access took
+a sweep across eighteen repositories. The live ruleset carries the owner's standing
+bypass, and the committed file now carries it too:
 
-`bypass_actors` holds exactly the repository owner's standing bypass
-(`RepositoryRole` 5, `bypass_mode: always`), deliberately and permanently: an
-agent once applied a ruleset with no bypass and locked the owner out of their
-own repository, and restoring access took a sweep across eighteen
-repositories. An empty list here is not a stricter gate, it is the lockout.
+```json
+{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
+```
 
-This page used to say the opposite — "**no bypass actors** (admins included)" —
-while both JSON files said `"bypass_actors": []` and the live ruleset carried
-the owner's bypass, so the documented posture and the enforced one disagreed
-with nothing in the repository comparing them. The old argument is not wrong
-about the risk it names, an admin merging past a red check; it is wrong about
-which risk is larger, and the larger one has already happened. Everything else
-on this page still addresses the smaller one: a pull request is required, the
-required checks are required, the branch must be up to date, and history cannot
-be rewritten. The bypass is the way back in when a required check is wedged,
-not a routine merge path.
+`RepositoryRole` 5 is admin. `bypass_mode: "always"` and not `"pull_request"`, because a
+bypass that only works inside a pull request is no use when the thing that is wedged is
+the pull request. One actor, and a repository role rather than a team or a GitHub App: a
+second entry in this list would be a real finding, and this one is not.
 
-Two things keep it that way, and they are deliberately not one thing:
+**"The three `ci.yml` checks."** The live ruleset requires six contexts, not three. That
+sentence described `docs/rulesets/main.json`, a second committed ruleset that was removed
+in the same change as this rewrite. It was the older of the two files (#39; the `.github`
+export arrived with #54), it had drifted away from the live ruleset in four ways at once
+(a different `name`, `~DEFAULT_BRANCH` instead of `refs/heads/main`, `merge` among the
+allowed merge methods, and three required contexts instead of six), and the apply command
+below still pointed at it. Two committed rulesets that disagree with each other and with
+the server are two chances to apply the wrong one, so there is now one.
 
-- `scripts/check_ruleset.py` holds the live ruleset and each committed file
-  **independently** against that one actor, rather than only comparing them to
-  each other. Comparing them would report conformance on the day both were
-  emptied together, which is the incident recurring with a green tick on it.
-- `tests/test_ruleset.py` runs that logic offline against the committed files
-  and a recorded live payload, and pins all three failure directions: a second
-  actor granted a bypass, the owner's bypass gone from the live ruleset, and
-  both sides emptied at once (two findings, never zero).
+## Applying it is owner-only (⛔USER)
 
-If you are reading this because the empty list looks more secure and you are
-about to restore it: reapplying a ruleset file that omits the owner's bypass is
-how the lockout happens. Do not.
+`POST` **adds** a ruleset rather than replacing one, and a ruleset already exists on this
+repository. Rules from every applicable ruleset combine while bypass actors are
+per-ruleset, so posting this file without first deleting id `18752852` would leave two
+rulesets over `main`, and the stricter combination with the narrower bypass wins. Do not
+re-apply unless the existing one is going away.
 
-## Applying it
-
-Applying it is a live-settings change, so it is owner-only (⛔USER):
+If it ever does need re-applying:
 
 ```sh
 gh api -X POST repos/ChelseaKR/outcome-receipts/rulesets \
-  --input docs/rulesets/main.json
+  --input .github/rulesets/main.json
 ```
 
-> **Check `bypass_actors` in the file before running that.** The ruleset this
-> creates enforces exactly what the file says, so a file carrying
-> `"bypass_actors": []` produces an active ruleset on the default branch that
-> the owner cannot bypass. Until 2026-08-28 both committed files said exactly
-> that while the live ruleset carried the owner's standing bypass, so following
-> this instruction as written would have applied the lockout described above,
-> by following this repository's own documented procedure. Note also that
-> `POST` *adds* a ruleset rather than replacing `protect-main`: the new one
-> would sit alongside it and both would be enforced.
-> `.venv/bin/python scripts/check_ruleset.py` fails when either committed file
-> omits the owner's bypass. Run it first.
-
-Note: branch rulesets on a **private** repo require a paid plan; on a public
-repo they are free. This file is committed either way so the intended
-protection is reviewable and diffable. After the ruleset is live, restore the
-"main is protected" language in CONTRIBUTING.md (remediation P0-1 step 4). If
-the live ruleset is ever edited in the UI, re-export it here
-(`gh api repos/ChelseaKR/outcome-receipts/rulesets/<id>`) so the file stays
-the source of truth.
-
-## Checking it
+Then confirm the bypass survived, because an apply that lands every rule and loses that
+actor returns 201 like any other:
 
 ```sh
-.venv/bin/python scripts/check_ruleset.py                    # committed files only
-gh api repos/ChelseaKR/outcome-receipts/rulesets/18752852 |
-  .venv/bin/python scripts/check_ruleset.py --live -         # and the live ruleset
+gh api repos/ChelseaKR/outcome-receipts/rulesets/<id> --jq .current_user_can_bypass
 ```
 
-The script never reaches the network itself: the caller hands it the live JSON,
-so the thing that fetches and the thing that judges stay separable. It exits
-`0` when the owner's bypass is recorded in both committed files, and enforced
-live if a live payload was supplied, and nothing else can bypass on either
-side; `1` otherwise, naming every finding.
+must read `"always"`.
 
-Reading `bypass_actors` needs a token with permission to read repository
-administration. A token without it gets a reduced payload that omits the field
-entirely, and the script reports that it could not read the field rather than
-reading the omission as "no one bypasses".
+`required_approving_review_count` is `0` deliberately: this is a single-maintainer
+repository and GitHub does not count self-approval, so a count of 1 would deadlock every
+merge. Raise it to 1 the day a second maintainer exists.
+
+If the live ruleset is ever edited in the UI, re-export it to
+`.github/rulesets/main.json` (`gh api repos/ChelseaKR/outcome-receipts/rulesets/18752852`)
+so the file stays the source of truth, and check the bypass list survived the round trip.
+
+## What guards this
+
+`tests/test_ruleset_lockout.py` fails the build if any committed ruleset file would lock
+the owner out when applied: an empty `bypass_actors`, an absent key, a non-list, a foreign
+actor, or the owner with `bypass_mode: "pull_request"`. It discovers ruleset files by
+glob rather than by a hardcoded path, so a second committed ruleset cannot reappear
+uncovered the way `docs/rulesets/main.json` did, and it fails if it finds none at all. It
+parses rather than greps, because a truncated JSON file still contains the string
+`bypass_actors`.
+
+What it does not check is whether the committed export still matches the live ruleset.
+That needs a network call, and the gates here do not make one.

@@ -43,6 +43,6 @@ and permanently: an agent once applied a ruleset with no bypass and locked the
 owner out of their own repository, and restoring access took a sweep across
 eighteen repositories. An empty `bypass_actors` list is not a stricter gate,
 it is the lockout. Every other statement in this section still holds; see
-`docs/rulesets/README.md`, "Why the owner can bypass".
+`docs/rulesets/README.md`.
 
 *Audited: 2026-07-12 · Recheck: next standards bump or quarterly.*

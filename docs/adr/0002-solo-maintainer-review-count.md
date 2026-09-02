@@ -37,6 +37,6 @@ out of their own repository, and restoring access took a sweep across eighteen
 repositories. This decision is unchanged by that. The approval count stays at
 zero, the bypass is the way back in when a required check is wedged rather than a
 routine merge path, and it is the only actor permitted to skip these rules --
-`scripts/check_ruleset.py` reports a finding if a second one appears, or if the
-owner's own goes missing from either the live ruleset or a committed file. See
-`docs/rulesets/README.md`, "Why the owner can bypass".
+`tests/test_ruleset_lockout.py` fails the build if a second one appears in a
+committed ruleset file, or if the owner's own goes missing from one. See
+`docs/rulesets/README.md`.

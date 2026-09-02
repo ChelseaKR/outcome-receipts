@@ -1,6 +1,6 @@
 .PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
 	security-pip security-npm security-osv security-secrets security-semgrep security-workflows \
-	a11y build-html cards benchmark eval eval-check mutation run container-build \
+	a11y perf build-html cards benchmark eval eval-check mutation run container-build \
 	container-smoke container-scan container-verify container-demo clean
 
 # The gate sets, in reporting order. Lists rather than prerequisites, because
@@ -12,7 +12,7 @@
 # exits non-zero if any of them failed. Nothing is muted; nothing is skipped.
 SECURITY_GATES := security-pip security-npm security-osv security-secrets \
 	security-semgrep security-workflows
-VERIFY_GATES := lint type test hygiene i18n security a11y cards eval-check compat \
+VERIFY_GATES := lint type test hygiene i18n security a11y perf cards eval-check compat \
 	container-verify
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
@@ -48,12 +48,24 @@ install-smoke: install
 	docker version --format '{{.Server.Version}}'
 	node -e "const fs=require('node:fs'); const {chromium}=require('playwright'); fs.accessSync(chromium.executablePath(), fs.constants.X_OK)"
 
+# `scripts/` is in scope here on purpose. Every merge-blocking gate in this
+# repository except the test suite is implemented under scripts/, and for a
+# long time those two lines read `src tests`: the code enforcing the other
+# standards was the one directory exempt from the code-quality standard.
 lint:
-	.venv/bin/ruff check src tests
-	.venv/bin/ruff format --check src tests
+	.venv/bin/ruff check src tests scripts
+	.venv/bin/ruff format --check src tests scripts
 
+# Two invocations, not one target list. `pyproject.toml`'s `files` covers src
+# and tests, where the scripts are imported as `scripts.<name>` by the test
+# suite; the second call checks the same files the way they are actually run,
+# as top-level modules on `scripts/`, which is how `scripts/check_waivers.py`
+# resolves `from check_conformance import ...` when standards.yml executes it.
+# One combined run fails with "Source file found twice under different module
+# names", so the choice is two runs or no coverage of scripts at all.
 type:
 	.venv/bin/python -m mypy
+	.venv/bin/python -m mypy --strict scripts
 
 test:
 	.venv/bin/python -m pytest
@@ -61,9 +73,15 @@ test:
 		--include="src/outcome_receipts/grounding.py,src/outcome_receipts/engine.py,src/outcome_receipts/suppression.py,src/outcome_receipts/bundle.py,src/outcome_receipts/verify.py" \
 		--fail-under=95
 
+# check_semgrep_waivers.py enforces the invariant `.semgrep-waivers.yml` had
+# only ever asserted in its own header: every ledger row must correspond to a
+# real inline suppression, and every inline suppression must have a row. Before
+# it, a row could outlive the code it documented and an undocumented
+# suppression could be added, with every gate still green.
 hygiene:
 	.venv/bin/python scripts/check_source_hygiene.py
 	.venv/bin/python scripts/check_conformance.py
+	.venv/bin/python scripts/check_semgrep_waivers.py
 
 # Keep ephemeral Python tools on the same interpreter as the locked project. In
 # particular, Semgrep's macOS source distribution does not carry semgrep-core.
@@ -119,6 +137,17 @@ build-html:
 
 a11y: build-html
 	npm run a11y
+
+# The regression half of the Performance standard's rule. The absolute budgets
+# (performance >= 0.9, zero script bytes) are asserted by Lighthouse-CI inside
+# `a11y`, from the one lighthouserc.cjs the standard allows; this compares the
+# same run's report against the committed perf/baseline.json and fails on any
+# metric more than 10% worse in its declared direction. It reads a report rather
+# than taking a second measurement, and it refuses a report older than the trace
+# it would be scored against, so a failed Lighthouse run cannot leave a stale
+# green here. Run `make a11y` first; `make verify` runs them in that order.
+perf:
+	.venv/bin/python scripts/check_perf_baseline.py
 
 cards:
 	.venv/bin/receipts cards --out docs/cards --check

@@ -70,7 +70,7 @@ from outcome_receipts.draft import draft, draft_template
 from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import EvalReport, evaluate
 from outcome_receipts.grounding import audit_narrative, ground
-from outcome_receipts.ledger import LedgerEntry, append_export, verify_chain
+from outcome_receipts.ledger import LedgerEntry, append_export, read_ledger, verify_chain
 from outcome_receipts.mapping import build_mapping_queue
 from outcome_receipts.model_draft import (
     DraftingPolicyError,
@@ -823,9 +823,48 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return EXIT_VERIFY_FAIL
 
 
+# What a clean chain does not prove. The chain has no secret and nothing
+# outside the file records its expected length, so these three tampers verify
+# clean; the PASS output states them so a reader cannot take PASS for more
+# than it is. tests/test_ledger.py pins each one with a hand-tampered fixture.
+_LEDGER_PASS_LIMITS = (
+    "entries deleted from the end leave a shorter chain that still verifies",
+    "a rewrite of the whole file with recomputed hashes verifies; the chain"
+    " has no secret and proves integrity of what is recorded, not authorship",
+    "an export that was never appended leaves no trace; PASS is not evidence of completeness",
+)
+
+
 def _cmd_verify_ledger(args: argparse.Namespace) -> int:
     ledger_path = Path(args.ledger)
+
+    # Fail closed on a missing file. read_ledger treats an absent ledger as
+    # empty, which is right for the writer (first export creates the file) and
+    # wrong for a verifier: a mistyped --ledger path would otherwise report
+    # PASS over nothing. A check that read no file has verified no chain.
+    if not ledger_path.exists():
+        if args.json:
+            _emit_json(
+                {
+                    "command": "verify-ledger",
+                    "ok": False,
+                    "ledger": str(ledger_path),
+                    "entries": 0,
+                    "problems": [f"no ledger file at {ledger_path}"],
+                    "not_proven": list(_LEDGER_PASS_LIMITS),
+                }
+            )
+            return EXIT_VERIFY_FAIL
+        print(f"export ledger: {ledger_path}", file=sys.stderr)
+        print(
+            "\nverify-ledger: FAIL — no ledger file at that path; a check that"
+            " read nothing has verified nothing",
+            file=sys.stderr,
+        )
+        return EXIT_VERIFY_FAIL
+
     problems = verify_chain(ledger_path)
+    n_entries = len(read_ledger(ledger_path))
 
     if args.json:
         _emit_json(
@@ -833,14 +872,21 @@ def _cmd_verify_ledger(args: argparse.Namespace) -> int:
                 "command": "verify-ledger",
                 "ok": not problems,
                 "ledger": str(ledger_path),
+                "entries": n_entries,
                 "problems": list(problems),
+                "not_proven": list(_LEDGER_PASS_LIMITS),
             }
         )
         return EXIT_OK if not problems else EXIT_VERIFY_FAIL
 
     if not problems:
         print(f"export ledger: {ledger_path}")
-        print("verify-ledger: PASS — the export chain is intact")
+        print(
+            f"verify-ledger: PASS — all {n_entries} recorded entries re-verify;"
+            " nothing was edited, inserted, reordered, or removed mid-chain"
+        )
+        for limit in _LEDGER_PASS_LIMITS:
+            print(f"  not proven: {limit}")
         return EXIT_OK
     print(f"export ledger: {ledger_path}", file=sys.stderr)
     for problem in problems:
@@ -893,6 +939,7 @@ def _eval_payload(report: EvalReport, *, out: str | None) -> dict[str, object]:
     return {
         "command": "eval",
         "gate_pass": report.gate_pass,
+        "scored": report.scored,
         "n_numbers": report.n_numbers,
         "n_bound": report.n_bound,
         "n_unbound": report.n_unbound,
@@ -975,29 +1022,71 @@ def _cmd_verify_bundle(args: argparse.Namespace) -> int:
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
-    # Score the artifact the pipeline actually exports. Drafting and grounding
-    # against the raw figures measured a narrative `run` would never produce:
-    # one whose numbers include the cells suppression withholds.
+    """Score the gate over every narrative the pipeline would export.
+
+    Two things are scored, and they are scored the way `run` produces them.
+
+    The figures are the *publishable* set. Drafting and grounding against the raw
+    figures measured a narrative `run` would never produce: one whose numbers
+    include the cells suppression withholds.
+
+    The narratives are *all* of `spec.report.effective_templates`, drafted
+    through the same `_draft_templates` the export path uses. This used to call
+    `draft(spec.report, ...)`, which fills only the legacy single
+    `[report] template`. A spec that names funder formats under
+    `[[report.templates]]` leaves that field empty, so eval drafted the empty
+    string, found no numbers, and reported a pass over nothing. That is the shape
+    of `examples/multi-funder/report.toml`, which ships here, and whose two
+    funder narratives carry real figures eval never looked at.
+
+    A figure written into two funder narratives is counted twice, and that is the
+    intended denominator, not an artifact to correct. `run` exports one report
+    per format, each a separate document a separate funder reads, so each
+    occurrence is its own opportunity for an ungrounded number to reach someone.
+    Scoring the distinct figures instead would report a smaller population than
+    the one the gate actually has to hold, and would make the measurement depend
+    on how many formats happen to share a metric.
+    """
+
     spec, _rows, figures, _comparison, _reconciliation = _compute_all(
         args.config, reproducible=True, quiet=args.json
     )
     publishable, _hidden = _publishable_and_hidden(figures)
-    narrative = draft(spec.report, publishable)
-    result = ground(narrative, publishable)
+    drafts = _draft_templates(spec, publishable)
+    result = GroundingResult(
+        bound=tuple(span for _t, _n, one in drafts for span in one.bound),
+        unbound=tuple(span for _t, _n, one in drafts for span in one.unbound),
+    )
     report = evaluate(result)
     markdown = render_eval_markdown(report, dataset=Path(args.config).parent.name)
     if args.out:
         Path(args.out).write_text(markdown, encoding="utf-8")
 
+    # An eval that scored no number has measured nothing, and this command exists
+    # to measure. `gate_pass` is still true and still reported, because it is
+    # true: nothing failed to bind. But exiting 0 on it hands CI a green from a
+    # run that never exercised the gate, which is how the multi-template hole
+    # above stayed invisible. `render_eval_markdown` already refuses to print the
+    # vacuous rate as an observed measurement; the exit code agrees with it now.
+    exit_code = EXIT_OK if report.gate_pass and report.scored else EXIT_VERIFY_FAIL
+
     if args.json:
         _emit_json(_eval_payload(report, out=args.out or None))
-        return EXIT_OK if report.gate_pass else EXIT_VERIFY_FAIL
+        return exit_code
 
     if args.out:
         print(f"wrote eval report: {args.out}")
     else:
         print(markdown)
-    return EXIT_OK if report.gate_pass else EXIT_VERIFY_FAIL
+    if not report.scored:
+        print(
+            "\neval: FAIL — no numeric span was scored, so this run is not a "
+            "measurement of the grounding gate. Check that the report spec's "
+            "templates render figures and that suppression has not withheld all "
+            "of them.",
+            file=sys.stderr,
+        )
+    return exit_code
 
 
 def _cmd_init(args: argparse.Namespace) -> int:

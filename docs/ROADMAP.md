@@ -161,7 +161,7 @@ The implemented designs and real-world validation gates are recorded in
 |-----------|---------------|------|
 | AI-Evaluation-Standard | APPLIES — optional Bedrock prose drafter; numeric grounding, red-team, cards, and governance tiers; no RAG or judge | REVIEW scope declaration |
 | Grounding rate | 100% of numeric spans bound on exported fixtures; any unbound span blocks | AUTO |
-| Bilingual benchmark | 100 committed cases: 50 EN, 50 ES; 50 planted unbound failures all rejected | AUTO |
+| Bilingual benchmark | 136 committed cases: 68 EN, 68 ES; 68 planted unbound failures all rejected. Checked against the committed file by `scripts/check_conformance.py`, so the count cannot go stale unnoticed again | AUTO |
 | Hallucinated-number rate | Reported with Wilson intervals in `eval/report.md` | AUTO artifact / REVIEW interpretation |
 | LLM judge calibration | N/A — no model judge ships; calibration becomes blocking before one can gate | Declared N/A |
 | Branch coverage | 90% repository floor; integrity-critical module group 95% | AUTO |
@@ -176,19 +176,46 @@ The implemented designs and real-world validation gates are recorded in
 | Lighthouse accessibility | At least 0.90 on generated trace | AUTO |
 | Keyboard/reflow/motion | Native-link path; no overflow at 320px; no residual motion | AUTO + REVIEW |
 | Screen readers | VoiceOver/macOS and NVDA/Windows task reviews not yet executed | REVIEW blocker |
+| Lighthouse performance | 1.00 on the generated trace; floor 0.90, and no more than 10% below the committed `perf/baseline.json` | AUTO |
+| Script bytes on a published artifact | 0; the trace ships no JavaScript and the budget is zero, not the standard's 204,800 | AUTO |
+| Hosted-route latency (k6, PERF-01) | N/A as of 2026-08-27 — no hosted route and no preview environment exists to measure; re-entry trigger is the first hosted surface | Declared N/A |
 | i18n | 51 EN/ES gettext keys, zero missing/fuzzy entries, placeholder parity | AUTO |
 | Data governance | Three current data cards; L3 input ephemeral, L2 output operator-retained | AUTO + REVIEW |
 | Incident response | 0 recorded incidents; label/postmortem and secret runbook armed | REVIEW |
+| AI-DEV-MEASUREMENT: APPLIES | AI tooling participates in development here, so the delivery and quality-debt metrics below are collected. Diagnostic counters (lines of code, suggestion-acceptance rate, share of AI-written code) are tracked nowhere and gate nothing | BASELINE until 2026-10-11 |
 
 ### DORA and quality-debt baseline
 
-Portfolio collection on 2026-07-11 measured 2.1 deploy/merge proxies per week,
-149.8 hours median lead time, 0.0 revert-based change-fail ratio, 27 merges, and
-3.19 PRs per week over the 90-day window. These are observe-only proxies, not
-release gates. The same run measured 0.074 churn ratio, 69% short-term churn,
-100% unreviewed merges, and zero reverts. The unreviewed-merge value is a risk
-signal for a solo-maintained, agent-assisted repo and motivates the required PR
-acknowledgement and complete automated gates.
+Portfolio collection on 2026-07-11, over a 90-day window, and observe-only: none
+of these is a release gate. They are recorded as rows rather than prose so each
+one carries its own graduation date, which the measurement standard requires. A
+metric may not sit in BASELINE indefinitely: on the date named, each either
+becomes an AUTO or REVIEW gate or is retired, and the decision is recorded here.
+
+| Metric | Measured 2026-07-11 | Gate |
+|--------|---------------------|------|
+| Deployment frequency | 2.1 deploy/merge proxies per week; 27 merges; 3.19 PRs per week | BASELINE until 2026-10-11 |
+| Change lead time | 149.8 hours median | BASELINE until 2026-10-11 |
+| Change-fail rate | 0.0, revert-based proxy | BASELINE until 2026-10-11 |
+| Revert rate | zero reverts | BASELINE until 2026-10-11 |
+| Churn ratio | 0.074 | BASELINE until 2026-10-11 |
+| Short-term churn (14 days) | 69% | BASELINE until 2026-10-11 |
+| Unreviewed-merge rate | 100% | BASELINE until 2026-10-11 |
+
+The unreviewed-merge value is the one that matters most here. It is a risk signal
+for a solo-maintained, agent-assisted repository, and it is what the required
+pull-request acknowledgement and the complete automated gate set exist to answer.
+Its graduation decision is not a mechanical one: ADR 0002 holds the ruleset's
+required approving reviews at zero for as long as there is one maintainer, so
+gating on this metric and that ADR cannot both stand. Whichever way it goes on
+2026-10-11 needs a recorded decision, and if the metric graduates, a superseding
+ADR.
+
+Two artifacts the measurement standard asks for are not here and are not claimed:
+the weekly portfolio metrics rollup, which is produced at the portfolio level
+rather than in this repository, and the quarterly seven-capability
+self-assessment, which is the maintainer answering about her own practice and
+cannot be written for her.
 
 ## Out of scope
 

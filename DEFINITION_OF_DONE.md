@@ -9,8 +9,11 @@ Reviewed quarterly. The CODEOWNER protects changes to this file.
       WCAG 2.2 AA browser checks, generated cards, and the committed eval.
 - [ ] The grounding, suppression, bundle, and re-derivation critical modules each
       retain at least 95% branch coverage; repository branch coverage stays at 90%.
-- [ ] Every numeric span in every publishable surface binds to a receipt after
-      suppression; client-level rows and identifiers never reach an export.
+- [ ] Every numeric span in a publishable claim binds to a receipt after
+      suppression: the drafted narrative, and any chart, comparison, or
+      reconciliation claim. Receipt metadata printed alongside them (timestamps,
+      row counts, slice hashes, and query text) is out of that scope by design.
+      Client-level rows and identifiers never reach an export.
 - [ ] All GitHub Actions references are full commit SHAs, tokens are least
       privilege, and release jobs use OIDC without build caches.
 - [ ] CodeQL, OpenSSF Scorecard, the reusable-action dogfood check, and the pinned
