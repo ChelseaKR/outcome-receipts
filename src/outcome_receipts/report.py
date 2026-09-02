@@ -283,9 +283,13 @@ def render_report(
     provenance and receipts.
 
     When ``provenance`` is given, a standard provenance block is embedded before
-    the receipts, stating that no number was written by a model and that the gate
-    bound every number before export. The receipts section then lists each figure
-    with its plain-language definition and the receipt that backs it.
+    the receipts, stating that no figure was written by a model and that the gate
+    bound every number in the report's claims before export. The receipts section
+    then lists each figure with its plain-language definition and the receipt that
+    backs it. That section, and the provenance block itself, print row counts,
+    slice hashes, timestamps, and query text; those numerals are receipt metadata
+    and were never in the gate's scope, so grounding a whole rendered report
+    rather than its narrative region reports them as unbound.
     """
 
     copy = get_copy(locale)
@@ -401,6 +405,30 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
         else "(no numeric spans in the narrative to bind; the gate passes vacuously, not "
         "on a measured rate)."
     )
+    # An eval that scored nothing is not evidence about the gate, whatever the
+    # gate's own verdict was. The reader of a committed eval.md has only this
+    # file, so the file has to say it; `receipts eval` exits non-zero on the same
+    # condition.
+    closing = (
+        "".join(
+            (
+                "This committed run scores the drafted narrative, every number of which ",
+                "comes from a receipt, so it passes. That the gate catches an injected ",
+                "unverifiable number is shown by the merge-blocking test ",
+                "`tests/test_grounding_gate.py`, not by failing this report.",
+            )
+        )
+        if report.n_numbers
+        else "".join(
+            (
+                "No numeric span was scored here, so this run is not a measurement of ",
+                "the gate and `receipts eval` exits non-zero on it. Either the report ",
+                "spec's templates render no figure, or suppression withheld all of ",
+                "them. That the gate catches an injected unverifiable number is shown ",
+                "by the merge-blocking test `tests/test_grounding_gate.py`.",
+            )
+        )
+    )
     lines = [
         "# Eval report",
         "",
@@ -424,13 +452,19 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
         "",
         "".join(
             (
-                "The **publishable** figure set: the narrative is drafted and grounded ",
-                "after small-cell suppression, so this scores the artifact `receipts run` ",
-                "exports rather than a pre-suppression draft the pipeline would never ",
-                "produce. A suppressed cell renders as `[SUPPRESSED]` and carries no ",
-                "number, so it contributes no span to the denominator. The denominator ",
-                "is therefore the count of numbers that survive suppression, which is ",
-                "smaller than the spec's metric count whenever a report has a small cell.",
+                "The **publishable** figure set, in **every narrative the run would ",
+                "export**: each of the spec's report templates is drafted and grounded ",
+                "after small-cell suppression, so this scores the artifacts ",
+                "`receipts run` exports rather than a pre-suppression draft the ",
+                "pipeline would never produce. A suppressed cell renders as ",
+                "`[SUPPRESSED]` and carries no number, so it contributes no span to the ",
+                "denominator. The denominator is therefore the count of numbers that ",
+                "survive suppression, which is smaller than the spec's metric count ",
+                "whenever a report has a small cell. A spec that names several funder ",
+                "formats is scored across all of them, and a figure written into two of ",
+                "them counts twice: each format is a separate exported document, so ",
+                "each occurrence is its own chance for an ungrounded number to reach a ",
+                "reader.",
             )
         ),
         "",
@@ -450,13 +484,6 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
         "",
         f"Grounding gate (100% required): **{gate_word}** {gate_observed}",
         "",
-        "".join(
-            (
-                "This committed run scores the drafted narrative, every number of which ",
-                "comes from a receipt, so it passes. That the gate catches an injected ",
-                "unverifiable number is shown by the merge-blocking test ",
-                "`tests/test_grounding_gate.py`, not by failing this report.",
-            )
-        ),
+        closing,
     ]
     return "\n".join(lines) + "\n"

@@ -52,8 +52,26 @@ The timestamp comes from the injected `Clock`, the same seam receipts use, so a
 against the stored value, checks each `prev_hash` against the previous entry's
 `entry_hash`, and checks that indices are contiguous from zero. It reports every
 problem with the index where it was found and exits non-zero on any break, so an
-edited, inserted, dropped, or reordered entry is located and fails closed, the
-same UX as `receipts verify`.
+entry edited, inserted, dropped, or reordered anywhere except at the end of the
+chain is located and fails closed, the same UX as `receipts verify`.
+
+### Limits (recorded 2026-08-29)
+
+The original wording above claimed any deletion was detected. That was an
+overclaim, found and corrected by an audit that tampered by hand rather than
+through the writer. Three things verify clean and always did:
+
+- Entries deleted from the tail. Nothing outside the file records the expected
+  length, so a truncated chain is indistinguishable from a shorter honest one.
+- A rewrite of the whole file with every hash recomputed. The hash has no
+  secret; the chain proves integrity of what is recorded, never authorship.
+- An export that was never appended. A clean chain is not completeness.
+
+`verify-ledger` now prints these as "not proven" lines beside its PASS verdict,
+and `tests/test_ledger.py` pins each one with a hand-tampered fixture so the
+stated limits cannot silently drift from the code. Closing them would take an
+out-of-band record of the expected head or entry count (the pattern the sibling
+`ledger` project uses across replicas), or a keyed signature over the tail.
 
 ## Consequences
 

@@ -35,6 +35,19 @@ def test_zero_numeric_spans_does_not_render_as_an_observed_measurement() -> None
     assert "vacuously" in markdown
 
 
+def test_zero_numeric_spans_says_the_run_is_not_a_measurement() -> None:
+    # The reader of a committed eval.md has only that file. It has to say that a
+    # run which scored nothing is not evidence about the gate, and it must not
+    # carry the closing sentence that claims the opposite.
+    report = evaluate(GroundingResult(bound=(), unbound=()))
+
+    markdown = render_eval_markdown(report, dataset="empty-fixture")
+
+    assert "not a measurement of the gate" in markdown
+    assert "exits non-zero on it" in markdown
+    assert "every number of which comes from a receipt, so it passes" not in markdown
+
+
 def test_a_real_fully_grounded_narrative_still_reports_the_measured_rate() -> None:
     report = evaluate(GroundingResult(bound=(_span("12"), _span("6")), unbound=()))
     assert report.n_numbers == 2
@@ -44,3 +57,5 @@ def test_a_real_fully_grounded_narrative_still_reports_the_measured_rate() -> No
     assert "observed 100.0%" in markdown
     assert "**100.0%** (2/2)" in markdown
     assert "N/A" not in markdown
+    assert "not a measurement of the gate" not in markdown
+    assert "every number of which comes from a receipt, so it passes" in markdown
