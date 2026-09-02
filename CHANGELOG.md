@@ -87,6 +87,37 @@ release-hardening work completed before the first public tag.
   stopped looking".
 - `tests/test_gate_scope.py`, which fails if `make lint` or `make type` is
   narrowed back to a scope that skips `scripts/`.
+- The AI-Development Measurement standard's scope declaration and the graduation
+  dates its BASELINE state requires, closing the second open gap the README
+  declared. `docs/ROADMAP.md` gains the `AI-DEV-MEASUREMENT: APPLIES` ledger
+  line the standard asks every repository for, and the DORA and quality-debt
+  numbers move from a prose paragraph into dated rows so each names the date its
+  graduation decision is due (2026-10-11, one quarter from the 2026-07-11
+  collection). A metric may not sit in BASELINE indefinitely; a row with no date
+  is a metric nobody has committed to ever decide about, which the standard
+  treats exactly as an aspirational one. The unreviewed-merge row records that
+  its decision collides with ADR 0002, which holds required approving reviews at
+  zero while there is one maintainer, so gating on it needs a superseding ADR
+  rather than a quiet threshold change. `scripts/check_conformance.py` gains
+  `ai_dev_measurement_failures`, wired into `make hygiene`, which fails when the
+  scope line is absent, when any BASELINE row's gate cell names no date, when
+  that date is unreadable, and when it has passed. The last two conditions are
+  the check itself: the date is read out of the gate cell and not out of the
+  row, because every row in this ledger also states when its number was
+  measured, so a row-wide search reports a graduation date on a row that names
+  none; and the date is compared against today, because asking only whether a
+  date is *present* turns every dated row permanently green the day after the
+  date it prints, which is the metric parked in BASELINE indefinitely that the
+  undated arm's own failure message says must not be possible. Two artifacts
+  the standard also asks for are named as outstanding rather than claimed: the
+  weekly rollup, which is produced at the portfolio level rather than here, and
+  the quarterly seven-capability self-assessment, which is the maintainer
+  answering about her own practice. Regression tests: nine in
+  `tests/test_conformance.py`, including
+  `::test_ai_dev_measurement_is_silent_against_the_real_committed_roadmap` and
+  `::test_every_baseline_row_in_the_real_roadmap_will_fail_once_its_date_passes`,
+  which reads the real ledger on 2026-10-12 so "this gate can fail" is a claim
+  about the document rather than about a fixture.
 - Issue 94: the first real, non-synthetic run of the small-cell suppression
   engine, over HUD's own published 2024 CoC Point-in-Time subpopulation
   counts (363 CoCs, 10,890 real cells; `eval/hud/`). No HUD-published
