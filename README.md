@@ -6,6 +6,10 @@
 
 ![Outcome Receipts: deterministic SQL to receipt to grounding gate to verified report](docs/assets/social-preview.png)
 
+**New here?** [Run the five-minute demo](docs/TRY_THE_DEMO.md). It uses
+synthetic data, makes no network calls, and ends with the grounding gate
+refusing an invented number.
+
 Draft funder outcome reports where **every reported figure is a receipt**. The
 tool reads a nonprofit's own service data, computes each required figure with a
 deterministic query, and attaches to that figure a receipt: the exact query, the
