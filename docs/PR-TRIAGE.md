@@ -551,3 +551,55 @@ and both worth an issue:
 * That `examples/multi-funder/report.toml` yields exactly six scored spans, as
   #123's test asserts. The test passed in CI; it was not re-run here.
 * The eight-way merged state. All conflict, lint and type results are pairwise.
+
+## Outcome, recorded 2026-09-01
+
+The triage above is a snapshot of 2026-08-28 and is kept as written. What
+followed is recorded here rather than folded into it, so the report can still be
+read against the state it was made in.
+
+| PR | Recommended | What happened |
+|---|---|---|
+| #122 | merge (first) | merged as `4ee481e` |
+| #123 | merge | merged as `7c9970e` |
+| #124 | merge | merged as `c7f6d0f` |
+| #125 | merge after rebase | **closed**, superseded by #136 |
+| #127 | merge | merged as `d449088` |
+| #128 | needs work | **merged after the defect was fixed** |
+| #129 | merge | merged as `b724433` |
+| #130 | merge (last) | merged as `27809cd` |
+
+Three of the report's findings decided an outcome:
+
+**The #122 + #125 collision was real, and #125 lost the race.** #136 landed the
+same `benchmark_claim_failures` gate on 2026-08-29 with the regenerated
+136/68/68/68 counts and a third document (`docs/RESPONSIBLE-TECH-AUDITS.md`) in
+scope. #125's branch still carried `132`, so merging it after #122 would have
+turned the gate it adds red against its own repository — exactly the breakage
+this report reproduced. It was closed as superseded rather than rebased.
+
+**#128's graduation-date check was fixed before merge, and the report
+understated it by one.** Both defects named here were reproduced against the
+as-submitted function: with a measurement date anywhere else in the row, an
+undated BASELINE row reported nothing, and the real ledger reported nothing on
+2099-01-01. The date is now read out of the gate cell alone and compared against
+today. A third case the report did not name was found while fixing it: a
+date-shaped string that is not a date (`2026-13-40`) parsed as "a date is
+present" and passed. It now fails closed.
+
+**The shared red belonged to nobody, and is gone.** #133 cleared
+CVE-2026-14456 on 2026-08-29 by installing the fixed `libcrypto3`/`libssl3`
+3.5.8-r0 into the final stage, version-pinned, and deleting pip from the runtime.
+`container (build · smoke · trivy)` has been green on every run since. The
+report's one "taken on trust" item on this point — that no rebuilt
+`python:3.13-alpine` digest carries the fix — held: the remedy was not a digest
+bump.
+
+The two green checks that cannot fail, from the section above:
+
+1. **`portfolio standards conformance` compares the README against the vendored
+   literal.** Still true. It needs a `.standards-version` bump, which is a
+   portfolio-pin decision with repository-wide scope and is not made here.
+2. **#128's BASELINE check.** Fixed, with four regression tests, one of which
+   reads the real ledger on 2026-10-12 and requires every row parked in BASELINE
+   to come back overdue.
