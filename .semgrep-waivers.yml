@@ -7,6 +7,13 @@
 # exists, and when it was added, so a waiver can't quietly go stale or multiply unnoticed. Every
 # entry here must have a matching `# nosemgrep:` comment in the code.
 #
+# `scripts/check_semgrep_waivers.py` (run by `make hygiene`) enforces every sentence above, in
+# both directions, and holds the review clock: `last_reviewed` more than 92 days old fails the
+# build naming the row's tracking issue, a date in the future is refused, and a date recorded
+# here but not in docs/RESPONSIBLE-TECH-AUDITS.md is reported as the two records disagreeing.
+# "Reviewed quarterly" used to live only in issues 52 and 53; this field was read as a date and
+# then discarded, so a lapsed review passed exactly like a fresh one.
+#
 # Adding a new waiver: get sign-off in the PR description (why this is a true false-positive, not
 # a fix-later), add the inline comment, then add a row here. Removing a waiver: delete both the
 # code comment and this row in the same PR.

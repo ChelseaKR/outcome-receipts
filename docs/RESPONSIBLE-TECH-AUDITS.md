@@ -125,7 +125,15 @@ are not inferred from automated results.
   `scripts/check_semgrep_waivers.py`, which compares `.semgrep-waivers.yml`
   against the tree in both directions, so a ledger row cannot outlive the
   suppression it documents and an undocumented suppression cannot be added.
-  Before it, both of those states passed every gate.
+  Before it, both of those states passed every gate. That check also holds the
+  quarterly cadence issues 52 and 53 commit to: a `last_reviewed` date more than
+  92 days old fails the build naming its tracking issue, a date in the future is
+  refused, and a review date recorded here but not in the ledger — or in the
+  ledger but not here — is reported as the two records disagreeing. Until then
+  `last_reviewed` was parsed and discarded, so a waiver whose review had lapsed
+  by a year passed exactly like one reviewed yesterday, and this paragraph and
+  the ledger could describe two different reviews with nothing to notice. On the
+  2026-08-28 dates above, the next review is due **2026-11-28**.
 - VEX: N/A today because scans report no unfixable HIGH/CRITICAL dependency CVE.
   Any future exception requires a CycloneDX VEX and quarterly review.
 

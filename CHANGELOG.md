@@ -11,6 +11,30 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- A clock on the Semgrep waiver reviews. Issues 52 and 53 are the audit owners
+  CQ-35 and SEC-10 require, and both commit to reviewing their waiver
+  *quarterly*. `last_reviewed` was validated as an ISO date and then never read
+  again, so that commitment was a sentence in two issue bodies with nothing
+  behind it: a waiver reviewed once in July passed identically forever, and the
+  issues could stay open indefinitely with no gate able to say the promise in
+  them had lapsed. `scripts/check_semgrep_waivers.py` now fails when a row's
+  review is more than 92 days old — the same span `check_conformance`'s
+  `CADENCE_DAYS` maps "quarter" to, so a quarter means one thing in both gates —
+  and the message names the tracking issue that owns the re-review rather than
+  only the rule. Two adjacent holes closed with it: a `last_reviewed` in the
+  *future* is refused, because a date ahead of today can never lapse and would
+  buy a row unlimited green; and the review date must also appear in
+  `docs/RESPONSIBLE-TECH-AUDITS.md`, which issue 52's acceptance criteria name
+  as the second record and which nothing compared against the first, so one
+  could be updated and the other forgotten. A missing audits document is
+  reported as the second record being unreadable, once, rather than as every row
+  disagreeing with it. Proven against the real ledger with its dates aged to
+  2024-01-01: the previous check exited 0, this one exits 1 with both rows
+  overdue by 882 days. Eight tests in `tests/test_semgrep_ledger.py`, one of
+  which runs the committed ledger past its own quarter so "the cadence is
+  enforced" is a claim about the document and not about a fixture. A green run
+  now prints the date the next review is due (2026-11-28), so it says when it
+  stops being green instead of implying it never will.
 - The Performance standard's artifacts, closing the open gap the README
   declared. `perf/baseline.json` is the committed comparand the standard's
   10%-regression rule needs, with `meta` provenance, an explicit `null` for
