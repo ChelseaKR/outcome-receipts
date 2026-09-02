@@ -101,7 +101,7 @@ msgid "provenance_heading"
 msgstr "## Procedencia"
 
 msgid "provenance_statement"
-msgstr "Cada número de este informe fue calculado por una consulta SQL determinista sobre los propios datos de servicio de la organización. Ningún dato fue redactado por un modelo de lenguaje. Cada dato lleva un recibo a continuación: la consulta exacta, el número de filas de las que se extrajo, un hash de contenido de ese segmento de datos y una marca de tiempo."
+msgstr "Cada dato de este informe fue calculado por una consulta SQL determinista sobre los propios datos de servicio de la organización. Ningún dato fue redactado por un modelo de lenguaje. Cada dato lleva un recibo a continuación: la consulta exacta, el número de filas de las que se extrajo, un hash de contenido de ese segmento de datos y una marca de tiempo. Los demás números que aparecen aquí, incluidas esas marcas de tiempo, los recuentos de filas, los hashes y las cifras dentro de las consultas y las definiciones, son metadatos del recibo y no datos informados."
 
 msgid "provenance_gate_pass_template"
 msgstr "Antes de exportar este informe, la verificación de fundamentación vinculó los {bound} números a un recibo; un número que no correspondiera a ningún recibo habría bloqueado la exportación."

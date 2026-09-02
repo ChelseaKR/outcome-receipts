@@ -1,15 +1,24 @@
-"""Issue 94: the HUD suppression-calibration write-up's numbers, recomputed.
+"""Issue 94: the HUD suppression calibration, recomputed and pinned.
 
-`docs/audits/hud-coc-suppression-calibration-2026-08-21.md` reports headline
-numbers about running the shipped small-cell suppression engine over real HUD
-2024 PIT-Count-by-CoC data. Every number in that write-up is required to trace
-back to `scripts/hud_suppression_calibration.calibrate()`, run fresh here
-against the committed `eval/hud/hud_pit_2024_by_coc_subpopulation.csv` --
-not copied from a one-time notebook run and pasted into prose. If the
-suppression engine's behavior ever changes, or the committed CSV is ever
-edited, this is what catches the write-up going stale, the same way
-`tests/test_release_compatibility.py` catches a receipts-manifest change the
-frozen baseline no longer matches.
+This file pins the *engine*. It runs
+`scripts/hud_suppression_calibration.calibrate()` fresh against the committed
+`eval/hud/hud_pit_2024_by_coc_subpopulation.csv` and asserts the result, so a
+change to the suppression engine's behavior, or an edit to the CSV, fails here
+-- the same way `tests/test_release_compatibility.py` catches a
+receipts-manifest change the frozen baseline no longer matches.
+
+It does NOT pin the write-up, and this docstring used to claim it did: "every
+number in that write-up is required to trace back to `calibrate()` ... not
+copied from a one-time notebook run and pasted into prose." Nothing here opens
+`docs/audits/hud-coc-suppression-calibration-2026-08-21.md`. The assertions
+below are literals copied out of the same run that produced the prose, which
+makes them a second hand-copy rather than a check on the first: a headline rate
+in that document could be edited by an order of magnitude with this file, and
+the whole suite, still green.
+
+`tests/test_hud_writeup_figures.py` is what reads the document and holds every
+figure in it to a fresh `calibrate()` run. The two are complementary: this one
+says what the engine does, that one says the write-up still describes it.
 """
 
 from __future__ import annotations

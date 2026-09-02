@@ -11,6 +11,33 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- The Performance standard's artifacts, closing the open gap the README
+  declared. `perf/baseline.json` is the committed comparand the standard's
+  10%-regression rule needs, with `meta` provenance, an explicit `null` for
+  every metric this project has no route to measure, and a per-metric direction
+  so the comparison is mechanical. `perf/README.md` records the budgets and
+  which controls apply: k6 latency is declared N/A with its reason, there being
+  no hosted route and no preview environment, rather than skipped. The single
+  `lighthouserc.cjs` now asserts `categories:performance` at 0.9 alongside the
+  accessibility score, and a script-transfer budget of zero bytes on the
+  generated trace, which is tighter than the standard's 204,800 on purpose: the
+  trace is a static document a funder opens, the project ships no web
+  application, and at 204,800 the assertion could not fail until 200 KB of
+  JavaScript had already reached a funder's browser. `scripts/check_perf_baseline.py`
+  (`make perf`, wired into `make verify` after `a11y`) is the regression half.
+  It reads the report `a11y` produced rather than measuring twice, because the
+  standard requires one Lighthouse config per repository, and it refuses a
+  report older than the trace it would be scored against, or no report at all,
+  so a failed Lighthouse run cannot leave a stale green behind it. Proven able
+  to fail against the real toolchain: a 1 KB script injected into
+  `out/a11y/trace.html` takes the measurement to 0.411 KB and fails both the
+  Lighthouse assertion and the baseline check. Twelve tests in
+  `tests/test_perf_baseline.py`.
+- `verify-ledger` blind-spot tests on hand-tampered fixtures: entries deleted
+  from the tail verify clean, and a wholesale rewrite with recomputed hashes
+  verifies clean. Both are documented limits of a keyless hash chain; the tests
+  keep the documentation honest in both directions. Middle-entry deletion and
+  reordering, which the chain does detect, are now pinned too.
 - `scripts/check_semgrep_waivers.py`, run by `make hygiene`: `.semgrep-waivers.yml`
   is now compared against the tree in both directions. Its header had asserted
   since July that every entry there must have a matching inline suppression in
@@ -51,6 +78,37 @@ release-hardening work completed before the first public tag.
   `tests/test_hud_suppression_calibration.py`.
 
 ### Changed
+- `tests/test_conformance.py` no longer describes its frozen `controls.yml`
+  snapshot as coming from "the version this repository pins in
+  `.standards-version`". It does not. The pin is `v1.0.1`, and `controls.yml`
+  did not exist at `v1.0.1`; it arrived with FIX-01 on 2026-07-11. The
+  consequence is now stated where a reader meets the snapshot: the "portfolio
+  standards" CI job checks the pinned ref out and runs
+  `check_conformance.py --standards-dir .standards` against it, that checkout
+  carries no `controls.yml`, and `standards_index` warns and falls back to the
+  vendored literal. The job passes in a few seconds having compared the README
+  against the same hardcoded list DOC-11 set out to stop trusting, so nothing is
+  currently checking either copy against a live registry. The remedy is a
+  `.standards-version` bump, which is a deliberate portfolio-pin decision with
+  repository-wide scope and is not made here. `check_conformance.py` and its
+  behavior are unchanged.
+- `tests/test_conformance.py::test_the_standards_pin_is_named_the_same_way_in_all_three_places`
+  pins the three places the standards version is written: `.standards-version`,
+  the `ref:` the CI job checks the standards repository out at, and that job's
+  own `test "$(cat .standards-version)" = "..."` line. Two of the three live in
+  a workflow file no test read. Bumping `.standards-version` alone turns the job
+  red on its assertion, which is loud; moving the `ref:` alone is the quiet one,
+  and left the job checking out a version nobody declared while reporting green.
+- The export ledger no longer claims to detect "any edit, insertion, deletion,
+  or reordering". Deletion from the tail, a full rewrite with recomputed
+  hashes, and an export never appended all leave no trace, and the module
+  docstring, the ADR, and the README row now say so. `verify-ledger` prints
+  the entry count and three "not proven" lines beside PASS, and its `--json`
+  output carries `entries` and `not_proven`, so a clean chain can no longer
+  read as proof of completeness or authorship. `verify-ledger` also now fails
+  closed on a missing file: an absent ledger used to verify as an empty chain
+  and report PASS, so a mistyped `--ledger` path was a green check that had
+  read nothing.
 - `.semgrep-waivers.yml`: both waivers re-reviewed on 2026-08-28 by deleting
   each suppression and re-running the pinned scanner against the file. Both
   rules still fire, so neither waiver can be retired and issue 53 stays open.
@@ -126,6 +184,143 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- Issue 118: `receipts eval` now scores every narrative the run would export,
+  and refuses to report a pass over nothing. It drafted through
+  `draft(spec.report, ...)`, which fills only the legacy single
+  `[report] template`. A spec that names funder formats under
+  `[[report.templates]]` leaves that field empty, so eval drafted the empty
+  string, found zero numeric spans, and reported `gate_pass: true` with exit 0.
+  That is the shape of `examples/multi-funder/report.toml`, which ships in this
+  repository: both funder narratives carry real figures, and eval had never
+  looked at either. It now drafts through the same `_draft_templates` the
+  export path uses and aggregates the spans across formats, which takes the
+  shipped example from 0 numbers scored to 6. A figure written into two funder
+  narratives counts twice on purpose: `run` exports one document per format, so
+  each occurrence is its own chance for an ungrounded number to reach a reader,
+  and the eval report's "What was scored" section now says so.
+- `receipts eval` exits non-zero when it scored no numeric span at all.
+  `EvalReport.gate_pass` still reports the grounding gate's own verdict, which
+  is a truthful pass over an empty denominator and is what `run` would do with
+  such a spec, but a command whose job is to measure the gate must not hand CI
+  a green from a run that never exercised it. That silent green is how the
+  multi-template hole above stayed invisible. `EvalReport.scored` is the new
+  distinction, `--json` carries it as `scored`, and the committed eval report
+  says in words that an unscored run is not a measurement. Regression tests:
+  `tests/test_cli.py::test_eval_scores_every_funder_template_not_only_the_legacy_field`,
+  `::test_eval_refuses_to_report_a_pass_when_it_scored_no_numbers`, a passing
+  control on the legacy single-template path beside them, and
+  `tests/test_eval_report_markdown.py::test_zero_numeric_spans_says_the_run_is_not_a_measurement`.
+- Issue 117: a chart naming a metric whose value is negative now refuses to
+  render instead of drawing the decrease as a zero. A comparison or
+  reconciliation delta figure carries the signed change in `Figure.value`, and
+  nothing stopped a `[[charts]]` block from naming one. `_bar_svg_body` took its
+  `else` branch for any value not above zero and emitted `height="0.0"`, flush
+  on the axis baseline, with the magnitude printed directly above it: a bar
+  claiming "no change" beside a receipt reading minus twelve and a label reading
+  12. `_line_svg_body` plotted the same point at `y=668.0` on a canvas 360 high,
+  off the image entirely, and `_scale_max` fell back to an axis maximum of 1.0
+  over a set of decreases. `_points` now raises `ValueError` naming the chart,
+  the metric and the value, before any geometry is computed, so both the bar and
+  the line path are covered from one place. Drawing the magnitude was rejected
+  as a fix and is recorded as such: it makes a decrease of 12 and an increase of
+  12 produce byte-identical geometry and an identical `<title>`. A signed bar
+  from a zero baseline was also rejected for now, because the only text a chart
+  may put on the page is `figure.display`, a delta display is the unsigned
+  magnitude by design, and signed geometry with no signed text equivalent leaves
+  a screen-reader user reading the same "12" for a rise and a fall. Rationale
+  and the path to charting a change properly:
+  `docs/adr/0006-refuse-a-negative-valued-chart-metric.md`. A true zero is
+  unaffected and still draws a zero-height bar. Regression tests:
+  `tests/test_charts.py::test_a_negative_bar_value_is_refused_instead_of_drawn_as_a_zero`,
+  `::test_a_negative_line_value_is_refused_too`,
+  `::test_the_refusal_names_the_value_and_says_what_to_do`, and a passing zero
+  control beside them.
+- Issue 116: a decimal written without its leading zero no longer loses its
+  separator and binds an unrelated receipt. Every alternative in the grounding
+  gate's `_NUMBER` pattern required the match to start on a digit, so `.75`
+  matched one character late and came back as the span `75`. That span was
+  then looked up like any integer, so a narrative stating a retention rate of
+  `.75` bound a receipted count of 75 and the gate reported the report fully
+  grounded: a number two orders of magnitude from anything in the data,
+  carrying a receipt for something else. `$.99`, `-.5` and the Spanish-
+  convention `,75` had the same shape. The pattern now consumes a leading
+  `.`/`,` that is not itself preceded by a digit, so `_span_key` sees the whole
+  number and a leading-separator decimal binds only a display written the same
+  way. No display is written that way, because `engine._format` always writes
+  the integer part, so such a span is unbound and blocks export. Ordinary
+  decimals, thousands groups, NBSP grouping, currency, percent and duration
+  spans are unchanged. Regression tests:
+  `tests/test_grounding_gate.py::test_leading_dot_decimal_does_not_bind_the_integer_with_the_same_digits`,
+  `::test_leading_separator_decimals_keep_their_separator_in_the_span`, a
+  passing control beside them, and two new bilingual benchmark shapes
+  (`leading-separator-decimal-for-count`, `sub-one-rate-with-leading-zero`).
+- `make container-verify` failed on two upstream findings, not repo code: the
+  pinned `python:3.13-alpine` base ships libcrypto3/libssl3 3.5.7-r0, which
+  trivy flags for CVE-2026-14456 (HIGH, fixed in Alpine 3.24 main as
+  3.5.8-r0), and even the newest base rebuild still carries the old build.
+  The final stage now installs the fixed packages version-pinned, and removes
+  pip entirely: the runtime is the copied venv, pip exists only for installs
+  this offline image never performs, and pip's vendored msgpack and
+  setuptools copies were the next findings the scanner surfaced. The base
+  digest is refreshed to the current multi-arch index. All 11 verify gates
+  pass again, with the scan reporting zero findings rather than any waiver.
+- The README, the `docs/ROADMAP.md` metrics ledger, and
+  `docs/RESPONSIBLE-TECH-AUDITS.md` all stated the committed grounding benchmark
+  was 100 cases, the ROADMAP adding "50 EN, 50 ES; 50 planted unbound failures".
+  It has held 132 cases, 66 EN, 66 ES and 66 planted failures since PR 89 added
+  the 32-case formatting family on 2026-08-15, and none of the three was
+  updated. The numbers were wrong in the three places a reader checks the
+  evidence, in the direction of understating it, and nothing could catch that: a
+  count written in prose is exactly the kind of claim no gate reads. All three
+  are corrected, and `scripts/check_conformance.py` gains
+  `benchmark_claim_failures`, wired into `make hygiene`, which reads the
+  committed `eval/grounding-benchmark.jsonl` and compares the totals against the
+  numbers the documents state. It fails closed on a claim it cannot parse as
+  well as on one that is wrong, because a sentence that no longer matches the
+  expected shape is not evidence the count is right, and it matches `[0-9]`
+  rather than `\d` so a count written in fullwidth digits fails closed instead of
+  parsing. Regression tests:
+  `tests/test_conformance.py::test_benchmark_claim_failures_catches_the_stale_count`,
+  `::test_benchmark_claim_failures_fails_closed_on_an_unreadable_claim`,
+  `::test_benchmark_claim_failures_rejects_a_count_written_in_exotic_digits`,
+  `::test_benchmark_claim_failures_is_silent_when_the_claims_are_true`, and
+  `::test_benchmark_claim_is_true_of_the_real_committed_repository`.
+- "Every number is a receipt" promised more than the gate delivers, and the
+  project's own exports falsified it. Running the shipped gate over the
+  artifacts `make build-html` writes gives `out/a11y/report.md` 3 bound and 61
+  unbound, and `out/a11y/trace.html` 4 bound and 124 unbound. Those unbound
+  spans are export timestamps, row counts, slice hashes, and the numerals inside
+  the printed queries and definitions. They were never in the gate's scope:
+  `receipts run` grounds the drafted narrative and the chart, comparison, and
+  reconciliation claims, which is what `verify.py::_report_narrative` already
+  documented and what README line 289 already said. The headline said otherwise
+  in the GitHub description, `README.md`, `DEFINITION_OF_DONE.md`,
+  `docs/PROJECT-SCOPE.md`, `AGENTS.md`, `CITATION.cff`, `pyproject.toml`, and
+  the shipped `provenance_statement` string that prints inside every export. All
+  of them now state the scope the gate actually enforces, and the README and the
+  provenance block name the exception rather than leaving a reader to discover
+  it. `tests/test_provenance.py::test_the_gate_covers_the_claims_not_every_numeral_in_the_file`
+  pins both halves: clean over the narrative region, not clean over the whole
+  rendered file. The Spanish `provenance_statement` was rewritten alongside the
+  English so no locale keeps asserting what the English no longer says. The
+  msgid is a stable key rather than the source text, so gettext could not have
+  marked it fuzzy and nothing would have caught the drift. Per
+  `docs/I18N.md`'s translation review policy this Spanish is a draft and still
+  needs the human review step before it is final copy. Changing the copy changes
+  the bytes of an exported `report.md`, so the two bundle digests in
+  `tests/fixtures/compat/v1/workflow-artifacts.json` are regenerated. No schema,
+  receipt, or figure changed, and the frozen `v0.1.0` manifest still re-derives.
+- `docs/ci-action.md` published the composite action's `version` input default
+  as `v0.1.0` in its Inputs table and as "the first released tag" in the prose
+  beneath it. `action.yml` sets `v0.2.0`, so a reader copying the table pinned
+  the wrong CLI. Both are corrected against `action.yml`, and
+  `action_default_failures` reads the default out of the action definition
+  rather than restating it.
+- Nothing compared the three public schema versions across their three homes:
+  the constant the code writes, the `const` the published JSON Schema pins, and
+  the sentence `docs/SPEC-STABILITY.md` states. All three agree today;
+  `schema_version_failures` is what keeps them agreeing, and fails closed when
+  the sentence stops being readable.
 - `scripts/check_conformance.py` allowed no waiver kind that
   `scripts/check_npm_audit.py` could honour. The npm gate accepts a Node
   dependency advisory only from a waiver whose `kind` is `npm-audit`, and

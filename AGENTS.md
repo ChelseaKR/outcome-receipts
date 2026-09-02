@@ -5,8 +5,8 @@
 
 ## What this is
 
-`outcome-receipts` drafts a funder outcome report in which **every number is a
-receipt**. It connects to a nonprofit's own service data, computes each required
+`outcome-receipts` drafts a funder outcome report in which **every reported
+figure is a receipt**. It connects to a nonprofit's own service data, computes each required
 figure with a deterministic query, and attaches to that figure a receipt: the
 exact query, the row count, a content hash of the data slice it was computed
 from, and a timestamp. A drafting step writes narrative prose around the

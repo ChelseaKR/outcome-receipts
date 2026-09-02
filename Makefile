@@ -1,6 +1,6 @@
 .PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
 	security-pip security-npm security-osv security-secrets security-semgrep security-workflows \
-	a11y build-html cards benchmark eval eval-check mutation run container-build \
+	a11y perf build-html cards benchmark eval eval-check mutation run container-build \
 	container-smoke container-scan container-verify container-demo clean
 
 # The gate sets, in reporting order. Lists rather than prerequisites, because
@@ -12,7 +12,7 @@
 # exits non-zero if any of them failed. Nothing is muted; nothing is skipped.
 SECURITY_GATES := security-pip security-npm security-osv security-secrets \
 	security-semgrep security-workflows
-VERIFY_GATES := lint type test hygiene i18n security a11y cards eval-check compat \
+VERIFY_GATES := lint type test hygiene i18n security a11y perf cards eval-check compat \
 	container-verify
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
@@ -137,6 +137,17 @@ build-html:
 
 a11y: build-html
 	npm run a11y
+
+# The regression half of the Performance standard's rule. The absolute budgets
+# (performance >= 0.9, zero script bytes) are asserted by Lighthouse-CI inside
+# `a11y`, from the one lighthouserc.cjs the standard allows; this compares the
+# same run's report against the committed perf/baseline.json and fails on any
+# metric more than 10% worse in its declared direction. It reads a report rather
+# than taking a second measurement, and it refuses a report older than the trace
+# it would be scored against, so a failed Lighthouse run cannot leave a stale
+# green here. Run `make a11y` first; `make verify` runs them in that order.
+perf:
+	.venv/bin/python scripts/check_perf_baseline.py
 
 cards:
 	.venv/bin/receipts cards --out docs/cards --check

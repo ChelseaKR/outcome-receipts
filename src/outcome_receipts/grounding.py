@@ -56,8 +56,9 @@ from outcome_receipts.models import (
     SuppressedSpan,
 )
 
-# A number as it appears in prose, tolerant of locale formatting, in three forms
-# tried in order, each with an optional leading currency symbol:
+# A number as it appears in prose, tolerant of locale formatting, in four forms,
+# each with an optional leading currency symbol. Form 4 is tried first and the
+# rest in the order listed, for the reason form 4 records:
 #   1. NBSP-grouped thousands: 1-3 leading digits then one or more groups of
 #      exactly 3 digits separated by NBSP (U+00A0) or narrow NBSP (U+202F), with
 #      an optional '.'/',' decimal tail and optional '%'. These are the space
@@ -70,6 +71,19 @@ from outcome_receipts.models import (
 #   2. Dot/comma-grouped or decimal: a digit run carrying '.'/',' as thousands
 #      and/or decimal ("1,234", "1.234", "12,345.67", "3.5", "3,5").
 #   3. A lone digit, with optional '%'.
+#   4. A decimal written without its leading zero: a '.'/',' that is not itself
+#      preceded by a digit, then a digit run (".75", "$.99", "-.5", ",75"). This
+#      alternative is tried first, because the three above all require the match
+#      to *start* on a digit and so match a leading-separator decimal one
+#      character late: ".75" came back as the span "75", the dot silently outside
+#      the match, and that span then bound a receipted count of 75. A rate
+#      written the ordinary English way ("a retention rate of .75") therefore
+#      carried a receipt for a number two orders of magnitude away from it. The
+#      separator is inside the span now, so _span_key reads ".75" as its own
+#      value and it binds only a display written the same way. No display is
+#      written that way -- every display comes out of engine._format, which
+#      always writes the integer part -- so a leading-separator decimal is
+#      unbound, which is the fail-closed direction and is visible to the author.
 # The ``$`` is captured so a money display (``$1,234.50``) is one span that
 # normalizes to its figure. A trailing unit word (the ``days`` in a duration
 # display) is not captured here on purpose: capturing an arbitrary following word
@@ -82,7 +96,8 @@ from outcome_receipts.models import (
 # so a number that is not a figure (a stray "2024") is unbound and must be removed
 # or made a figure. That strictness is the point.
 _NUMBER = re.compile(
-    r"(?<!\d)\$?[+-]?\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?%?"
+    r"(?<!\d)\$?[+-]?[.,]\d+%?"
+    r"|(?<!\d)\$?[+-]?\d{1,3}(?:[\u00a0\u202f]\d{3})+(?:[.,]\d+)?%?"
     r"|(?<!\d)\$?[+-]?\d[\d.,]*\d%?"
     r"|(?<!\d)\$?[+-]?\d%?"
 )
