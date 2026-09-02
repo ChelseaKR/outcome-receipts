@@ -854,8 +854,10 @@ def perf_claim_failures(root: Path) -> list[str]:
     try:
         metrics = json.loads(baseline_path.read_text(encoding="utf-8"))["metrics"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        return [f"perf/baseline.json cannot be read as a metrics object ({exc}), so the "
-                "performance figures docs/ROADMAP.md publishes cannot be checked"]
+        return [
+            f"perf/baseline.json cannot be read as a metrics object ({exc}), so the "
+            "performance figures docs/ROADMAP.md publishes cannot be checked"
+        ]
 
     roadmap = (root / "docs" / "ROADMAP.md").read_text(encoding="utf-8")
     failures: list[str] = []
