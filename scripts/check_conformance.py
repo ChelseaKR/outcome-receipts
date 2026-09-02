@@ -1000,6 +1000,79 @@ def schema_version_failures(root: Path) -> list[str]:
     return failures
 
 
+# The AI-Development Measurement standard asks each repository for two things a
+# document can hold and a check can read: one scope-declaration line in the
+# ROADMAP metrics ledger, and a graduation date on every metric parked in the
+# BASELINE state. A BASELINE row with no date is a metric nobody has committed to
+# ever decide about, which the standard calls a conformance failure for the same
+# reason an aspirational row is one.
+#
+# Both halves of the date rule are load-bearing, and getting either wrong turns
+# this into the shape of check it exists to catch. The date is read out of the
+# BASELINE cell alone, not out of the row, because every row in this ledger also
+# carries a measurement date: a row-wide search reports a graduation date on a
+# row that names none. And the date is compared against today, because a check
+# that only asks whether a date is *present* goes permanently green on the day
+# after the one it printed -- the metric parked in BASELINE forever, which is
+# exactly the state the failure message below says must not be possible.
+_AI_DEV_DECLARATION_RE = re.compile(r"AI-DEV-MEASUREMENT:\s*(APPLIES|N/A\b)")
+_TABLE_ROW_RE = re.compile(r"^\|.*\|\s*$", re.MULTILINE)
+_ISO_DATE_RE = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})")
+
+
+def _row_cells(row: str) -> list[str]:
+    """The cells of a Markdown table row, without the leading/trailing empties."""
+
+    return [cell.strip() for cell in row.strip().strip("|").split("|")]
+
+
+def ai_dev_measurement_failures(root: Path, today: date) -> list[str]:
+    """Check the measurement standard's two document-level obligations."""
+
+    roadmap_path = root / "docs" / "ROADMAP.md"
+    if not roadmap_path.exists():
+        return ["docs/ROADMAP.md is missing, so the AI-DEV-MEASUREMENT scope cannot be checked"]
+    roadmap = roadmap_path.read_text(encoding="utf-8")
+
+    failures: list[str] = []
+    if _AI_DEV_DECLARATION_RE.search(roadmap) is None:
+        failures.append(
+            "docs/ROADMAP.md carries no 'AI-DEV-MEASUREMENT: APPLIES' or "
+            "'AI-DEV-MEASUREMENT: N/A' scope line in its metrics ledger"
+        )
+    for row in _TABLE_ROW_RE.findall(roadmap):
+        cells = _row_cells(row)
+        if len(cells) < 2:
+            continue
+        gate = cells[-1]
+        if not re.search(r"\bBASELINE\b", gate):
+            continue
+        name = cells[0]
+        match = _ISO_DATE_RE.search(gate)
+        if match is None:
+            failures.append(
+                f"docs/ROADMAP.md parks {name!r} in BASELINE with no graduation date; a metric "
+                "may not sit there indefinitely, so the gate cell must name the date its "
+                "decision is due (YYYY-MM-DD)"
+            )
+            continue
+        try:
+            graduation = date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        except ValueError:
+            failures.append(
+                f"docs/ROADMAP.md gives {name!r} the graduation date {match.group(0)!r}, which is "
+                "not a real date, so the date its decision is due cannot be read"
+            )
+            continue
+        if graduation < today:
+            failures.append(
+                f"docs/ROADMAP.md parks {name!r} in BASELINE until {graduation.isoformat()}, "
+                f"which passed on {today.isoformat()}; the metric must now become an AUTO or "
+                "REVIEW gate, be retired, or be re-dated with the decision recorded"
+            )
+    return failures
+
+
 def main() -> int:
     """Return nonzero when a required declaration or artifact is missing."""
 
@@ -1050,6 +1123,7 @@ def main() -> int:
     failures.extend(perf_claim_failures(ROOT))
     failures.extend(action_default_failures(ROOT))
     failures.extend(schema_version_failures(ROOT))
+    failures.extend(ai_dev_measurement_failures(ROOT, date.today()))
 
     if failures:
         print("repository conformance failed:", file=sys.stderr)
