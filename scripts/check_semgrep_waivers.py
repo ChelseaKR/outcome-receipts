@@ -18,6 +18,21 @@ Semgrep ledger:
 * an unqualified suppression naming no rule is refused, because it silences
   every rule at that line and no ledger row can describe what it accepted.
 
+Then the same question about the ledger's own dates, because a row can be
+perfectly consistent with the tree and still be a waiver nobody has looked at
+since it was granted:
+
+* `last_reviewed` more than `REVIEW_INTERVAL_DAYS` old fails, naming the
+  tracking issue that owns the re-review. Issues 52 and 53 promise a quarterly
+  review; the field recording it was parsed as a date and then never read, so
+  the promise had no clock on it and a waiver reviewed once could stay green
+  forever;
+* `last_reviewed` in the future is refused, since a date ahead of today can
+  never lapse and would buy the row unlimited green;
+* the review date has to appear in `docs/RESPONSIBLE-TECH-AUDITS.md` too. Issue
+  52's acceptance criteria name both records; nothing compared them, so one
+  could be updated and the other forgotten.
+
 Python files are read through `tokenize`, so a directive quoted inside a
 docstring or a test fixture is not mistaken for a live suppression. Reads the
 repository by default; `--root` and `--ledger` exist so
@@ -31,7 +46,7 @@ import re
 import sys
 import tokenize
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +68,29 @@ _DIRECTIVE_RE = re.compile(
 _COMMENT_START_RE = re.compile(r"(?:#|//)")
 
 REQUIRED_FIELDS = ("rule_id", "locations", "added", "last_reviewed", "tracking_issue", "reason")
+
+#: How long a `last_reviewed` date stays good. Issues 52 and 53 are the audit
+#: owners CQ-35 and SEC-10 require, and both commit to a *quarterly* re-review;
+#: 92 days is the same number `check_conformance.CADENCE_DAYS` maps "quarter" to,
+#: so a quarter means the same span in both gates.
+#:
+#: Until this, that commitment was a sentence in two issues and a field nothing
+#: read. `last_reviewed` was validated as an ISO date and then ignored, so a
+#: waiver whose review had lapsed by a year passed exactly like one reviewed
+#: yesterday, and the two issues could stay open indefinitely with nothing able
+#: to say the promise in them had been broken. A recurring review with no clock
+#: on it is not a control.
+REVIEW_INTERVAL_DAYS = 92
+
+#: The second place each review has to be recorded. Issue 52's acceptance
+#: criteria name both this ledger and the audits document, and nothing compared
+#: them: the ledger could carry a fresh review date while the audit section a
+#: reader actually opens still described the previous one. The check is
+#: deliberately weak -- the date string has to appear somewhere in the document
+#: -- because a stricter shape would be a second thing to keep in sync. It
+#: catches the failure that has actually happened here, which is one record
+#: being updated and the other forgotten.
+AUDITS_DOC = Path("docs") / "RESPONSIBLE-TECH-AUDITS.md"
 
 _BLOCK_INDICATORS = frozenset({">", ">-", ">+", "|", "|-", "|+"})
 
@@ -232,13 +270,60 @@ def _schema_failures(entry: LedgerEntry, label: str) -> list[str]:
     return failures
 
 
-def _entry_failures(entry: LedgerEntry, suppressions: list[Suppression]) -> list[str]:
-    """Schema and coverage failures for one ledger row."""
+def _review_failures(entry: LedgerEntry, label: str, today: date, audits: str | None) -> list[str]:
+    """Has this waiver's quarterly review happened, and is it recorded twice?
+
+    Runs only on a row whose `last_reviewed` already parsed, so an unreadable
+    date is reported once as a schema failure rather than again here as a lapse.
+    """
+
+    value = entry.fields.get("last_reviewed", "")
+    try:
+        reviewed = date.fromisoformat(value)
+    except ValueError:
+        return []
+
+    issue = entry.fields.get("tracking_issue", "") or "the waiver's tracking issue"
+    failures: list[str] = []
+    if reviewed > today:
+        # Not pedantry: a future date is the one value that would make this
+        # check permanently silent, because it can never go stale. A review
+        # dated ahead of today has not happened.
+        failures.append(
+            f"{label}: last_reviewed is {value}, which is after today ({today.isoformat()}); "
+            "a review that has not happened yet cannot be recorded as done"
+        )
+    elif (today - reviewed).days > REVIEW_INTERVAL_DAYS:
+        overdue = (today - reviewed).days - REVIEW_INTERVAL_DAYS
+        failures.append(
+            f"{label}: last reviewed {value}, {(today - reviewed).days} days ago, and this "
+            f"waiver is reviewed quarterly ({REVIEW_INTERVAL_DAYS} days) -- {overdue} day(s) "
+            f"overdue. Re-run the pinned scanner with the suppression deleted, then record "
+            f"the result in the ledger and in {AUDITS_DOC.as_posix()}, or retire the waiver. "
+            f"Owner: {issue}"
+        )
+
+    if audits is not None and value not in audits:
+        failures.append(
+            f"{label}: the ledger records a review on {value} but {AUDITS_DOC.as_posix()} "
+            "does not mention that date, so the two records of the same review disagree"
+        )
+    return failures
+
+
+def _entry_failures(
+    entry: LedgerEntry,
+    suppressions: list[Suppression],
+    today: date,
+    audits: str | None,
+) -> list[str]:
+    """Schema, review-currency and coverage failures for one ledger row."""
 
     label = entry.rule_id or "<missing rule_id>"
     failures = _schema_failures(entry, label)
     if not entry.rule_id:
         return failures
+    failures.extend(_review_failures(entry, label, today, audits))
 
     covering = [item for item in suppressions if entry.rule_id in item.rule_ids]
     if not covering:
@@ -278,8 +363,8 @@ def _undocumented_failures(
     return failures
 
 
-def ledger_failures(root: Path, ledger_path: Path) -> list[str]:
-    """Every disagreement between the ledger and the suppressions in the tree."""
+def ledger_failures(root: Path, ledger_path: Path, today: date) -> list[str]:
+    """Every disagreement between the ledger, the tree, the calendar and the audits doc."""
 
     if not ledger_path.exists():
         return [f"{ledger_path} does not exist; the Semgrep waiver ledger is required"]
@@ -287,13 +372,27 @@ def ledger_failures(root: Path, ledger_path: Path) -> list[str]:
     entries = parse_ledger(ledger_path.read_text(encoding="utf-8"))
     suppressions = find_suppressions(root)
 
+    audits_path = root / AUDITS_DOC
+    # `None` means "there is no second record to compare against", which is a
+    # different statement from "the two records disagree" and must not be
+    # reported as one. It is still a failure, reported once for the document
+    # rather than once per row.
+    audits: str | None = None
     failures: list[str] = []
+    if audits_path.exists():
+        audits = audits_path.read_text(encoding="utf-8")
+    elif entries:
+        failures.append(
+            f"{AUDITS_DOC.as_posix()} is missing, so the second record of each waiver "
+            "review cannot be read; the ledger's dates cannot be corroborated"
+        )
+
     known: set[str] = set()
     for entry in entries:
         if entry.rule_id and entry.rule_id in known:
             failures.append(f"{entry.rule_id}: duplicate ledger row")
         known.add(entry.rule_id)
-        failures.extend(_entry_failures(entry, suppressions))
+        failures.extend(_entry_failures(entry, suppressions, today, audits))
 
     failures.extend(_undocumented_failures(suppressions, known, ledger_path.name))
     return failures
@@ -305,19 +404,40 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--ledger", type=Path, default=None)
+    parser.add_argument(
+        "--today",
+        type=date.fromisoformat,
+        default=None,
+        help="the date to judge review currency against (default: today)",
+    )
     args = parser.parse_args(argv)
 
+    today = args.today if args.today is not None else date.today()
     ledger = args.ledger if args.ledger is not None else args.root / ".semgrep-waivers.yml"
-    failures = ledger_failures(args.root, ledger)
+    failures = ledger_failures(args.root, ledger, today)
     if failures:
         print("semgrep waiver ledger failed:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
 
-    rows = len(parse_ledger(ledger.read_text(encoding="utf-8")))
+    entries = parse_ledger(ledger.read_text(encoding="utf-8"))
     inline = len(find_suppressions(args.root))
-    print(f"semgrep waiver ledger: {rows} row(s) matched against {inline} inline suppression(s)")
+    # Print the nearest review deadline rather than only a row count, so a green
+    # run says when this stops being green instead of implying it never will.
+    due = min(
+        (date.fromisoformat(entry.fields["last_reviewed"]) for entry in entries),
+        default=None,
+    )
+    horizon = (
+        f", next review due {(due + timedelta(days=REVIEW_INTERVAL_DAYS)).isoformat()}"
+        if due is not None
+        else ""
+    )
+    print(
+        f"semgrep waiver ledger: {len(entries)} row(s) matched against "
+        f"{inline} inline suppression(s){horizon}"
+    )
     return 0
 
 
