@@ -48,12 +48,24 @@ install-smoke: install
 	docker version --format '{{.Server.Version}}'
 	node -e "const fs=require('node:fs'); const {chromium}=require('playwright'); fs.accessSync(chromium.executablePath(), fs.constants.X_OK)"
 
+# `scripts/` is in scope here on purpose. Every merge-blocking gate in this
+# repository except the test suite is implemented under scripts/, and for a
+# long time those two lines read `src tests`: the code enforcing the other
+# standards was the one directory exempt from the code-quality standard.
 lint:
-	.venv/bin/ruff check src tests
-	.venv/bin/ruff format --check src tests
+	.venv/bin/ruff check src tests scripts
+	.venv/bin/ruff format --check src tests scripts
 
+# Two invocations, not one target list. `pyproject.toml`'s `files` covers src
+# and tests, where the scripts are imported as `scripts.<name>` by the test
+# suite; the second call checks the same files the way they are actually run,
+# as top-level modules on `scripts/`, which is how `scripts/check_waivers.py`
+# resolves `from check_conformance import ...` when standards.yml executes it.
+# One combined run fails with "Source file found twice under different module
+# names", so the choice is two runs or no coverage of scripts at all.
 type:
 	.venv/bin/python -m mypy
+	.venv/bin/python -m mypy --strict scripts
 
 test:
 	.venv/bin/python -m pytest
@@ -61,9 +73,15 @@ test:
 		--include="src/outcome_receipts/grounding.py,src/outcome_receipts/engine.py,src/outcome_receipts/suppression.py,src/outcome_receipts/bundle.py,src/outcome_receipts/verify.py" \
 		--fail-under=95
 
+# check_semgrep_waivers.py enforces the invariant `.semgrep-waivers.yml` had
+# only ever asserted in its own header: every ledger row must correspond to a
+# real inline suppression, and every inline suppression must have a row. Before
+# it, a row could outlive the code it documented and an undocumented
+# suppression could be added, with every gate still green.
 hygiene:
 	.venv/bin/python scripts/check_source_hygiene.py
 	.venv/bin/python scripts/check_conformance.py
+	.venv/bin/python scripts/check_semgrep_waivers.py
 
 # Keep ephemeral Python tools on the same interpreter as the locked project. In
 # particular, Semgrep's macOS source distribution does not carry semgrep-core.

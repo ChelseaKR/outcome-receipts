@@ -11,7 +11,9 @@ from pathlib import Path
 
 import pytest
 from scripts.check_conformance import (
+    DEPENDENCY_ADVISORY_KINDS,
     FALLBACK_STANDARDS,
+    VALID_KINDS,
     StandardsIndexError,
     _readme_standards_rows,
     _standards_table_failures,
@@ -24,6 +26,7 @@ from scripts.check_conformance import (
     standards_index,
     waiver_failures,
 )
+from scripts.check_npm_audit import KIND as NPM_AUDIT_KIND
 
 # A frozen, verbatim copy of the 15 standard-registry lines from the portfolio
 # standards repo's controls.yml. This is what a real `--standards-dir` checkout
@@ -610,6 +613,62 @@ def test_security_declaration_ignores_an_expired_dependency_waiver() -> None:
     )
 
     assert failures == []
+
+
+# ---------------------------------------------------------------------------
+# The two waiver linters have to agree on what a waiver may be. They did not.
+# `scripts/check_npm_audit.py` accepts a Node dependency advisory only from a
+# waiver whose kind is exactly its `KIND`; `VALID_KINDS` here did not list that
+# string, so the only kind the npm gate could honour was one this gate rejected.
+# A registry holding the fixture above -- the one four §F tests are written
+# against -- failed `waiver_failures` with "unknown kind", which means the
+# `npm-audit` arm of DEPENDENCY_ADVISORY_KINDS could never fire against a
+# registry this repository would accept. Nothing caught it because WVR-007, the
+# only npm-audit waiver ever granted here, was retired on 2026-08-15 and
+# VALID_KINDS was introduced on 2026-08-21.
+# ---------------------------------------------------------------------------
+
+
+def test_valid_kinds_contains_the_kind_the_npm_audit_gate_requires() -> None:
+    # Read from check_npm_audit rather than restated, so the two constants
+    # cannot drift apart again without this failing.
+    assert NPM_AUDIT_KIND in VALID_KINDS, (
+        f"scripts/check_npm_audit.py accepts a dependency advisory only from a "
+        f"{NPM_AUDIT_KIND!r} waiver, but the waiver lint rejects that kind, so "
+        "no npm-audit waiver can ever be valid in this repository"
+    )
+
+
+def test_every_dependency_advisory_kind_is_a_kind_the_waiver_lint_accepts() -> None:
+    # security_declaration_failures branches on these kinds. A kind the schema
+    # check rejects makes its branch unreachable for the real waivers.yml.
+    unusable = [kind for kind in DEPENDENCY_ADVISORY_KINDS if kind not in VALID_KINDS]
+    assert unusable == [], (
+        f"{unusable} drive the §F VEX cross-check but are rejected by the waiver "
+        "schema check, so that arm can never fire against the committed registry"
+    )
+
+
+def test_the_npm_audit_fixture_registry_is_one_the_waiver_lint_accepts(tmp_path: Path) -> None:
+    # The same text four §F tests are written against, put through the sibling
+    # gate that runs on the same file in the same `make hygiene` invocation.
+    registry = tmp_path / "waivers.yml"
+    registry.write_text(_waivers_with_live_npm_audit_waiver(), encoding="utf-8")
+
+    assert waiver_failures(registry) == []
+
+
+def test_the_waiver_lint_still_rejects_a_near_miss_of_the_local_kind(tmp_path: Path) -> None:
+    # Accepting `npm-audit` must not have turned the kind check into a rubber
+    # stamp: an underscore instead of a hyphen is still an unknown kind, and
+    # check_npm_audit.py would not honour it either.
+    registry = tmp_path / "waivers.yml"
+    registry.write_text(
+        _waivers_with_live_npm_audit_waiver().replace("kind: npm-audit", "kind: npm_audit"),
+        encoding="utf-8",
+    )
+
+    assert any("unknown kind 'npm_audit'" in failure for failure in waiver_failures(registry))
 
 
 # ---------------------------------------------------------------------------
