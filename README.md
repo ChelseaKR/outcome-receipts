@@ -6,13 +6,21 @@
 
 ![Outcome Receipts: deterministic SQL to receipt to grounding gate to verified report](docs/assets/social-preview.png)
 
-Draft funder outcome reports where **every number is a receipt**. The tool reads
-a nonprofit's own service data, computes each required figure with a deterministic
-query, and attaches to that figure a receipt: the exact query, the count of rows
-it drew from, a content hash of that data slice, and a timestamp. It then drafts
-a narrative around the receipted figures and runs fail-closed grounding gates
-before and after suppression. Export is refused if any displayed number does not
-trace to a receipt.
+Draft funder outcome reports where **every reported figure is a receipt**. The
+tool reads a nonprofit's own service data, computes each required figure with a
+deterministic query, and attaches to that figure a receipt: the exact query, the
+count of rows it drew from, a content hash of that data slice, and a timestamp.
+It then drafts a narrative around the receipted figures and runs fail-closed
+grounding gates before and after suppression. Export is refused if any number in
+the drafted narrative, or in a chart, comparison, or reconciliation claim, does
+not trace to a receipt.
+
+The gate reads those narrative and structured claims. It does not read every
+numeral in an exported file: the receipts section, the provenance block, and the
+trace page also print timestamps, row counts, slice hashes, and the text of each
+query, and those are receipt metadata rather than reported figures. Running the
+gate over a whole exported `report.md` reports them as unbound, which is the
+scope working as specified and not a gate failure.
 
 > **Status: Beta.** The current tagged release is `v0.2.0`; `v0.1.0` was the
 > first. The default path is
@@ -370,8 +378,9 @@ report, none of which puts a model near a number.
   its value and definition, then the receipt behind each (the query, the row count,
   the slice hash, the timestamp). It opens offline and needs no SQL or Python.
 * **A provenance statement.** Every export embeds a short, standard block stating
-  that each number was computed by a deterministic query, that no figure was
-  written by a model, and that the grounding gate bound every number before export.
+  that each figure was computed by a deterministic query, that no figure was
+  written by a model, and that the grounding gate bound every number in the
+  report's claims before export.
   The same attestation goes into the manifest as a machine-readable record, which
   separately names the deterministic or Bedrock narrative drafter used.
 
@@ -404,7 +413,7 @@ pinning guidance.
 | `receipts eval` | Score grounding behavior on a configured fixture. |
 | `receipts verify` | Recompute receipt values and hashes, or verify an entire exported bundle with `--bundle`. |
 | `receipts verify-bundle` | Recompute `bundle.json` member digests and an optional keyed signature. |
-| `receipts verify-ledger` | Re-hash the append-only export ledger and detect a broken chain. |
+| `receipts verify-ledger` | Re-hash the append-only export ledger and detect an entry edited, inserted, reordered, or removed mid-chain. It cannot detect entries deleted from the end, a rewrite that recomputes every hash, or an export never appended; its PASS output lists exactly that. |
 | `receipts diff` | Explain added, removed, or changed figures between two manifests. |
 | `receipts restate` | Link a verified prior bundle to a receipted restatement and named approval. |
 | `receipts migrate-check` | Compare reviewed metrics across two schema-variant exports. Each metric is `equivalent`, `changed`, or `indeterminate` (withheld by suppression on one side, so no comparison is possible). |
@@ -485,12 +494,12 @@ project-specific values live in [docs/ROADMAP.md](docs/ROADMAP.md) and
 | Observability | Applies — Tier C local CLI; no service telemetry or SLO surface, with explicit operational and incident runbooks |
 | Accessibility | Applies — axe, pa11y, Lighthouse, reflow, and reduced-motion gates cover generated HTML; the ACR records manual VoiceOver/NVDA evidence status |
 | Internationalization & Localization | Applies — packaged gettext catalogs with EN/ES key and placeholder parity; operational CLI messages remain English |
-| AI Evaluation | Applies to optional Bedrock drafting — 100-case bilingual grounding benchmark, generated cards, red-team and governance artifacts; no judge ships |
+| AI Evaluation | Applies to optional Bedrock drafting — 136-case bilingual grounding benchmark, generated cards, red-team and governance artifacts; no judge ships |
 | Documentation | Applies — pinned standards, current root docs, canonical ADR log, data/incident/operations artifacts, and conformance checks |
 | Quality & Metrics | Applies — Definition of Done, committed eval with Wilson intervals, fail-closed gates, and project metrics ledger |
 | Incident Response | Applies — severity/label convention, private disclosure, secret-leak runbook, and committed-postmortem requirement |
 | Data Governance | Applies — L3 ephemeral input and L2 aggregate-output cards, retention boundary, lineage, and verified recovery procedure |
-| Performance | Applies — no performance budget or benchmark is committed in this repository yet; recorded here as an open gap, not as an exemption |
+| Performance | Applies — Lighthouse performance score and a zero-byte script budget on the generated trace, asserted from the one repository Lighthouse config, plus a committed `perf/baseline.json` and a direction-aware 10% regression gate (`make perf`); k6 latency is N/A with reason, there being no hosted route, and the reason is recorded in [perf/README.md](perf/README.md) rather than skipped |
 | AI-Development Measurement | Applies — declared in the [ROADMAP](docs/ROADMAP.md) metrics ledger, with the delivery and quality-debt metrics recorded as dated BASELINE rows that each name the date their graduation decision is due; diagnostic counters are tracked nowhere and gate nothing. The portfolio-level weekly rollup and the quarterly seven-capability self-assessment are named as outstanding in the same section rather than claimed |
 
 ## License

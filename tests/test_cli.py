@@ -28,6 +28,7 @@ main = cli.main
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 HOUSING = str(EXAMPLES / "housing-demo" / "report.toml")
 GRANT = str(EXAMPLES / "grant-report" / "report.toml")
+MULTI_FUNDER = str(EXAMPLES / "multi-funder" / "report.toml")
 
 
 def test_run_json_parses_and_reports_a_passing_gate(
@@ -265,6 +266,84 @@ def test_eval_json_reports_the_gate(capsys: pytest.CaptureFixture[str]) -> None:
     assert payload["gate_pass"] is True
     assert payload["n_unbound"] == 0
     assert len(payload["grounding_ci"]) == 2
+
+
+def test_eval_scores_every_funder_template_not_only_the_legacy_field(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # `receipts eval` drafted with `draft(spec.report, ...)`, which fills only the
+    # legacy single `[report] template`. A spec that names funder formats under
+    # `[[report.templates]]` leaves that field empty, so eval drafted "", found no
+    # numbers, and reported a pass over nothing -- on a spec that ships in this
+    # repository. The two funder narratives it never looked at carry real figures.
+    code = main(["eval", "--config", MULTI_FUNDER, "--json"])
+    assert code == EXIT_OK
+
+    payload = json.loads(capsys.readouterr().out)
+    # Three of the six placeholders per format survive suppression, in each of the
+    # two formats, so six spans are scored. A figure written into both funder
+    # narratives is two numbers here, one per exported document; see _cmd_eval.
+    assert payload["n_numbers"] == 6
+    assert payload["n_bound"] == 6
+    assert payload["n_unbound"] == 0
+    assert payload["scored"] is True
+    assert payload["gate_pass"] is True
+
+
+def test_eval_over_a_legacy_single_template_spec_is_unchanged(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The control. The legacy path scored one span before this change and scores
+    # the same one span after it, so a red result above is the multi-template hole
+    # and not a change to how a single-template spec is evaluated.
+    code = main(["eval", "--config", HOUSING, "--json"])
+    assert code == EXIT_OK
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["n_numbers"] == 1
+    assert payload["n_bound"] == 1
+    assert payload["n_unbound"] == 0
+    assert payload["gate_pass"] is True
+
+
+def test_eval_refuses_to_report_a_pass_when_it_scored_no_numbers(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # An eval that scored nothing has measured nothing, and a command whose whole
+    # job is to measure the gate must not exit 0 on that. render_eval_markdown
+    # already refuses to print the vacuous rate as an observed measurement (#114);
+    # the exit code has to agree with it, or CI reads success from a run that
+    # looked at no number at all.
+    config = tmp_path / "report.toml"
+    config.write_text(
+        'schema_version = "1.0"\n'
+        '[data]\npath = "services.csv"\n'
+        '[report]\ntitle = "No numbers"\n'
+        'template = "This narrative states no figure at all."\n'
+        "[metrics.clients_served]\n"
+        'description = "Distinct clients."\n'
+        'definition = "Each person enrolled in the period, counted once by client_id."\n'
+        'unit = "count"\n'
+        'value_sql = "SELECT COUNT(DISTINCT client_id) FROM data"\n'
+        'slice_sql = "SELECT client_id FROM data"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "services.csv").write_text(
+        "client_id,exit_date,exit_destination\n"
+        + "".join(f"c{n},2026-01-0{n % 9 + 1},permanent\n" for n in range(20)),
+        encoding="utf-8",
+    )
+
+    code = main(["eval", "--config", str(config), "--json"])
+    assert code == EXIT_VERIFY_FAIL
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["n_numbers"] == 0
+    assert payload["scored"] is False
+    # The grounding gate itself still passes vacuously, which is true and is what
+    # `run` would do with this spec. It is the eval that refuses to call it a
+    # measurement.
+    assert payload["gate_pass"] is True
 
 
 def test_exit_codes_are_distinct_constants() -> None:

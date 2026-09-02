@@ -74,6 +74,8 @@ def test_benchmark_exercises_the_locale_handling_it_claims_to() -> None:
         "rate-comma-decimal",
         "ambiguous-dot-for-grouped-count",
         "ambiguous-comma-for-decimal-rate",
+        "leading-separator-decimal-for-count",
+        "sub-one-rate-with-leading-zero",
     ):
         assert required in shapes, f"benchmark no longer covers {required}"
 

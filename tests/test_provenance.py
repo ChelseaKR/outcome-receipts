@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+from outcome_receipts.grounding import ground
 from outcome_receipts.models import Figure, Receipt
 from outcome_receipts.provenance import (
     Provenance,
@@ -17,6 +18,7 @@ from outcome_receipts.provenance import (
     provenance_record,
 )
 from outcome_receipts.report import receipts_manifest, render_report
+from outcome_receipts.verify import _report_narrative
 
 
 def _figure(metric_id: str, display: str) -> Figure:
@@ -85,3 +87,56 @@ def test_manifest_carries_the_provenance_record() -> None:
 def test_manifest_without_provenance_has_no_provenance_key() -> None:
     manifest = json.loads(receipts_manifest([_figure("a", "5")]))
     assert "provenance" not in manifest
+
+
+# --- The scope the provenance block and the README are allowed to claim. ---
+
+
+def _receipted(metric_id: str, display: str, value: float) -> Figure:
+    receipt = Receipt(
+        metric_id=metric_id,
+        value_sql="SELECT COUNT(DISTINCT client_id) FROM data",
+        row_count=12,
+        slice_hash="5fb9cf7a45262e7ecb099944819e8605f28a036d084034898fd93edda1f7e01e",
+        value=value,
+        unit="count",
+        computed_at="1970-01-01T00:00:00+00:00",
+    )
+    return Figure(metric_id=metric_id, value=value, display=display, receipt=receipt)
+
+
+def test_the_gate_covers_the_claims_not_every_numeral_in_the_file() -> None:
+    """The gate's scope is the claims, and the published copy must say only that.
+
+    The README headline, `DEFINITION_OF_DONE.md`, and the shipped
+    `provenance_statement` string used to promise that every number in a report
+    traced to a receipt. A rendered report falsifies that: the receipts section
+    and the provenance block print row counts, slice hashes, timestamps, and the
+    text of each query, and the gate never read them. Running `ground` over a
+    whole rendered report reports them as unbound.
+
+    So this pins both halves. Over the narrative region the gate is clean, which
+    is the claim the documents may make. Over the whole file it is not, which is
+    why they may not make the broader one. A change that genuinely widens the
+    scope should widen the copy and then update this test, not the other way
+    round.
+    """
+
+    figures = [_receipted("clients_served", "12", 12.0)]
+    report = render_report(
+        "Housing Program Outcome Report",
+        "In the reporting period, our housing program served 12 clients.",
+        figures,
+        provenance=Provenance(numbers_bound=1),
+    )
+
+    narrative_only = ground(_report_narrative(report), figures)
+    assert narrative_only.ok, [span.text for span in narrative_only.unbound]
+
+    whole_file = ground(report, figures)
+    assert not whole_file.ok
+    unbound = {span.text for span in whole_file.unbound}
+    # Receipt metadata, not reported figures: the export timestamp, the row
+    # count, and the numerals inside the printed query.
+    assert "1970" in unbound
+    assert unbound - {span.text for span in narrative_only.unbound}
