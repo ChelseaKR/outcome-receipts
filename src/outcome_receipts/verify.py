@@ -20,7 +20,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from outcome_receipts.grounding import ground
 from outcome_receipts.models import (
@@ -53,18 +53,41 @@ _CHECKED_FIELDS = (
 _CHECKED_FIELDS_V1 = tuple(field for field in _CHECKED_FIELDS if field != "suppressed")
 
 
+#: What a :class:`Check` is about. ``"receipt"`` is one receipt re-derived from
+#: the data. ``"manifest"`` is a descriptor of the document itself -- its declared
+#: schema version, its hash descriptor -- which is compared against a constant and
+#: is not re-derived from anything.
+#:
+#: The distinction used to go unrecorded, and everything downstream inherited the
+#: conflation: a four-receipt manifest was reported as "receipts checked: 6
+#: (re-derived 6)", and a manifest whose only failure was its declared version was
+#: announced as "a receipt does not match the data" with ``drift 1`` pointing the
+#: reader at data that was fine.
+CheckKind = Literal["receipt", "manifest"]
+
+
 @dataclass(frozen=True)
 class Check:
-    """The verification outcome for one receipt in the manifest."""
+    """The verification outcome for one check against the manifest.
+
+    ``metric_id`` names a metric when ``kind`` is ``"receipt"``, and names the
+    descriptor (``schema_version``, ``hash``) when ``kind`` is ``"manifest"``.
+    """
 
     metric_id: str
     ok: bool
     detail: str
+    kind: CheckKind = "receipt"
 
 
 @dataclass(frozen=True)
 class VerifyResult:
-    """Every per-receipt check, plus whether the manifest verified as a whole."""
+    """Every check run against the manifest, and whether it verified as a whole.
+
+    ``checks`` holds both kinds in report order, manifest descriptors first.
+    ``n_ok`` counts all of them; the receipt-only counts are the ones to quote as
+    "how many receipts re-derived", because they are the only ones that did.
+    """
 
     checks: tuple[Check, ...]
 
@@ -74,7 +97,35 @@ class VerifyResult:
 
     @property
     def n_ok(self) -> int:
+        """Every passing check, of both kinds. Not a count of receipts."""
+
         return sum(1 for check in self.checks if check.ok)
+
+    @property
+    def receipt_checks(self) -> tuple[Check, ...]:
+        """The checks that re-derived a receipt from the data."""
+
+        return tuple(check for check in self.checks if check.kind == "receipt")
+
+    @property
+    def manifest_checks(self) -> tuple[Check, ...]:
+        """The checks against the manifest document's own descriptors."""
+
+        return tuple(check for check in self.checks if check.kind == "manifest")
+
+    @property
+    def n_receipts_ok(self) -> int:
+        """How many receipts re-derived. This is the number to report as such."""
+
+        return sum(1 for check in self.receipt_checks if check.ok)
+
+    @property
+    def failed_receipts(self) -> tuple[Check, ...]:
+        return tuple(check for check in self.receipt_checks if not check.ok)
+
+    @property
+    def failed_manifest_checks(self) -> tuple[Check, ...]:
+        return tuple(check for check in self.manifest_checks if not check.ok)
 
 
 def _recomputed_fields(figure: Figure, *, legacy: bool) -> dict[str, Any]:
@@ -109,12 +160,16 @@ def _recomputed_fields(figure: Figure, *, legacy: bool) -> dict[str, Any]:
 def _schema_checks(manifest: Mapping[str, Any]) -> list[Check]:
     """Version and hash-descriptor checks against the current constants.
 
-    Run before any field re-derivation so a manifest written under a different
-    schema fails with a named reason ("schema_version: manifest '0.9' != expected
-    '1.0'") rather than as a wave of opaque per-receipt slice-hash drift. Each
-    descriptor is checked only when the manifest carries it, so a pre-schema
-    manifest (no ``schema_version``, no ``hash``) is not flagged here and falls
-    through to plain re-derivation.
+    Reported first, so a manifest written under a different schema names its
+    reason ("schema_version: manifest '0.9' is not one of ['1.0', '2.0']") at the
+    top rather than leaving a reader to infer it from a wave of opaque
+    per-receipt slice-hash drift below. Each descriptor is checked only when the
+    manifest carries it, so a pre-schema manifest (no ``schema_version``, no
+    ``hash``) is not flagged here and falls through to plain re-derivation.
+
+    These are ``kind="manifest"`` checks: they are compared against a constant,
+    not re-derived from the data, and counting them among the re-derived receipts
+    overstated every verification by the number of descriptors present.
     """
 
     checks: list[Check] = []
@@ -131,7 +186,7 @@ def _schema_checks(manifest: Mapping[str, Any]) -> list[Check]:
             detail = (
                 f"schema_version {got!r} is supported for reading (current is {SCHEMA_VERSION!r})"
             )
-        checks.append(Check("schema_version", ok, detail))
+        checks.append(Check("schema_version", ok, detail, kind="manifest"))
     if "hash" in manifest:
         got_hash = manifest["hash"]
         expected = {
@@ -145,9 +200,16 @@ def _schema_checks(manifest: Mapping[str, Any]) -> list[Check]:
             if got_hash.get(key) != want
         ]
         if drifts:
-            checks.append(Check("hash", False, "hash descriptor drift — " + "; ".join(drifts)))
+            checks.append(
+                Check(
+                    "hash",
+                    False,
+                    "hash descriptor drift — " + "; ".join(drifts),
+                    kind="manifest",
+                )
+            )
         else:
-            checks.append(Check("hash", True, "hash descriptor matches"))
+            checks.append(Check("hash", True, "hash descriptor matches", kind="manifest"))
     return checks
 
 
@@ -182,11 +244,15 @@ def verify_manifest(figures: Sequence[Figure], manifest: Mapping[str, Any]) -> V
     with no receipt, is reported as a failure so the two sets must agree exactly.
 
     When the manifest carries a ``schema_version`` or ``hash`` descriptor, they are
-    checked against the current constants first, so a manifest written under an
-    unsupported schema fails with a named version/descriptor reason before any
-    per-receipt re-derivation is attempted. A manifest written under an older but
-    still supported schema is compared field-for-field as *that* schema wrote it,
-    so a schema change is not reported as data drift; see ``_recomputed_fields``.
+    checked against the current constants and reported first, so a manifest
+    written under an unsupported schema names its reason at the top. Re-derivation
+    still runs for every receipt underneath it — deliberately, and this docstring
+    used to claim otherwise. Reporting both is what makes a refusal attributable:
+    when the version fails and all the receipts re-derive, the reader can see that
+    the document declared a contract nobody implements rather than that its data
+    moved. A manifest written under an older but still supported schema is compared
+    field-for-field as *that* schema wrote it, so a schema change is not reported
+    as data drift; see ``_recomputed_fields``.
     """
 
     by_id = {figure.metric_id: figure for figure in figures}

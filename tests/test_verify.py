@@ -13,6 +13,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from outcome_receipts.cli import main
 from outcome_receipts.clock import FixedClock
 from outcome_receipts.config import load_spec
@@ -41,6 +43,14 @@ def test_fresh_manifest_re_derives() -> None:
     # and hash-descriptor checks now carried by a versioned manifest.
     assert result.n_ok == len(result.checks)
     assert result.n_ok == len(figures) + 2
+    # `n_ok` spans both kinds and is therefore not a count of receipts. That the
+    # two numbers differ is the whole reason the kinds are recorded: this
+    # assertion used to be the only statement of the total, and reading it as
+    # "how many receipts re-derived" overstated it by the two descriptors.
+    assert result.n_receipts_ok == len(figures)
+    assert len(result.receipt_checks) == len(figures)
+    assert [check.metric_id for check in result.manifest_checks] == ["schema_version", "hash"]
+    assert all(check.kind == "receipt" for check in result.receipt_checks)
 
 
 def test_tampered_value_is_drift() -> None:
@@ -225,3 +235,127 @@ def test_unbound_number_in_report_fails_grounding(tmp_path: Path) -> None:
     assert all(a.ok for a in result.artifacts)
     assert not result.grounding.ok
     assert any(span.text == "4242" for span in result.grounding.unbound)
+
+
+def test_the_reported_receipt_count_is_the_manifest_receipt_count() -> None:
+    """The count `verify` prints must be the number of receipts in the document.
+
+    It was not. `schema_version` and `hash` are descriptors of the manifest,
+    compared against a constant rather than re-derived from anything, and they
+    were built as the same `Check` type as a receipt and counted with them. The
+    housing demo's four-receipt manifest reported "receipts checked: 6
+    (re-derived 6, drift 0)" -- a reported number, wrong by two, describing the
+    strength of the verification a reader would quote.
+    """
+
+    figures = _figures()
+    manifest = json.loads(receipts_manifest(figures))
+    assert len(manifest["receipts"]) == 4
+
+    result = verify_manifest(figures, manifest)
+
+    assert len(result.receipt_checks) == len(manifest["receipts"])
+    assert result.n_receipts_ok == len(manifest["receipts"])
+    assert len(result.checks) > len(result.receipt_checks), (
+        "the manifest carried no descriptors, so this no longer tests the conflation"
+    )
+    stored = {receipt["metric_id"] for receipt in manifest["receipts"]}
+    assert {check.metric_id for check in result.receipt_checks} == stored
+
+
+def test_a_version_only_failure_does_not_blame_the_data(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A refused version is a document failure, not a data failure.
+
+    Every receipt re-derives here. The only thing wrong is the declared schema
+    major, and the failure has to say so: the headline used to read "a receipt
+    does not match the data" for this exact case, sending the reader to the one
+    place the problem was not. Asserted on what the CLI actually prints, since
+    the headline is the part a person reads first and acts on.
+    """
+
+    figures = _figures()
+    manifest = json.loads(receipts_manifest(figures))
+    manifest["schema_version"] = "3.0"
+
+    result = verify_manifest(figures, manifest)
+    assert not result.ok
+    assert result.n_receipts_ok == len(figures)
+    assert result.failed_receipts == ()
+    assert [check.metric_id for check in result.failed_manifest_checks] == ["schema_version"]
+
+    # The CLI half needs a manifest the CLI itself wrote: `verify` suppresses the
+    # re-derived figures before comparing, so a manifest built from unsuppressed
+    # ones would drift for a reason that has nothing to do with this test.
+    out = tmp_path / "out"
+    run_args = ["run", "--config", str(HOUSING), "--out", str(out)]
+    assert main([*run_args, "--reproducible", "--approved-by", "CI"]) == 0
+    capsys.readouterr()
+    exported = json.loads((out / "receipts.json").read_text(encoding="utf-8"))
+    exported["schema_version"] = "3.0"
+    relabelled = tmp_path / "receipts.json"
+    relabelled.write_text(json.dumps(exported, indent=2, sort_keys=True), encoding="utf-8")
+
+    assert main(["verify", "--config", str(HOUSING), "--receipts", str(relabelled)]) == 1
+    captured = capsys.readouterr()
+
+    assert "verify: FAIL" in captured.err
+    assert "schema_version" in captured.err
+    assert "does not match the data" not in captured.err
+    # The receipt count stays honest under a failing document check.
+    receipts = exported["receipts"]
+    assert (
+        f"receipts checked: {len(receipts)} (re-derived {len(receipts)}, drift 0)" in captured.out
+    )
+
+
+def test_verify_json_separates_receipts_from_manifest_descriptors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The machine-readable payload carries the same distinction, additively.
+
+    `n_ok` and `drift` keep their old meaning -- totals across both kinds -- so a
+    script reading them still works. What is new is that a script can now ask for
+    the receipt count without having to know which `metric_id` values are secretly
+    descriptors.
+    """
+
+    out = tmp_path / "out"
+    assert (
+        main(
+            [
+                "run",
+                "--config",
+                str(HOUSING),
+                "--out",
+                str(out),
+                "--reproducible",
+                "--approved-by",
+                "CI",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert (
+        main(
+            ["verify", "--config", str(HOUSING), "--receipts", str(out / "receipts.json"), "--json"]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    stored = json.loads((out / "receipts.json").read_text(encoding="utf-8"))["receipts"]
+
+    assert payload["receipts_checked"] == len(stored)
+    assert payload["receipts_ok"] == len(stored)
+    assert payload["receipts_drift"] == 0
+    assert payload["manifest_checks"] == 2
+    assert payload["manifest_checks_failed"] == 0
+    # The totals are unchanged, and are larger than the receipt count.
+    assert payload["n_ok"] == len(payload["checks"]) == len(stored) + 2
+    kinds = {check["metric_id"]: check["kind"] for check in payload["checks"]}
+    assert kinds["schema_version"] == "manifest"
+    assert kinds["hash"] == "manifest"
+    assert all(kinds[receipt["metric_id"]] == "receipt" for receipt in stored)

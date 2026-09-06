@@ -316,6 +316,32 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- `receipts verify` reported more receipts re-derived than the manifest contained,
+  and blamed the data when the manifest's declared version was the only thing
+  wrong. `schema_version` and `hash` are descriptors of the manifest document —
+  compared against a constant, re-derived from nothing — but they were built as
+  the same `Check` type as a receipt and counted alongside them, with `metric_id`
+  as their only label. So the housing demo's **four**-receipt manifest printed
+  `receipts checked: 6 (re-derived 6, drift 0)`, the `--json` payload's `n_ok`
+  and `drift` carried the same inflation, and a manifest relabelled to a schema
+  major nothing implements failed with `verify: FAIL — a receipt does not match
+  the data` and `drift 1` while every one of its receipts re-derived cleanly.
+  In a repository whose premise is that every reported number carries a receipt,
+  the count of re-derived receipts was a reported number that did not.
+  `Check` now records a `kind` of `receipt` or `manifest`; the human output
+  reports the two counts on separate lines, each naming what it counted; the FAIL
+  headline is built from the checks that actually failed and names them; and the
+  `--json` payload gains `receipts_checked`, `receipts_ok`, `receipts_drift`,
+  `manifest_checks`, `manifest_checks_failed`, and a `kind` on every entry in
+  `checks`. `n_ok` and `drift` are unchanged and still span both kinds, so
+  existing scripts keep working — they were never wrong as totals, only as the
+  receipt counts they were printed as. `tests/test_verify.py` asserted
+  `n_ok == len(figures) + 2`, which pinned the conflation as intended behaviour;
+  it now also asserts the receipt-only counts against the manifest's own receipt
+  list. Two docstrings corrected in the same pass, including `verify_manifest`'s
+  claim that an unsupported schema fails "before any per-receipt re-derivation is
+  attempted" — it does not, and reporting both is what makes a refusal
+  attributable to the version rather than to the data.
 - The `scorecard` job's three consecutive failures on `main` are two npm
   advisories no gate in this repository could see. `qs` 6.15.3 picked up
   GHSA-4mjr-xmp4-gh2g and GHSA-x5fp-wj9c-mxmx, both published 2026-09-02 at

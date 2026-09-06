@@ -457,6 +457,14 @@ recorded approval. Under `--json` there is no interactive sign-off prompt, so
 `verify-ledger`, `eval`, `diff`, and `cards` objects report their own results and
 details; `map` reports pending or blocked candidates without executing them;
 `init` carries the scaffolded spec and where it was written.
+
+`verify` reports its counts twice over, because two different things are checked
+and only one of them is a receipt. `receipts_checked`, `receipts_ok` and
+`receipts_drift` count receipts re-derived from the data. `n_ok` and `drift` are
+totals that also include the manifest's own descriptors — its declared
+`schema_version` and its `hash` block — which are compared against a constant and
+re-derived from nothing. Each entry in `checks` carries a `kind` of `receipt` or
+`manifest` saying which it is, so a script need not guess from the `metric_id`.
 `verify-workflow` reports every artifact-contract check, and each workflow
 command returns the artifact it wrote. The `--json` flag is accepted before or
 after the subcommand, so `receipts --json run ...` and `receipts run ... --json`

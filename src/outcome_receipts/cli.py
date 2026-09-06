@@ -99,7 +99,13 @@ from outcome_receipts.suppression import (
     suppress_figures,
 )
 from outcome_receipts.trace import render_trace_html
-from outcome_receipts.verify import BundleResult, VerifyResult, verify_bundle, verify_manifest
+from outcome_receipts.verify import (
+    BundleResult,
+    Check,
+    VerifyResult,
+    verify_bundle,
+    verify_manifest,
+)
 from outcome_receipts.workflows import (
     WorkflowError,
     build_contract_evidence,
@@ -747,6 +753,43 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
 
+def _check_payload(check: Check) -> dict[str, object]:
+    """One check, carrying what it is a check *of*.
+
+    ``kind`` is the field that distinguishes a receipt re-derived from the data
+    from a descriptor of the manifest document (``schema_version``, ``hash``)
+    compared against a constant. Without it a consumer counting ``checks`` counts
+    descriptors as receipts, which is what every count below used to do.
+    """
+
+    return {
+        "metric_id": check.metric_id,
+        "ok": check.ok,
+        "detail": check.detail,
+        "kind": check.kind,
+    }
+
+
+def _receipt_counts(result: VerifyResult) -> dict[str, object]:
+    """The receipt-only counts, alongside the totals across every check.
+
+    ``n_ok`` and ``drift`` are unchanged and still span both kinds, so a script
+    reading them keeps working. They are simply not counts of receipts, and were
+    reported as though they were: a four-receipt manifest carrying a
+    ``schema_version`` and a ``hash`` descriptor answered ``n_ok: 6``.
+    """
+
+    return {
+        "n_ok": result.n_ok,
+        "drift": len(result.checks) - result.n_ok,
+        "receipts_checked": len(result.receipt_checks),
+        "receipts_ok": result.n_receipts_ok,
+        "receipts_drift": len(result.failed_receipts),
+        "manifest_checks": len(result.manifest_checks),
+        "manifest_checks_failed": len(result.failed_manifest_checks),
+    }
+
+
 def _verify_payload(result: VerifyResult) -> dict[str, object]:
     """The machine-readable record of a manifest ``verify`` invocation."""
 
@@ -754,12 +797,8 @@ def _verify_payload(result: VerifyResult) -> dict[str, object]:
         "command": "verify",
         "mode": "manifest",
         "ok": result.ok,
-        "checks": [
-            {"metric_id": check.metric_id, "ok": check.ok, "detail": check.detail}
-            for check in result.checks
-        ],
-        "n_ok": result.n_ok,
-        "drift": len(result.checks) - result.n_ok,
+        "checks": [_check_payload(check) for check in result.checks],
+        **_receipt_counts(result),
     }
 
 
@@ -776,12 +815,8 @@ def _bundle_payload(result: BundleResult) -> dict[str, object]:
         "command": "verify",
         "mode": "bundle",
         "ok": result.ok,
-        "checks": [
-            {"metric_id": check.metric_id, "ok": check.ok, "detail": check.detail}
-            for check in manifest.checks
-        ],
-        "n_ok": manifest.n_ok,
-        "drift": len(manifest.checks) - manifest.n_ok,
+        "checks": [_check_payload(check) for check in manifest.checks],
+        **_receipt_counts(manifest),
         "artifacts": [
             {"path": artifact.path, "ok": artifact.ok, "detail": artifact.detail}
             for artifact in result.artifacts
@@ -792,6 +827,57 @@ def _bundle_payload(result: BundleResult) -> dict[str, object]:
             "unbound": [_span_payload(span) for span in result.grounding.unbound],
         },
     }
+
+
+def _print_manifest_checks(result: VerifyResult) -> None:
+    """The two counts, each naming what it counted, then every line.
+
+    The receipt count is the manifest's receipts and nothing else. The manifest
+    count is the document's own descriptors, which are compared against a
+    constant rather than re-derived from the data. Reporting one number for both
+    told a reader that a four-receipt manifest had six receipts re-derived.
+    """
+
+    print(
+        f"receipts checked: {len(result.receipt_checks)} "
+        f"(re-derived {result.n_receipts_ok}, drift {len(result.failed_receipts)})"
+    )
+    if result.manifest_checks:
+        names = ", ".join(check.metric_id for check in result.manifest_checks)
+        failed = len(result.failed_manifest_checks)
+        print(
+            f"manifest descriptors checked: {len(result.manifest_checks)} ({names}); failed {failed}"
+        )
+    for check in result.checks:
+        status = "ok" if check.ok else "DRIFT"
+        print(f"  [{status}] {check.metric_id}: {check.detail}")
+
+
+def _verify_failure_reason(result: VerifyResult) -> str:
+    """What actually failed, in the words of the thing that failed.
+
+    The headline used to read "a receipt does not match the data" whenever the
+    result was not ok -- including when every receipt re-derived and the only
+    failure was the manifest declaring a schema version nobody implements. That
+    sent the reader to the data, which was the one place the problem was not.
+    """
+
+    reasons: list[str] = []
+    descriptors = result.failed_manifest_checks
+    if descriptors:
+        names = ", ".join(check.metric_id for check in descriptors)
+        reasons.append(f"the manifest's own {names} descriptor is not one this version accepts")
+    receipts = result.failed_receipts
+    if receipts:
+        count = len(receipts)
+        noun = "receipt" if count == 1 else "receipts"
+        names = ", ".join(check.metric_id for check in receipts)
+        reasons.append(f"{count} {noun} do not match the data ({names})")
+    if not reasons:
+        # Unreachable while `ok` is the conjunction of every check, and stated
+        # rather than silently rendered as an empty reason if that ever changes.
+        return "the manifest did not verify, and no failing check says why"
+    return " and ".join(reasons)
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
@@ -809,17 +895,11 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         _emit_json(_verify_payload(result))
         return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
-    print(
-        f"receipts checked: {len(result.checks)} "
-        f"(re-derived {result.n_ok}, drift {len(result.checks) - result.n_ok})"
-    )
-    for check in result.checks:
-        status = "ok" if check.ok else "DRIFT"
-        print(f"  [{status}] {check.metric_id}: {check.detail}")
+    _print_manifest_checks(result)
     if result.ok:
         print("\nverify: PASS — every receipt re-derives from the data")
         return EXIT_OK
-    print("\nverify: FAIL — a receipt does not match the data", file=sys.stderr)
+    print(f"\nverify: FAIL — {_verify_failure_reason(result)}", file=sys.stderr)
     return EXIT_VERIFY_FAIL
 
 
@@ -903,13 +983,7 @@ def _verify_bundle(args: argparse.Namespace, figures: Sequence[Figure]) -> int:
         _emit_json(_bundle_payload(result))
         return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
-    print(
-        f"receipts checked: {len(manifest.checks)} "
-        f"(re-derived {manifest.n_ok}, drift {len(manifest.checks) - manifest.n_ok})"
-    )
-    for check in manifest.checks:
-        status = "ok" if check.ok else "DRIFT"
-        print(f"  [{status}] {check.metric_id}: {check.detail}")
+    _print_manifest_checks(manifest)
     print(f"artifacts checked: {len(result.artifacts)}")
     for artifact in result.artifacts:
         status = "ok" if artifact.ok else "MISMATCH"
@@ -925,6 +999,8 @@ def _verify_bundle(args: argparse.Namespace, figures: Sequence[Figure]) -> int:
         print("\nverify: PASS — the whole bundle is coherent")
         return EXIT_OK
     print("\nverify: FAIL — the exported bundle does not verify", file=sys.stderr)
+    if not manifest.ok:
+        print(f"  receipts manifest: {_verify_failure_reason(manifest)}", file=sys.stderr)
     for artifact in result.failed_artifacts:
         print(f"  offending file: {artifact.path} ({artifact.detail})", file=sys.stderr)
     if not result.grounding.ok:
