@@ -98,8 +98,9 @@ Before a release can claim a stable contract:
 The repository freezes generated version-1.0 examples for all six workflow
 artifact kinds under `tests/fixtures/compat/v1/` and regenerates them in
 `make verify` to catch drift. Cross-release execution evidence is tracked in
-[issue 65](https://github.com/ChelseaKR/outcome-receipts/issues/65) and begins
-with the next two tags; it cannot be manufactured from a single release.
+[issue 65](https://github.com/ChelseaKR/outcome-receipts/issues/65). Two tags now
+exist, `v0.1.0` and `v0.2.0`, and both are frozen and exercised; what they do not
+yet establish is stated under the matrix below rather than left as "pending".
 
 ## Compatibility evidence
 
@@ -108,10 +109,27 @@ with the next two tags; it cannot be manufactured from a single release.
 | Signed `v0.1.0` tag, commit `51d18fc4cdd9f9dcd91dd4588ededc80a6b6bb7d` | Unversioned beta report spec, interpreted as report-spec `1.0` | Current loader | PASS |
 | Signed `v0.1.0` tag, same commit | Receipts manifest `1.0` | Current re-derivation verifier (reads `1.0`, writes `2.0`) | PASS |
 | Current implementation package | Workflow artifact `1.0`, all six kinds | `receipts verify-workflow` | PASS |
-| Next tagged release | All supported contracts | Next tagged verifier | Pending issue 65 |
+| Signed `v0.2.0` tag, commit `b8f5a27e48283e6b97add1841d1f8a110f760265` | Report spec `1.0`, declared explicitly | Current loader | PASS |
+| Signed `v0.2.0` tag, same commit | Receipts manifest `1.0` | Current re-derivation verifier (reads `1.0`, writes `2.0`) | PASS |
+| Next tagged release | A contract that actually moves across the boundary | Next tagged verifier | Not yet observed — see below |
 
 The signed-release files are preserved byte-for-byte under
-`tests/fixtures/compat/v0.1.0/`; the source commit and paths are recorded in that
-directory. `tests/test_release_compatibility.py` recomputes the tagged manifest
-with current code. This establishes a real prior-release baseline, but the v1
-gate still needs evidence across the next two consecutive tags.
+`tests/fixtures/compat/v0.1.0/` and `tests/fixtures/compat/v0.2.0/`; each
+directory records its source commit and paths. `tests/test_release_compatibility.py`
+recomputes each tagged manifest with current code.
+
+What the second tag established, and what it did not. `v0.2.0`'s
+`services.csv` and `receipts.json` are byte-identical to `v0.1.0`'s: the second
+released implementation produced exactly the artifact the first one did. The only
+difference between the two frozen specs is that `v0.2.0`'s declares
+`schema_version = "1.0"` where `v0.1.0`'s carried no `schema_version` key and was
+interpreted as `1.0` by default. So the evidence across this boundary is real but
+narrow — a spec that names its contract and a spec that omits it are read
+identically, and a released implementation's manifest still re-derives
+field-for-field.
+
+It is not evidence that a *changed* contract survives a release boundary, because
+no contract changed across it. That is what issue 65's remaining criteria need,
+and it cannot be written before a release moves one; recording the gap here is
+the honest alternative to reading two identical artifacts as a compatibility
+result.

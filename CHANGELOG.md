@@ -11,6 +11,24 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- A second release baseline, `tests/fixtures/compat/v0.2.0/`, and the honest
+  reading of what it does and does not prove. `docs/SPEC-STABILITY.md` said
+  cross-release execution evidence "begins with the next two tags"; both of those
+  tags have since shipped, so the sentence was describing a state the repository
+  had already left. `v0.2.0`'s spec, data and manifest are now frozen byte for
+  byte beside `v0.1.0`'s, and `tests/test_release_compatibility.py` re-derives the
+  second tag's manifest with current code as it already did for the first.
+  What that establishes is narrower than a green row implies, and the matrix now
+  says so rather than counting it twice: `v0.2.0`'s `services.csv` and
+  `receipts.json` are **byte-identical** to `v0.1.0`'s, so the second released
+  implementation produced exactly the artifact the first one did. The only thing
+  that moved between them is that `v0.2.0`'s spec declares
+  `schema_version = "1.0"` where `v0.1.0`'s carried no key and was read as `1.0`
+  by default — a real property, pinned by a new test, and not the same thing as a
+  contract surviving a release boundary. Issue 65's remaining criteria need a
+  release that actually moves a contract, and reading two identical artifacts as
+  a compatibility result would be this repository's own dominant defect turned on
+  its own evidence.
 - A clock on the Semgrep waiver reviews. Issues 52 and 53 are the audit owners
   CQ-35 and SEC-10 require, and both commit to reviewing their waiver
   *quarterly*. `last_reviewed` was validated as an ISO date and then never read
