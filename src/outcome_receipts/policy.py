@@ -52,6 +52,12 @@ class SuppressionPolicy:
     threshold: int
     complementary_rule: bool
     citation: str
+    #: The source's URL, kept apart from the prose rather than embedded in it.
+    #: A caller that needs the source needs the URL itself, and pulling it back
+    #: out of a sentence means a substring test against a URL -- the
+    #: `py/incomplete-url-substring-sanitization` shape, which is a real
+    #: anti-pattern wherever the result is trusted. Two fields, one exact.
+    citation_url: str
     #: The date the citation was last read, not the date the guidance issued.
     #: A citation with no read date cannot be audited for having gone stale.
     citation_read: str
@@ -69,9 +75,9 @@ _REGISTRY: dict[str, SuppressionPolicy] = {
         complementary_rule=True,
         citation=(
             "U.S. CMS Cell Size Suppression Policy: counts of 1-10 are suppressed "
-            "and derivable cells require complementary suppression. "
-            "https://www.hhs.gov/guidance/document/cms-cell-suppression-policy"
+            "and derivable cells require complementary suppression."
         ),
+        citation_url="https://www.hhs.gov/guidance/document/cms-cell-suppression-policy",
         citation_read="2026-08-21",
     ),
 }
@@ -108,5 +114,6 @@ def ad_hoc_policy(threshold: int) -> SuppressionPolicy:
         threshold=threshold,
         complementary_rule=True,
         citation="",
+        citation_url="",
         citation_read="",
     )

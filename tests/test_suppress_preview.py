@@ -64,7 +64,13 @@ def test_the_default_policy_matches_the_threshold_the_engine_applies() -> None:
 def test_the_default_policy_is_cited_with_a_read_date() -> None:
     policy = get_policy(DEFAULT_POLICY_ID)
     assert policy.cited
-    assert "hhs.gov" in policy.citation
+    # Exact equality on a dedicated field, not a substring test against a URL.
+    # `"hhs.gov" in <url>` is the `py/incomplete-url-substring-sanitization`
+    # shape -- the host can sit anywhere in the string, so the test would also
+    # pass for `https://evil.example/?ref=hhs.gov`.
+    assert policy.citation_url == (
+        "https://www.hhs.gov/guidance/document/cms-cell-suppression-policy"
+    )
     assert policy.citation_read == "2026-08-21"
 
 
@@ -73,6 +79,9 @@ def test_every_registered_policy_is_cited() -> None:
     for policy in registered_policies():
         assert policy.cited, f"{policy.policy_id} is registered with no citation"
         assert policy.citation_read
+        assert policy.citation_url.startswith("https://"), (
+            f"{policy.policy_id} must cite an https source"
+        )
 
 
 def test_an_unknown_policy_id_fails_closed_naming_it() -> None:
@@ -86,6 +95,7 @@ def test_an_ad_hoc_threshold_claims_no_source() -> None:
     assert policy.threshold == 6
     assert not policy.cited
     assert policy.citation == ""
+    assert policy.citation_url == ""
 
 
 @pytest.mark.parametrize("threshold", [0, -1, -11])
@@ -313,6 +323,7 @@ def test_a_policy_with_the_complementary_rule_off_withholds_no_cascade() -> None
         threshold=11,
         complementary_rule=False,
         citation="test",
+        citation_url="https://example.invalid/test",
         citation_read="2026-09-06",
     )
     preview = preview_policy(figures, without)

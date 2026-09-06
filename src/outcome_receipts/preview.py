@@ -26,7 +26,7 @@ from dataclasses import dataclass
 
 from outcome_receipts.models import Figure
 from outcome_receipts.policy import SuppressionPolicy
-from outcome_receipts.suppression import suppress_figures
+from outcome_receipts.suppression import _disclosing_combination, suppress_figures
 
 #: The metric_id suffix `comparison.py` gives a period-over-period delta.
 _DELTA_SUFFIX = "__delta"
@@ -109,8 +109,6 @@ def _classify_cascade(
     # The recovery rule: this figure was taken because some withheld cell could
     # be rebuilt from a set of visible same-unit figures that included it. Name
     # the combination for the smallest withheld cell it can still reconstruct.
-    from outcome_receipts.suppression import _disclosing_combination
-
     unit = units.get(metric_id)
     visible = [
         (other, value)
@@ -183,6 +181,7 @@ def preview_payload(
                 "complementary_rule": preview.policy.complementary_rule,
                 "cited": preview.policy.cited,
                 "citation": preview.policy.citation or None,
+                "citation_url": preview.policy.citation_url or None,
                 "citation_read": preview.policy.citation_read or None,
                 "primary_suppressed": list(preview.primary_suppressed),
                 "complementary_suppressed": [
@@ -253,7 +252,14 @@ def render_preview_markdown(previews: list[PolicyPreview], *, include_withheld_v
         )
         if preview.policy.cited:
             lines.extend(
-                [f"{preview.policy.citation}", "", f"Read {preview.policy.citation_read}.", ""]
+                [
+                    preview.policy.citation,
+                    "",
+                    f"<{preview.policy.citation_url}>",
+                    "",
+                    f"Read {preview.policy.citation_read}.",
+                    "",
+                ]
             )
         else:
             lines.extend(
