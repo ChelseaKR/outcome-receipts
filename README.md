@@ -256,6 +256,31 @@ reports two distinct failures, and exits non-zero on either:
   used to pass it. Writing it into a report publishes a protected count, so
   `audit` names the metric it discloses rather than calling it unbound.
 
+`--explain` says *why* each of those numbers missed: which receipted displays are
+nearest and by how much, whether the miss is a rounding, a magnitude slip, a
+percentage written as a count, or the thousands/decimal ambiguity
+[ADR 0011](docs/decisions/0011-canonicalization-preserves-magnitude.md)
+deliberately refuses to resolve. It is advice; the verdict and the exit code are
+the same with and without it, and `run --explain` likewise explains a refusal
+without softening it.
+
+`--fixes-out` writes that diagnosis as a reviewable JSON plan, and
+`--apply-fixes` applies a plan you have read, to a new file:
+
+```sh
+receipts audit --config report.toml --narrative draft.md --fixes-out fixes.json
+receipts audit --config report.toml --narrative draft.md \
+  --apply-fixes fixes.json --fixed-out draft.fixed.md
+```
+
+The applier substitutes only exact receipted displays, re-checked against the
+figure set at the moment it runs, and then re-runs the gate over the bytes it
+wrote. It refuses the plan whole — never in part — if the narrative has changed
+since the plan was built, if a replacement is not the current display of a
+publishable figure, or if a replacement would state a suppressed cell. A span two
+displays are equally near gets no fix at all: nothing in the text says which, so
+nothing is chosen for you.
+
 `run` refuses to export in either case.
 
 ### Templates, charts, comparison, and reconciliation
@@ -413,7 +438,7 @@ pinning guidance.
 | `receipts init` | Inspect a CSV header and create an empty, fail-loud starter spec. |
 | `receipts map` | Map explicit funder requirements to candidate SQL and emit a mandatory human review queue; see [metric mapping](docs/metric-mapping.md). |
 | `receipts run` | Compute, ground, suppress, approve, export, seal, and append to the ledger. |
-| `receipts audit` | Check an existing narrative against the publishable figures: report spans that bind to no receipt, and spans that state a suppressed cell. |
+| `receipts audit` | Check an existing narrative against the publishable figures: report spans that bind to no receipt, and spans that state a suppressed cell. `--explain` diagnoses each miss; `--fixes-out` / `--apply-fixes` round-trip a reviewable fix plan. |
 | `receipts eval` | Score grounding behavior on a configured fixture. |
 | `receipts verify` | Recompute receipt values and hashes, or verify an entire exported bundle with `--bundle`. |
 | `receipts verify-bundle` | Recompute `bundle.json` member digests and an optional keyed signature. |

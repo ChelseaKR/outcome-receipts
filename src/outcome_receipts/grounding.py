@@ -45,14 +45,18 @@ states a redacted figure as its own category. See ``suppression``.
 
 from __future__ import annotations
 
+import hashlib
+import itertools
 import re
 from collections.abc import Sequence
 
 from outcome_receipts.models import (
     AuditResult,
+    Explanation,
     Figure,
     GroundingResult,
     NumericSpan,
+    SpanCandidate,
     SuppressedSpan,
 )
 
@@ -389,4 +393,625 @@ def redact_unbound(text: str, result: GroundingResult, *, marker: str = "[UNVERI
     out = text
     for span in sorted(result.unbound, key=lambda s: s.start, reverse=True):
         out = out[: span.start] + marker + out[span.end :]
+    return out
+
+
+# --------------------------------------------------------------------------
+# Diagnosis: why a span did not bind, and what receipted display it may have meant
+#
+# Everything below is advice. It reads the same canonicalization the gate reads
+# (`_figure_keys`, `_span_key`, `_is_ambiguous`), so it cannot contradict a
+# verdict, and it is never consulted when a verdict is formed: `ground` and
+# `audit_narrative` above are untouched by it. `explain_audit` returns a *copy*
+# of an AuditResult with the diagnoses attached; `ok` and `total` do not read
+# them, so the gate's exit code is the same whether or not a caller asks.
+# --------------------------------------------------------------------------
+
+#: Reason classes, most specific first. The order is the ranking `_rank` uses:
+#: a candidate whose *form* explains the miss outranks one that is merely
+#: numerically close, because the former names a mistake and the latter only
+#: measures a gap.
+_REASON_ORDER = (
+    "separator_ambiguity",
+    "percent_as_count",
+    "magnitude",
+    "rounding",
+    "nearest",
+)
+
+#: How close two same-shaped numbers must be before the nearer is worth naming.
+#: A relative gap wider than this is a different figure, not a typo, and
+#: offering it as "the display you probably meant" would be a guess dressed as a
+#: measurement. 1,234 against a receipted 1,235 is 8e-4 and is named; 1,234
+#: against a receipted 4,001 is 0.69 and is not.
+_NEAREST_RELATIVE_TOLERANCE = 0.05
+
+#: ...but a gap of one is always worth naming, whatever the magnitude. A
+#: relative window alone is blind exactly where hand-typed numbers go wrong most
+#: often: 11 against a receipted 10 is a relative gap of 0.09 and would fall
+#: outside a 5% window, while being the commonest miss there is. The floor is
+#: absolute so an off-by-one is diagnosed at every scale.
+_NEAREST_ABSOLUTE_FLOOR = 1.0
+
+_NON_DIGIT = re.compile(r"\D")
+
+
+def _rank(reason: str) -> int:
+    return _REASON_ORDER.index(reason)
+
+
+def _as_number(key: str) -> tuple[float, bool] | None:
+    """``(value, is_percent)`` for a canonicalized key, or ``None``.
+
+    The key must already have come through ``_display_value`` or
+    ``_prose_value``, which leave '.' as the only separator, so ``float`` is
+    exact here. ``None`` is returned for anything that does not parse -- an
+    ambiguous prose token reduced to its presentational form, for instance --
+    and every caller treats ``None`` as "no numeric comparison is available",
+    never as zero.
+    """
+
+    body, percent = _split_percent(key)
+    try:
+        return float(body), bool(percent)
+    except ValueError:
+        return None
+
+
+def _decimals(key: str) -> int:
+    """Decimal places carried by a canonicalized key."""
+
+    body, _ = _split_percent(key)
+    _, _, fraction = body.partition(".")
+    return len(fraction)
+
+
+def _digit_run(token: str) -> str:
+    """Just the digits of a token, separators and decoration discarded.
+
+    Used only to recognize a magnitude slip: "12.34" and "1,234" carry the same
+    digits in the same order and differ by a factor of a hundred, which is the
+    error ADR 0011 is about. Two numbers whose digit runs differ are not that
+    error, however close they are numerically.
+    """
+
+    return _NON_DIGIT.sub("", token)
+
+
+def _ambiguous_readings(token: str) -> tuple[str, str]:
+    """The two value keys an ambiguous prose token could denote.
+
+    ``("1234", "1.234")`` for "1,234": the thousands reading and the decimal
+    reading. Only called for tokens ``_is_ambiguous`` accepted, so exactly one
+    separator is present and it splits 1-3 digits from exactly 3.
+    """
+
+    body, percent = _split_percent(_presentational(token))
+    separator = "." if "." in body else ","
+    return (
+        body.replace(separator, "") + percent,
+        body.replace(separator, ".") + percent,
+    )
+
+
+def _candidates_for_ambiguous(token: str, by_key: dict[str, list[Figure]]) -> list[SpanCandidate]:
+    """Displays an ADR 0011 ambiguous span would have bound, written their way.
+
+    The span was refused a value reading on purpose (see ``_span_key``), so the
+    remedy is never "we resolved it for you": it is "the report writes this
+    figure exactly like this, so write it exactly like this". The candidate's
+    display is the receipt's own string, character for character.
+    """
+
+    out: list[SpanCandidate] = []
+    for reading in _ambiguous_readings(token):
+        for figure in by_key.get(reading, ()):
+            if _presentational(figure.display) == _presentational(token):
+                # It would have bound; it is not an ambiguity failure.
+                continue
+            out.append(
+                SpanCandidate(
+                    metric_id=figure.metric_id,
+                    display=figure.display,
+                    reason="separator_ambiguity",
+                    detail=(
+                        f"{figure.metric_id} is {figure.display}; "
+                        f"{token!r} could mean either of two values a thousand apart, "
+                        f"so it binds only when written exactly as the receipt writes it"
+                    ),
+                )
+            )
+    return out
+
+
+def _candidates_for_value(
+    token: str, span_key: str, figures: Sequence[Figure]
+) -> list[SpanCandidate]:
+    """Near-miss diagnoses for a span whose value is not in question."""
+
+    parsed = _as_number(span_key)
+    if parsed is None:
+        return []
+    span_value, span_percent = parsed
+    span_digits = _digit_run(_presentational(token))
+    span_decimals = _decimals(span_key)
+
+    out: list[SpanCandidate] = []
+    for figure in figures:
+        key = _display_value(figure.display)
+        if key == span_key:
+            # It bound; there is nothing to explain.
+            continue
+        other = _as_number(key)
+        if other is None:
+            continue
+        value, percent = other
+        difference = abs(span_value - value)
+
+        if percent != span_percent and value == span_value:
+            stated, meant = ("a count", "a percentage") if percent else ("a percentage", "a count")
+            out.append(
+                SpanCandidate(
+                    metric_id=figure.metric_id,
+                    display=figure.display,
+                    reason="percent_as_count",
+                    detail=(
+                        f"{figure.metric_id} is {figure.display}; the narrative states "
+                        f"the same digits as {stated} where the receipt is {meant}"
+                    ),
+                )
+            )
+            continue
+        if percent != span_percent:
+            continue
+
+        if span_digits and span_digits == _digit_run(_presentational(figure.display)):
+            factor = value / span_value if span_value else 0.0
+            out.append(
+                SpanCandidate(
+                    metric_id=figure.metric_id,
+                    display=figure.display,
+                    reason="magnitude",
+                    detail=(
+                        f"{figure.metric_id} is {figure.display}, the same digits as "
+                        f"{token!r} at {factor:g}x its magnitude -- check the "
+                        f"thousands separator or the decimal point"
+                    ),
+                    distance=difference,
+                )
+            )
+            continue
+
+        rounds_together = (
+            round(span_value, _decimals(key)) == value or round(value, span_decimals) == span_value
+        )
+        scale = max(abs(span_value), abs(value), 1.0)
+        if rounds_together:
+            out.append(
+                SpanCandidate(
+                    metric_id=figure.metric_id,
+                    display=figure.display,
+                    reason="rounding",
+                    detail=(
+                        f"{figure.metric_id} is {figure.display}; {token!r} is the same "
+                        f"number rounded differently, and a display is matched exactly"
+                    ),
+                    distance=difference,
+                )
+            )
+        elif difference <= max(_NEAREST_ABSOLUTE_FLOOR, _NEAREST_RELATIVE_TOLERANCE * scale):
+            out.append(
+                SpanCandidate(
+                    metric_id=figure.metric_id,
+                    display=figure.display,
+                    reason="nearest",
+                    detail=(
+                        f"nearest: {figure.metric_id} {figure.display} (off by {difference:g})"
+                    ),
+                    distance=difference,
+                )
+            )
+    return out
+
+
+def _deduplicate(candidates: Sequence[SpanCandidate]) -> list[SpanCandidate]:
+    """One candidate per (metric, reason), keeping the nearest.
+
+    An ambiguous span is measured against both of its readings, so the same
+    figure can be reached twice by the same reason class. Reporting it twice
+    would also make it look like a tie to ``_tied_at_front`` and turn a clean
+    single suggestion into a refusal.
+    """
+
+    nearest_first = sorted(
+        candidates,
+        key=lambda candidate: (
+            candidate.distance is None,
+            candidate.distance if candidate.distance is not None else 0.0,
+        ),
+    )
+    best: dict[tuple[str, str], SpanCandidate] = {}
+    for candidate in nearest_first:
+        best.setdefault((candidate.metric_id, candidate.reason), candidate)
+    return list(best.values())
+
+
+def _ordered(candidates: Sequence[SpanCandidate]) -> tuple[SpanCandidate, ...]:
+    """Candidates in a total, data-independent order.
+
+    Sorted by reason rank, then numeric distance, then metric id. The metric id
+    is the final key so the order does not depend on the order figures happened
+    to be computed in: two runs over the same data produce the same fix plan,
+    which is what makes ``apply_fixes`` reproducible.
+    """
+
+    return tuple(
+        sorted(
+            candidates,
+            key=lambda candidate: (
+                _rank(candidate.reason),
+                candidate.distance if candidate.distance is not None else 0.0,
+                candidate.metric_id,
+            ),
+        )
+    )
+
+
+def _tied_at_front(candidates: Sequence[SpanCandidate]) -> bool:
+    """True when nothing distinguishes the first candidate from the second.
+
+    Two candidates of the same reason class at the same distance are equally
+    near, and there is nothing in the text to choose between them. That is the
+    case ``apply_fixes`` refuses.
+    """
+
+    if len(candidates) < 2:
+        return False
+    first, second = candidates[0], candidates[1]
+    return first.reason == second.reason and first.distance == second.distance
+
+
+def explain_span(span: NumericSpan, publishable: Sequence[Figure]) -> Explanation:
+    """Diagnose one unbound span against the publishable figure set."""
+
+    if _NUMBER_WORD.fullmatch(span.text):
+        return Explanation(
+            span=span,
+            remedy="none",
+            detail=(
+                f"{span.text!r} is a written-out numeral. The gate never converts a word "
+                f"into a value, so it can never bind: write the digits of a receipted "
+                f"figure, or remove the number"
+            ),
+        )
+
+    token = _presentational(span.text)
+    by_key: dict[str, list[Figure]] = {}
+    for figure in publishable:
+        for key in _figure_keys(figure.display):
+            by_key.setdefault(key, []).append(figure)
+
+    if _is_ambiguous(token):
+        # Two passes, and the second is the one the issue's own example needs.
+        # An ambiguous span is refused a value reading by the *gate* (ADR 0011)
+        # and must stay refused there. Diagnosis is not binding, though, and
+        # saying nothing about "1,234" when the report publishes 1,235 is a
+        # diagnosis that fails exactly where it is most wanted. So: name any
+        # display the span would have bound had it been written the report's
+        # way (rank 0, an exact form match), and then measure both readings
+        # against the figure set for near-misses. Both readings, because
+        # neither is privileged -- the span genuinely could be either, which is
+        # why it did not bind.
+        found = _candidates_for_ambiguous(span.text, by_key)
+        for reading in _ambiguous_readings(span.text):
+            found.extend(_candidates_for_value(span.text, reading, publishable))
+        candidates = _ordered(_deduplicate(found))
+    else:
+        candidates = _ordered(_candidates_for_value(span.text, _span_key(span.text), publishable))
+
+    if not candidates:
+        return Explanation(
+            span=span,
+            remedy="none",
+            detail=(
+                f"no receipted display is near {span.text!r}. Remove it, or add a metric "
+                f"whose receipt produces it"
+            ),
+        )
+    if _tied_at_front(candidates):
+        names = ", ".join(candidate.metric_id for candidate in candidates)
+        return Explanation(
+            span=span,
+            remedy="review",
+            detail=(
+                f"{span.text!r} is equally near {names}; nothing in the text says which, "
+                f"so no substitution is offered"
+            ),
+            candidates=candidates,
+        )
+    return Explanation(
+        span=span,
+        remedy="replace",
+        detail=candidates[0].detail,
+        candidates=candidates,
+    )
+
+
+def explain_disclosure(disclosure: SuppressedSpan, suppressed: Sequence[Figure]) -> Explanation:
+    """Diagnose a span that states a cell the report withholds.
+
+    The remedy is removal and only removal. Every candidate here carries
+    ``substitutable=False``, because the candidate's display *is* the protected
+    value: offering it as a replacement would be the tool proposing the
+    disclosure it just refused.
+    """
+
+    displays = {figure.metric_id: figure.display for figure in suppressed}
+    candidates = tuple(
+        SpanCandidate(
+            metric_id=metric_id,
+            display=displays.get(metric_id, ""),
+            reason="suppressed_disclosure",
+            detail=(
+                f"{metric_id} is withheld by small-cell suppression; this report does not "
+                f"publish its value"
+            ),
+            substitutable=False,
+        )
+        for metric_id in disclosure.metric_ids
+    )
+    also = ""
+    if disclosure.ambiguous:
+        names = ", ".join(disclosure.publishable_metric_ids)
+        also = (
+            f" It is also the published value of {names}, so rephrase until the two numbers differ."
+        )
+    return Explanation(
+        span=disclosure.span,
+        remedy="remove",
+        detail=(
+            f"{disclosure.span.text!r} is the withheld value of "
+            f"{', '.join(disclosure.metric_ids)}. Remove it; no receipted display may "
+            f"stand in for a protected cell.{also}"
+        ),
+        candidates=candidates,
+    )
+
+
+def explain_audit(
+    result: AuditResult,
+    publishable: Sequence[Figure],
+    suppressed: Sequence[Figure],
+) -> AuditResult:
+    """Return ``result`` with a diagnosis attached to each failing span.
+
+    A copy: the verdict fields are carried over unchanged and ``ok`` does not
+    read ``explanations``, so asking for a diagnosis cannot alter the gate.
+    """
+
+    explanations = tuple(
+        [explain_disclosure(item, suppressed) for item in result.suppressed]
+        + [explain_span(span, publishable) for span in result.unbound]
+    )
+    return AuditResult(
+        bound=result.bound,
+        suppressed=result.suppressed,
+        unbound=result.unbound,
+        explanations=explanations,
+    )
+
+
+def explain_unbound(
+    spans: Sequence[NumericSpan], publishable: Sequence[Figure]
+) -> tuple[Explanation, ...]:
+    """Diagnose the unbound spans of a plain ``GroundingResult``.
+
+    ``run`` grounds against the publishable set with ``ground``, which has no
+    disclosure category, so its failures are all of the one kind.
+    """
+
+    return tuple(explain_span(span, publishable) for span in spans)
+
+
+# --------------------------------------------------------------------------
+# Fix plans
+#
+# A plan is a proposal a human reads and edits. Applying one is therefore not
+# "trust the plan": every field in it is re-checked against the narrative and
+# the figure set as they are *now*, and a plan that no longer describes them is
+# refused whole rather than applied in part. The substituted text is always a
+# receipted display copied character for character out of a Figure; the applier
+# never formats a number.
+# --------------------------------------------------------------------------
+
+#: Version of the fix-plan document. A plan written by a future version is
+#: refused rather than read on a guess about which fields moved.
+FIX_PLAN_SCHEMA_VERSION = 1
+
+
+class FixPlanRefused(Exception):
+    """A fix plan cannot be applied, with the reason a human needs.
+
+    Raised rather than returned so no caller can fall through to writing a
+    narrative it failed to validate.
+    """
+
+
+def narrative_digest(text: str) -> str:
+    """The digest a fix plan carries so it cannot be applied to a changed file.
+
+    Every offset in a plan indexes the narrative it was computed from. Applying
+    it to an edited narrative would splice a receipted display into whatever now
+    sits at those offsets -- a corruption that would then be gated as if it were
+    the author's own sentence. The digest makes that mismatch loud.
+    """
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def build_fix_plan(text: str, explanations: Sequence[Explanation]) -> dict[str, object]:
+    """A machine-readable, human-editable plan built from the diagnoses.
+
+    Only ``replace`` explanations become fixes. Everything else is listed under
+    ``unfixable`` with its reason, present so the plan is a complete account of
+    the failure rather than only the convenient part of it: a plan that silently
+    omitted the disclosures would read as "four problems, four fixes" when one
+    of them is a protected cell no substitution can address.
+    """
+
+    fixes = []
+    unfixable = []
+    for explanation in explanations:
+        span = explanation.span
+        if explanation.remedy == "replace":
+            # `candidates[0]` and not `.replacement`: the property is typed
+            # optional for callers who do not know the remedy, and this branch
+            # does. `Explanation.__post_init__` refuses to build a `replace`
+            # with an empty or non-substitutable candidate list, so the index is
+            # safe by construction rather than by a runtime assertion.
+            candidate = explanation.candidates[0]
+            fixes.append(
+                {
+                    "start": span.start,
+                    "end": span.end,
+                    "was": span.text,
+                    "replace_with": candidate.display,
+                    "metric_id": candidate.metric_id,
+                    "reason": candidate.reason,
+                }
+            )
+        else:
+            unfixable.append(
+                {
+                    "start": span.start,
+                    "end": span.end,
+                    "was": span.text,
+                    "remedy": explanation.remedy,
+                    "why": explanation.detail,
+                }
+            )
+    return {
+        "schema_version": FIX_PLAN_SCHEMA_VERSION,
+        "narrative_sha256": narrative_digest(text),
+        "fixes": fixes,
+        "unfixable": unfixable,
+    }
+
+
+def _read_plan(plan: object) -> tuple[object, list[dict[str, object]]]:
+    """The digest and the fix list of a plan whose shape has been checked.
+
+    Returns both so the caller never re-reads the raw object: everything the
+    applier needs comes back narrowed, and there is no second place where an
+    unvalidated field could be picked up.
+    """
+
+    if not isinstance(plan, dict):
+        raise FixPlanRefused("fix plan is not an object")
+    version = plan.get("schema_version")
+    if version != FIX_PLAN_SCHEMA_VERSION:
+        raise FixPlanRefused(
+            f"fix plan schema_version is {version!r}, expected {FIX_PLAN_SCHEMA_VERSION}"
+        )
+    fixes = plan.get("fixes")
+    if not isinstance(fixes, list):
+        raise FixPlanRefused("fix plan has no 'fixes' list")
+    out: list[dict[str, object]] = []
+    for entry in fixes:
+        if not isinstance(entry, dict):
+            raise FixPlanRefused("a fix entry is not an object")
+        out.append(entry)
+    return plan.get("narrative_sha256"), out
+
+
+def _checked_fix(
+    entry: dict[str, object],
+    text: str,
+    *,
+    allowed: set[str],
+    withheld: set[str],
+) -> tuple[int, int, str]:
+    """One plan entry validated against the narrative and figures as they are now.
+
+    Every branch raises. There is no repair path and no "closest acceptable
+    display" fallback: a plan that no longer describes the text or the figure
+    set is refused, because the alternative is a substitution nobody proposed
+    landing in a narrative that then passes the gate.
+    """
+
+    start, end = entry.get("start"), entry.get("end")
+    was, replacement = entry.get("was"), entry.get("replace_with")
+    if isinstance(start, bool) or isinstance(end, bool):
+        raise FixPlanRefused(f"fix {entry!r} has boolean offsets")
+    if not isinstance(start, int) or not isinstance(end, int):
+        raise FixPlanRefused(f"fix {entry!r} has no integer offsets")
+    if not isinstance(was, str) or not isinstance(replacement, str):
+        raise FixPlanRefused(f"fix {entry!r} has no 'was'/'replace_with' strings")
+    if not 0 <= start < end <= len(text):
+        raise FixPlanRefused(f"fix at {start}:{end} is outside the narrative")
+    if text[start:end] != was:
+        raise FixPlanRefused(
+            f"fix at {start}:{end} expected {was!r} but the narrative has {text[start:end]!r}"
+        )
+    if replacement in withheld:
+        raise FixPlanRefused(
+            f"fix at {start}:{end} would write {replacement!r}, the withheld value of a "
+            f"suppressed cell"
+        )
+    if replacement not in allowed:
+        raise FixPlanRefused(
+            f"fix at {start}:{end} would write {replacement!r}, which is not the display "
+            f"of any publishable figure"
+        )
+    return (start, end, replacement)
+
+
+def apply_fix_plan(
+    text: str,
+    plan: object,
+    publishable: Sequence[Figure],
+    suppressed: Sequence[Figure],
+) -> str:
+    """Apply a fix plan to ``text``, or refuse it whole.
+
+    Every check below has cost someone an afternoon somewhere, and each refuses
+    rather than repairs:
+
+    - the plan's schema version must be the one this code reads;
+    - the plan's digest must be the digest of ``text``, so the offsets still
+      index the sentences they were computed from;
+    - each ``was`` must be exactly the text at its offsets;
+    - fixes must not overlap, so no substitution lands inside another;
+    - each ``replace_with`` must be, character for character, the current
+      display of a *publishable* figure. A display that is merely close, or one
+      belonging to a withheld figure, is refused;
+    - a ``replace_with`` that would state a suppressed cell's raw display is
+      refused by name, whatever the plan calls it.
+
+    The last two are the ones that matter most: they are what makes "substitutes
+    only exact receipted displays" a property of the applier rather than a
+    property of whoever wrote the plan.
+    """
+
+    digest, fixes = _read_plan(plan)
+    actual = narrative_digest(text)
+    if digest != actual:
+        raise FixPlanRefused(
+            f"fix plan was built for a different narrative "
+            f"(plan {digest!r}, file {actual!r}); re-run audit --explain"
+        )
+
+    allowed = {figure.display for figure in publishable}
+    withheld = {figure.display for figure in suppressed}
+
+    normalized = sorted(
+        _checked_fix(entry, text, allowed=allowed, withheld=withheld) for entry in fixes
+    )
+    for (_, previous_end, _), (next_start, _, _) in itertools.pairwise(normalized):
+        if next_start < previous_end:
+            raise FixPlanRefused("two fixes overlap; the plan cannot be applied")
+
+    out = text
+    for start, end, replacement in reversed(normalized):
+        out = out[:start] + replacement + out[end:]
     return out

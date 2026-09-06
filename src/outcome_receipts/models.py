@@ -431,6 +431,86 @@ class SuppressedSpan:
 
 
 @dataclass(frozen=True)
+class SpanCandidate:
+    """One receipted display an unresolved numeric span may have been meant to state.
+
+    A candidate is a *diagnosis*, never a verdict. It is derived from the same
+    canonicalization the gate uses (see ``grounding``), so it can never disagree
+    with the gate about what binds; it says only what the gate found nearby and
+    why the two did not match.
+
+    ``reason`` is the machine-readable class of near-miss and ``detail`` is the
+    sentence a human reads. ``distance`` is the absolute difference between the
+    span's value and the candidate display's value where both resolve to a
+    number, and ``None`` where the near-miss is not a numeric one (a separator
+    ambiguity, a percent stated as a count). It orders candidates within a
+    reason class and nothing else.
+
+    ``substitutable`` is the field ``apply_fixes`` branches on, and it is false
+    for every candidate drawn from the suppressed set. A withheld cell's raw
+    display is a real, receipted string; writing it into the narrative would be
+    the disclosure the gate exists to stop, so a disclosure is offered removal
+    and never a replacement.
+    """
+
+    metric_id: str
+    display: str
+    reason: str
+    detail: str
+    distance: float | None = None
+    substitutable: bool = True
+
+
+@dataclass(frozen=True)
+class Explanation:
+    """Why one numeric span did not bind, and what a human may do about it.
+
+    ``remedy`` is one of four words and each means something different:
+
+    ``replace``  exactly one substitutable candidate is nearest, so a fix plan
+                 may offer its display.
+    ``remove``   the span states a cell the report withholds. Removal is the
+                 only remedy; no substitution is ever offered.
+    ``review``   two or more candidates tie for nearest, so nothing can be
+                 chosen mechanically. ``apply_fixes`` refuses a span in this
+                 state rather than picking one.
+    ``none``     no receipted display is near this number at all. That is not a
+                 failure of the diagnosis; it is the diagnosis, and it says the
+                 number has to be removed or made into a metric.
+
+    ``candidates`` may be empty only when ``remedy`` is ``none``. An explanation
+    with a remedy of ``replace`` and no candidate would be an empty suggestion
+    rendered as a real one, so the invariant is asserted rather than assumed.
+    """
+
+    span: NumericSpan
+    remedy: str
+    detail: str
+    candidates: tuple[SpanCandidate, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.remedy not in ("replace", "remove", "review", "none"):
+            raise ValueError(f"unknown remedy {self.remedy!r}")
+        if self.remedy == "none" and self.candidates:
+            raise ValueError("remedy 'none' cannot carry candidates")
+        if self.remedy != "none" and not self.candidates:
+            raise ValueError(f"remedy {self.remedy!r} requires at least one candidate")
+        if self.remedy == "replace" and not self.candidates[0].substitutable:
+            raise ValueError("remedy 'replace' requires a substitutable candidate")
+
+    @property
+    def replacement(self) -> SpanCandidate | None:
+        """The one display a fix plan may offer, or ``None``.
+
+        Only a ``replace`` remedy has one. ``review`` deliberately returns
+        ``None`` even though it carries candidates: a tie is exactly the case a
+        machine must not resolve.
+        """
+
+        return self.candidates[0] if self.remedy == "replace" else None
+
+
+@dataclass(frozen=True)
 class AuditResult:
     """The outcome of auditing a narrative against the publishable figure set.
 
@@ -445,6 +525,11 @@ class AuditResult:
     bound: tuple[NumericSpan, ...]
     suppressed: tuple[SuppressedSpan, ...]
     unbound: tuple[NumericSpan, ...]
+    #: Diagnoses for the failing spans, empty unless a caller asked for them.
+    #: ``ok`` and ``total`` do not read this field and never will: an
+    #: explanation is advice about a verdict already reached, so adding one
+    #: cannot change the verdict or the exit code derived from it.
+    explanations: tuple[Explanation, ...] = ()
 
     @property
     def ok(self) -> bool:

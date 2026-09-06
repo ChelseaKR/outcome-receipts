@@ -14,6 +14,9 @@ Supported v0.x surface:
   :class:`GroundingResult`
 - Publishable-set audit: :func:`audit_narrative`, :class:`AuditResult`,
   :class:`SuppressedSpan`
+- Diagnosis: :func:`explain_audit`, :func:`explain_unbound`,
+  :class:`Explanation`, :class:`SpanCandidate`, :func:`build_fix_plan`,
+  :func:`apply_fix_plan`, :class:`FixPlanRefused`
 - Narrative: :func:`draft`
 - Verification: :func:`verify_manifest`, :class:`VerifyResult`, :class:`Check`
 - Reporting: :func:`render_report`, :func:`receipts_manifest`
@@ -47,15 +50,26 @@ from outcome_receipts.engine import (
     load_table,
     read_csv,
 )
-from outcome_receipts.grounding import audit_narrative, ground, redact_unbound
+from outcome_receipts.grounding import (
+    FixPlanRefused,
+    apply_fix_plan,
+    audit_narrative,
+    build_fix_plan,
+    explain_audit,
+    explain_unbound,
+    ground,
+    redact_unbound,
+)
 from outcome_receipts.models import (
     AuditResult,
     DraftingSpec,
+    Explanation,
     Figure,
     GroundingResult,
     MetricSpec,
     Receipt,
     ReportSpec,
+    SpanCandidate,
     SuppressedSpan,
 )
 from outcome_receipts.report import receipts_manifest, render_report
@@ -69,22 +83,27 @@ __all__ = [
     "Clock",
     "ComparisonResult",
     "DraftingSpec",
+    "Explanation",
     # Core models
     "Figure",
     "FigureDelta",
+    "FixPlanRefused",
     "FixedClock",
     "GroundingResult",
     "ManifestDiff",
     "MetricSpec",
     "Receipt",
     "ReportSpec",
+    "SpanCandidate",
     "Spec",
     "SuppressedSpan",
     "SystemClock",
     "VerifyResult",
     "__version__",
+    "apply_fix_plan",
     # Publishable-set audit
     "audit_narrative",
+    "build_fix_plan",
     # Comparison
     "compute_comparison",
     "compute_figure",
@@ -93,6 +112,9 @@ __all__ = [
     "diff_manifests",
     # Narrative
     "draft",
+    # Diagnosis
+    "explain_audit",
+    "explain_unbound",
     # Grounding gate
     "ground",
     # Configuration
