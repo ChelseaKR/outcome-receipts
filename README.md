@@ -521,5 +521,5 @@ Never post client-level rows, identifiers, credentials, or real service exports.
 ## Support
 
 This is independent work, published so it can be read and checked rather than taken on
-trust. If your organization wants help making its outcome reporting traceable, see
-[consulting and workshops](https://chelseakr.com/consulting/).
+trust. If your organization wants help making its outcome reporting traceable,
+[get in touch](https://chelseakr.com/contact).
