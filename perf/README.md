@@ -1,6 +1,6 @@
 # Performance budgets and the committed baseline
 
-Last verified: 2026-08-27 · Recheck cadence: quarterly and on any change to the
+Last verified: 2026-09-06 · Recheck cadence: quarterly and on any change to the
 generated trace markup or the Lighthouse toolchain
 
 This directory holds the portfolio Performance standard's artifacts for this
@@ -22,7 +22,7 @@ rather than skipped.
 | Control | State here | Reason |
 |---|---|---|
 | PERF-01, k6 latency thresholds | N/A | There is no hosted route and no preview environment to measure. The standard's own rule is that a perf job with no real URL is declared N/A until the environment exists, not wired in advisory mode. |
-| PERF-02, Lighthouse score and bundle budgets | Applies, enforced | `lighthouserc.cjs` asserts them on the generated trace during `make a11y`. |
+| PERF-02, Lighthouse score and bundle budgets | Applies, enforced, with one deliberate substitution | `lighthouserc.cjs` asserts the bundle budgets and the accessibility score on the generated trace during `make a11y`. The standard's `categories:performance` floor is **not** asserted; see "Why the performance score is not a gate" below. |
 | PERF-03, baseline regression check | Applies, enforced | `scripts/check_perf_baseline.py`, run by `make perf` inside `make verify`. |
 | PERF-04, baseline currency | Applies, review | The ritual below, plus the pull-request checklist. |
 | PERF-05, intentional-regression sign-off | Applies, review | Solo-maintainer disposition: the regression is named in the pull request that carries it, and `perf/baseline.json` moves in that same pull request. |
@@ -31,9 +31,52 @@ rather than skipped.
 
 | Budget | Value | Whose value | Asserted by |
 |---|---|---|---|
-| Lighthouse performance score | at least 0.9 | the standard's | `lighthouserc.cjs`, `categories:performance` |
-| Script bytes on the published trace | 0 | this project's | `lighthouserc.cjs`, `resource-summary:script:size` |
+| JavaScript on the published trace | none, inline or external | this project's | `scripts/a11y.mjs`, a `<script>` element count; and `lighthouserc.cjs`, `resource-summary:script:size` |
+| Stylesheet and third-party bytes | 0 | this project's | `lighthouserc.cjs`, `resource-summary:{stylesheet,third-party}:size` |
+| Total transfer weight of the trace | at most 51 200 bytes | this project's | `lighthouserc.cjs`, `resource-summary:total:size` |
 | Regression against `baseline.json` | at most 10% worse, per metric, in its declared direction | the standard's | `scripts/check_perf_baseline.py` |
+| Lighthouse performance score | recorded, not gated | — | measured every run, printed by `make perf`, fails nothing |
+
+## Why the performance score is not a gate
+
+It was one, and it was the wrong kind of number to gate on.
+
+`categories:performance` is a simulated-throttling timing score of whatever
+machine ran Lighthouse. On byte-identical input this trace has been observed at
+1.00 on a local macOS checkout, 0.99 on one GitHub-hosted runner, and 0.87 on
+another. The 0.87 is the instructive one: in CI run 33591194873, on commit
+`5e5c7aa`, the `verify` job scored 0.87 and failed while the `accessibility` job
+of that same run ran the identical `make a11y` and passed, and a re-run of that
+same commit four days later passed both jobs with no code change at all. Both
+halves of the old gate — Lighthouse-CI's 0.90 floor and the 10% band around a
+1.00 baseline, which also lands on 0.90 — sit inside that spread. So `main` went
+red for a reason no diff had caused and no diff could fix, and re-baselining to
+0.87 would only have rescheduled the same failure at a lower number.
+
+What replaces it is a set of budgets on what the artifact *is* rather than on how
+fast a contended runner painted it: its transferred bytes, its subresource
+counts, and the absence of JavaScript. Those measured 2469 total bytes and zero
+of everything else on every run on every machine tried. For a static document
+with no scripts, no stylesheets and no third-party requests, that *is* what "fast
+for a funder" reduces to; the timing score was only ever a proxy for it.
+
+The score is still collected every run, still recorded in `baseline.json`, and
+still printed by `make perf` — labelled "observed, not scored", with the reason.
+`scripts/check_perf_baseline.py` declares the exclusion in `OBSERVED_NOT_GATED`
+rather than achieving it by quietly not measuring the metric, so a reader can
+tell the difference between a number nobody scores and a number nobody noticed
+had stopped being scored.
+
+One thing this cost, and how it was paid back. `resource-summary:script:size` is
+a budget on script *requests*, so it never sees an inline `<script>`: injecting
+1216 bytes of inline JavaScript into the trace left that row reading 0 and moved
+the compressed document by 26 bytes, passing both the Lighthouse assertion and
+the 10% band. The budget this directory publishes is "the trace ships no
+JavaScript", so `scripts/a11y.mjs` now counts `<script>` elements and fails on
+any, inline or external. That check catches the injection both byte budgets
+missed.
+
+## The other budgets
 
 The script budget is deliberately tighter than the standard's 204 800-byte
 critical-path figure. That figure is sized for a frontend. The trace here is a
@@ -41,9 +84,9 @@ document a funder opens from a file or an attachment, and the project ships no
 web application and no network ingress, so the honest budget for script bytes in
 a published artifact is none at all. At 204 800 the assertion could not have
 failed until someone had already shipped 200 KB of JavaScript into a funder's
-browser; at 0 it fails on the first byte. A 1 KB script injected into the trace
-takes the measurement to 0.411 KB, which fails both the Lighthouse assertion and
-the regression check.
+browser; at 0 it fails on the first byte of an external script, and the
+`<script>`-element check in `scripts/a11y.mjs` fails on the first byte of an
+inline one.
 
 ## The baseline
 
@@ -53,13 +96,17 @@ measured values, with an explicit `null` for each metric this project has no
 route to measure, never a silent absence) and `direction` (so the comparison is
 mechanical rather than a judgement each time).
 
-The performance score measures 1.00 on a local macOS checkout and 0.99 on a
-GitHub-hosted `ubuntu-latest` runner. The baseline records the higher of the two,
-so the number a regression is measured against is the best the page has been
-observed to do rather than the worst. The runner's 0.99 sits inside the 10% band
-with room to spare, and the absolute floor of 0.90 is asserted separately by
-Lighthouse-CI, so neither half of the gate is flaky and neither is toothless: a
-single kilobyte of script still fails both.
+`total_kb_gzip` is 2.4111328125 — the 2469 transferred bytes of the generated
+trace, which reproduced exactly on every run and every machine tried. It is the
+metric that carries the weight the performance score used to: 10% above it is
+2.652 KB, so a real content regression fails. Injecting 1500 incompressible bytes
+into the trace takes it to 3.958 KB and `make perf` exits 1.
+
+`lighthouse_performance` is recorded at 1.00, the best the page has been observed
+to do, and is deliberately *not* scored — see "Why the performance score is not a
+gate" above. It stays in the file because `docs/ROADMAP.md` publishes it and
+`scripts/check_conformance.py` cross-checks the two, so the published figure
+still cannot drift from the receipted one.
 
 `p95_ms`, `llm_first_token_ms` and `llm_full_response_ms` are `null`: there is no
 hosted route and no model in the default path. They are declared N/A here, and

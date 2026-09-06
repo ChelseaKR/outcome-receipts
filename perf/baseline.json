@@ -1,11 +1,11 @@
 {
   "meta": {
-    "commit": "80ee14d230eaaf4dbf60b3142bf83962eec81a3b",
-    "date": "2026-08-27",
-    "environment": "make a11y on a GitHub-hosted ubuntu-latest runner and on a local macOS checkout; the audited page is the generated static file out/a11y/trace.html served by Lighthouse-CI's own static server, with no network. The performance score is 1.00 locally and 0.99 on the runner (CI run 33139824509), so the baseline records the higher of the two and the 10% band covers the runner's value with room to spare; the absolute floor of 0.90 is asserted separately by Lighthouse-CI itself.",
+    "commit": "5e5c7aa637c6aab441364f4653c10e2005282d0e",
+    "date": "2026-09-06",
+    "environment": "make a11y on a GitHub-hosted ubuntu-latest runner and on a local macOS checkout; the audited page is the generated static file out/a11y/trace.html served by Lighthouse-CI's own static server, with no network. The scored metrics are transferred bytes, which measured 2469 total and 0 script on every run on every machine tried, so they are properties of the artifact rather than of the runner. lighthouse_performance is recorded for the record and is NOT scored: on byte-identical input it was observed at 1.00 locally, 0.99 on one runner (CI run 33139824509) and 0.87 on another (CI run 33591194873), where the same commit's accessibility job passed the identical command in the same workflow run and a re-run four days later passed both. See perf/README.md.",
     "tools": {
       "lhci": "0.15.1",
-      "node": "22 (CI) / 26.7.0 (local measurement)",
+      "node": "22 (CI) / 26.8.1 (local measurement)",
       "k6": null
     }
   },
@@ -14,13 +14,15 @@
     "llm_first_token_ms": null,
     "llm_full_response_ms": null,
     "lighthouse_performance": 1.0,
-    "js_kb_gzip": 0
+    "js_kb_gzip": 0,
+    "total_kb_gzip": 2.4111328125
   },
   "direction": {
     "p95_ms": "lower_is_better",
     "llm_first_token_ms": "lower_is_better",
     "llm_full_response_ms": "lower_is_better",
     "lighthouse_performance": "higher_is_better",
-    "js_kb_gzip": "lower_is_better"
+    "js_kb_gzip": "lower_is_better",
+    "total_kb_gzip": "lower_is_better"
   }
 }
