@@ -59,3 +59,35 @@ def test_a_real_fully_grounded_narrative_still_reports_the_measured_rate() -> No
     assert "N/A" not in markdown
     assert "not a measurement of the gate" not in markdown
     assert "every number of which comes from a receipt, so it passes" in markdown
+
+
+def test_the_hallucinated_rate_row_is_as_honest_as_the_grounding_row() -> None:
+    """0.0% is the best value for this metric, so it cannot stand in for no data.
+
+    `test_zero_numeric_spans_does_not_render_as_an_observed_measurement` above
+    holds the gated row to this. The row printed directly beneath it, over the
+    same empty denominator, rendered `0.0% (0/0)` while the 95% CI beside it
+    read the widest honest `[0.0%, 100.0%]`. A point estimate has to agree with
+    the interval next to it.
+    """
+    report = evaluate(GroundingResult(bound=(), unbound=()))
+    assert report.n_numbers == 0
+
+    markdown = render_eval_markdown(report, dataset="empty-fixture")
+    row = next(line for line in markdown.splitlines() if "Hallucinated-number rate" in line)
+
+    assert "0.0% (0/0)" not in row, row
+    assert "N/A (no numeric spans)" in row, row
+    assert "[0.0%, 100.0%]" in row, "the widest honest interval is still printed"
+
+
+def test_a_real_hallucinated_rate_is_still_a_percentage() -> None:
+    """The N/A only appears when nothing was scored."""
+    report = evaluate(GroundingResult(bound=(_span("4"),), unbound=(_span("7"),)))
+    assert report.n_numbers == 2
+
+    markdown = render_eval_markdown(report, dataset="two-numbers")
+    row = next(line for line in markdown.splitlines() if "Hallucinated-number rate" in line)
+
+    assert "50.0% (1/2)" in row, row
+    assert "N/A" not in row, row
