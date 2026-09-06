@@ -58,6 +58,19 @@ both opt in. Small aggregate displays can reach the provider before publication
 suppression, so the adopting organization must authorize the transfer and review
 its Bedrock logging and retention configuration.
 
+`receipts mcp` adds a second surface where a model meets this tool, and it is
+not a cloud boundary: the transport is standard input and output on the
+operator's own machine, the server opens no socket, and every response is
+computed from the post-suppression figure set. What crosses it is whatever the
+assistant already holds — the operator's own draft, sent in, and a bound/unbound
+verdict sent back. A withheld cell is answerable only as the redaction marker
+with null numerics; the pre-suppression figures are consulted in one place, to
+*classify* a span as a disclosure, and no display or value from that set enters
+a response. Tool arguments carry the draft, so nothing narrative is logged: the
+error path names the method and the exception class only. The server exposes no
+tool that writes, exports, or records an approval, so it cannot stand in for the
+named human sign-off `run` requires.
+
 ### Minimization, suppression, retention, and recovery
 
 The application does not copy or persist source rows. Counts 1 through 10 are

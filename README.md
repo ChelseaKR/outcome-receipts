@@ -439,6 +439,7 @@ pinning guidance.
 | `receipts map` | Map explicit funder requirements to candidate SQL and emit a mandatory human review queue; see [metric mapping](docs/metric-mapping.md). |
 | `receipts run` | Compute, ground, suppress, approve, export, seal, and append to the ledger. |
 | `receipts audit` | Check an existing narrative against the publishable figures: report spans that bind to no receipt, and spans that state a suppressed cell. `--explain` diagnoses each miss; `--fixes-out` / `--apply-fixes` round-trip a reviewable fix plan. |
+| `receipts mcp` | Serve `audit`, `verify`, `trace` and the publishable figure list to a drafting tool over stdio, read-only. No export tool, no approval tool, no network, no new dependency; a withheld cell answers as the redaction marker. See [drafting](docs/drafting.md). |
 | `receipts eval` | Score grounding behavior on a configured fixture. |
 | `receipts verify` | Recompute receipt values and hashes, or verify an entire exported bundle with `--bundle`. |
 | `receipts verify-bundle` | Recompute `bundle.json` member digests and an optional keyed signature. |
