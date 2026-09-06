@@ -295,6 +295,23 @@ release-hardening work completed before the first public tag.
   re-run run is where three of the four failures live: `gh run view --log` serves
   only the latest attempt, so they are reachable at
   `/actions/runs/<id>/attempts/1/jobs` and nowhere else.
+- The release workflow's five negative controls now fail as "the mutation did
+  not apply" instead of as the property they were checking. Each builds its input
+  by mutating the shipped `release.yml` text, which keeps the fixture anchored to
+  what is actually deployed but makes every one a literal string match. Adding
+  `timeout-minutes:` to the `verify` job in this same change broke one of those
+  anchors: the anchor spanned `needs:`, `runs-on:` and `steps:` as one block, so
+  `str.replace` returned the file unchanged and
+  `test_widening_write_scope_onto_another_job_is_caught` reported
+  `['github-release'] != ['github-release', 'verify']` — which reads as the
+  permission checker having regressed, when in fact the sabotage never ran and
+  the control proved nothing. A sabotage that silently no-ops is the failure mode
+  a negative control exists to rule out, so `_assert_mutated` now asserts the
+  mutation changed the text before the property is checked, on all five, and the
+  broken anchor is narrowed to the job's `name:` line. Verified by renaming that
+  line in `release.yml`: the guard fires with "the mutation did not apply: its
+  anchor no longer matches .github/workflows/release.yml", and the file was
+  restored.
 - Issue 118: `receipts eval` now scores every narrative the run would export,
   and refuses to report a pass over nothing. It drafted through
   `draft(spec.report, ...)`, which fills only the legacy single
