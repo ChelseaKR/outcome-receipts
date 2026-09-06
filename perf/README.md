@@ -42,16 +42,51 @@ rather than skipped.
 It was one, and it was the wrong kind of number to gate on.
 
 `categories:performance` is a simulated-throttling timing score of whatever
-machine ran Lighthouse. On byte-identical input this trace has been observed at
-1.00 on a local macOS checkout, 0.99 on one GitHub-hosted runner, and 0.87 on
-another. The 0.87 is the instructive one: in CI run 33591194873, on commit
-`5e5c7aa`, the `verify` job scored 0.87 and failed while the `accessibility` job
-of that same run ran the identical `make a11y` and passed, and a re-run of that
-same commit four days later passed both jobs with no code change at all. Both
-halves of the old gate — Lighthouse-CI's 0.90 floor and the 10% band around a
-1.00 baseline, which also lands on 0.90 — sit inside that spread. So `main` went
-red for a reason no diff had caused and no diff could fix, and re-baselining to
-0.87 would only have rescheduled the same failure at a lower number.
+machine ran Lighthouse. This section first stated that spread from three
+observations. Every score the repository has recorded is below, so that the claim
+about the distribution rests on the distribution.
+
+`make perf` prints the score on every run, pass or fail, so the `verify` job is a
+complete record; Lighthouse-CI in the `accessibility` job prints one only when its
+assertion fails, so that job contributes its failures and nothing else. Both were
+read from the job logs of every `ci` run between 2026-08-28, when the gate landed,
+and 2026-09-06, including the first attempt of each re-run run.
+
+| Score | Observations | Against the old gate |
+|---|---|---|
+| 1.00 | 26 | passes |
+| 0.99 | 3 | passes |
+| 0.94 | 1 | passes |
+| 0.89 | 1 | below the 0.90 floor, and 11% below the baseline |
+| 0.87 | 1 | below the 0.90 floor, and 13% below the baseline |
+| 0.81 | 1 | below the 0.90 floor, and 19% below the baseline |
+| 0.77 | 1 | below the 0.90 floor, and 23% below the baseline |
+
+Thirty-four observations, 0.77 to 1.00, four of them below the floor. Both halves
+of the old gate — Lighthouse-CI's 0.90 floor and the 10% band around a 1.00
+baseline, which also lands on 0.90 — sit inside that spread.
+
+The spread is not only between commits. Each `ci` run audits the same generated
+page twice, once in `verify` and once in `accessibility`, minutes apart on the
+same runner image, and the two disagree:
+
+| CI run | Commit's `verify` audit | Commit's `accessibility` audit |
+|---|---|---|
+| 33581078870 | 1.00 | **0.81**, failed |
+| 33582650956 | 1.00 | **0.77**, failed |
+| 33591194873 | **0.87**, failed | passed |
+| 34034962101 | **0.89**, failed | passed |
+
+Two audits of one artifact in one workflow run, 0.19 apart. And the last of those
+is after the fact: 34034962101 is a pull request opened on 2026-09-06 whose diff
+touched only the `Dockerfile` and this repository's changelog, nothing the trace
+loads, and it scored 0.89 — while the next run of the same branch nine minutes
+later scored 1.00.
+
+So `main` went red for a reason no diff had caused and no diff could fix, and
+re-baselining to 0.87 would only have rescheduled the same failure at a lower
+number — as 0.81 and 0.77 already show, both of them below anything a re-baseline
+would plausibly have chosen.
 
 What replaces it is a set of budgets on what the artifact *is* rather than on how
 fast a contended runner painted it: its transferred bytes, its subresource

@@ -133,6 +133,25 @@ release-hardening work completed before the first public tag.
   `tests/test_hud_suppression_calibration.py`.
 
 ### Changed
+- The Lighthouse performance score is no longer a merge gate; the bytes it is a
+  proxy for are. `categories:performance` is a simulated-throttling timing score
+  of whatever machine ran Lighthouse, and both halves of the old gate — the 0.90
+  floor in `lighthouserc.cjs` and the 10% band around a 1.00 baseline, which also
+  lands on 0.90 — sat inside the runner's observed spread, so `main` and four
+  pull requests went red for a reason no diff had caused and no diff could fix.
+  What is scored in its place is what the artifact *is*: `total_kb_gzip`
+  (2469 transferred bytes), the script/stylesheet/third-party budgets, and a new
+  `<script>`-element count in `scripts/a11y.mjs`. That last one closed a real
+  hole rather than merely replacing coverage: `resource-summary:script:size`
+  budgets script *requests*, so 1216 bytes of inline JavaScript injected into the
+  trace left it reading 0 and moved the compressed document by 26 bytes, passing
+  both the old Lighthouse assertion and the 10% band. The score is still measured
+  and printed every run, and its exclusion is declared in
+  `check_perf_baseline.py`'s `OBSERVED_NOT_GATED` with its reason, so a reader
+  can tell a number nobody scores from a number nobody noticed had stopped being
+  scored. This changes a declared conformance position — PERF-02's floor — and
+  `perf/README.md` records why. Shipped as #146; this entry is the changelog
+  record it went in without.
 - The container base image moves to the current `python:3.13-alpine` rebuild
   (`sha256:7415fbc3…`), which retires the CVE-2026-14456 workaround the
   Dockerfile had been carrying. That workaround pinned libcrypto3/libssl3
@@ -256,6 +275,26 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- Issue 139, the environment half: `perf/baseline.json` and `perf/README.md`
+  described a runner distribution tighter than the one that exists, and then
+  described the replacement decision from three observations of it. Both now rest
+  on the whole record. Every Lighthouse performance score this repository has
+  logged between 2026-08-28, when the gate landed, and 2026-09-06 was read back
+  out of the job logs — `make perf` prints one on every run, so the `verify` job
+  is complete, and Lighthouse-CI prints one in the `accessibility` job only when
+  it fails, so that job contributes its failures. Thirty-four observations, 0.77
+  to 1.00 on byte-identical input: 26 at 1.00, three at 0.99, and one each at
+  0.94, 0.89, 0.87, 0.81 and 0.77. Four are below the 0.90 floor and the same
+  four are more than 10% below the baseline. Two of them were previously
+  unrecorded here: the 0.81 and 0.77 came from the `accessibility` job, whose
+  `verify` counterpart in the same run scored 1.00 both times — two audits of one
+  artifact in one workflow run, 0.19 apart — and 0.89 was recorded on 2026-09-06
+  on a pull request that touched only the `Dockerfile` and this file, with the
+  next run of the same branch nine minutes later scoring 1.00. The scores
+  themselves are unchanged, no assertion moves, and the earlier attempt of a
+  re-run run is where three of the four failures live: `gh run view --log` serves
+  only the latest attempt, so they are reachable at
+  `/actions/runs/<id>/attempts/1/jobs` and nowhere else.
 - Issue 118: `receipts eval` now scores every narrative the run would export,
   and refuses to report a pass over nothing. It drafted through
   `draft(spec.report, ...)`, which fills only the legacy single
