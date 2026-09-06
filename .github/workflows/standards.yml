@@ -12,7 +12,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: portfolio-standards-${{ github.ref }}
+  # Keyed the same way as ci.yml, and for the same measured reason: a group
+  # holds one running run and one pending run, so a third joining it cancels
+  # the pending one before a single job dispatches. Keyed only on `github.ref`,
+  # consecutive pushes to `main` shared one group. On 2026-09-06 that happened
+  # here: run 34035866790, on commit `abde41c`, ended `cancelled` with zero jobs
+  # — and `portfolio standards conformance` is a required status check on
+  # `main`, so that commit carries no verdict for it. ci.yml, already fixed,
+  # kept both of the same pair's runs. See ci.yml for the longer note.
+  group: portfolio-standards-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

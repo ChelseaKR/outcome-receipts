@@ -11,7 +11,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: scorecard-${{ github.ref }}
+  # Same fix as ci.yml and standards.yml. `cancel-in-progress: false` does not
+  # protect this: it governs the *running* run, while the eviction happens to
+  # the *pending* one. Measured here on 2026-09-06 — run 34035866788, commit
+  # `abde41c`, `cancelled` with zero jobs, in the same pair of merges that also
+  # lost the standards run. `cancel-in-progress` stays false, and is now
+  # unreachable for pushes, exactly as in ci.yml.
+  group: scorecard-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: false
 
 jobs:

@@ -13,7 +13,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: codeql-${{ github.ref }}
+  # One idiom across the repository. Nothing has been lost here: this workflow
+  # has no `push` trigger (§11e dropped it), so consecutive merges never
+  # contended, and no `codeql` run on `main` has ever ended `cancelled`. What
+  # the shared key still allowed was a `workflow_dispatch` evicting a pending
+  # scheduled run on the same ref, and `codeql (python · actions)` is a required
+  # status check. Keying non-pull-request events on the commit closes that and
+  # leaves one rule to keep right instead of two.
+  group: codeql-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
