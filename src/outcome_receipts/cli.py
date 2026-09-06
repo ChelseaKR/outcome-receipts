@@ -69,7 +69,15 @@ from outcome_receipts.diff import diff_manifests
 from outcome_receipts.draft import draft, draft_template
 from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import EvalReport, evaluate
-from outcome_receipts.grounding import audit_narrative, ground
+from outcome_receipts.grounding import (
+    FixPlanRefused,
+    apply_fix_plan,
+    audit_narrative,
+    build_fix_plan,
+    explain_audit,
+    explain_unbound,
+    ground,
+)
 from outcome_receipts.ledger import LedgerEntry, append_export, read_ledger, verify_chain
 from outcome_receipts.mapping import build_mapping_queue
 from outcome_receipts.model_draft import (
@@ -78,9 +86,11 @@ from outcome_receipts.model_draft import (
     build_narrative_drafter,
 )
 from outcome_receipts.models import (
+    Explanation,
     Figure,
     GroundingResult,
     NumericSpan,
+    SpanCandidate,
     SuppressedSpan,
     TemplateSpec,
 )
@@ -480,7 +490,17 @@ def _print_template_summary(
 def _print_gate_failure(
     claims_result: GroundingResult,
     drafts: Sequence[tuple[TemplateSpec, str, GroundingResult]],
+    publishable: Sequence[Figure] = (),
+    *,
+    explain: bool = False,
 ) -> None:
+    """Report the refusal, and on request why each number missed.
+
+    The refusal lines print whether or not a diagnosis was asked for, and the
+    diagnosis is only ever added beneath them. ``run`` still writes nothing and
+    still exits ``EXIT_GATE_FAIL``: explaining a refusal does not soften it.
+    """
+
     print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
     for span in claims_result.unbound:
         print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
@@ -490,6 +510,14 @@ def _print_gate_failure(
                 f"  unverifiable number in {template.template_id!r}: {span.text!r}",
                 file=sys.stderr,
             )
+    if not explain:
+        return
+    spans = [
+        *claims_result.unbound,
+        *(span for _template, _narrative, result in drafts for span in result.unbound),
+    ]
+    for explanation in explain_unbound(spans, publishable):
+        print(f"  why {explanation.span.text!r}: {explanation.detail}", file=sys.stderr)
 
 
 def _write_template_exports(
@@ -613,9 +641,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
             _emit_json(payload)
             return EXIT_GATE_FAIL
         if not raw_gate_pass:
-            _print_gate_failure(raw_claims, raw_drafts)
+            # The raw drafts failed, so the raw figure set is the one they were
+            # written against and the only set a diagnosis of them can be true
+            # about. Explaining raw spans against the publishable set would
+            # report a suppressed figure as simply missing.
+            _print_gate_failure(raw_claims, raw_drafts, figures, explain=args.explain)
         else:
-            _print_gate_failure(claims_result, drafts)
+            _print_gate_failure(claims_result, drafts, publishable, explain=args.explain)
         return EXIT_GATE_FAIL
 
     approver = _approver(spec.report.title, combined_result, claims_result, args)
@@ -718,6 +750,41 @@ def _suppressed_span_payload(disclosure: SuppressedSpan) -> dict[str, object]:
     }
 
 
+def _candidate_payload(candidate: SpanCandidate) -> dict[str, object]:
+    return {
+        "metric_id": candidate.metric_id,
+        "display": candidate.display,
+        "reason": candidate.reason,
+        "detail": candidate.detail,
+        "distance": candidate.distance,
+        "substitutable": candidate.substitutable,
+    }
+
+
+def _explanation_payload(explanation: Explanation) -> dict[str, object]:
+    return {
+        **_span_payload(explanation.span),
+        "remedy": explanation.remedy,
+        "detail": explanation.detail,
+        "candidates": [_candidate_payload(item) for item in explanation.candidates],
+    }
+
+
+def _print_explanations(explanations: Sequence[Explanation]) -> None:
+    """Render the diagnoses under the verdict lines, never in place of them.
+
+    The verdict is printed first and unchanged by the caller; this only adds
+    lines beneath it. An explanation that printed instead of a failure line
+    would let a reader mistake advice for a result.
+    """
+
+    for explanation in explanations:
+        print(f"  why {explanation.span.text!r} at offset {explanation.span.start}:")
+        print(f"    {explanation.detail}")
+        for candidate in explanation.candidates[1:]:
+            print(f"    also: {candidate.detail}")
+
+
 def _cmd_audit(args: argparse.Namespace) -> int:
     # The full figure set, not just the narrative metrics: complementary
     # suppression is computed over every figure in the report, so auditing
@@ -727,19 +794,42 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     )
     publishable, hidden = _publishable_and_hidden(figures)
     narrative = Path(args.narrative).read_text(encoding="utf-8")
+
+    if args.apply_fixes:
+        return _apply_fixes(args, narrative, publishable, hidden)
+
+    # --fixes-out is a request for the diagnoses in file form, so it turns them
+    # on. Without this it wrote a plan built from an empty explanation list: a
+    # file that says "no fixes" about a narrative nobody diagnosed, which reads
+    # exactly like a narrative nothing could be done for.
+    explain = bool(args.explain or args.fixes_out)
     result = audit_narrative(narrative, publishable, hidden)
+    # Explaining is a read of the same canonicalization the verdict came from,
+    # and the verdict is already fixed by the line above. `explain_audit`
+    # returns a copy carrying the diagnoses; `ok` does not read them, so the
+    # exit code below is the same number whether or not `--explain` was given.
+    explained = explain_audit(result, publishable, hidden) if explain else result
+    if args.fixes_out:
+        Path(args.fixes_out).write_text(
+            json.dumps(build_fix_plan(narrative, explained.explanations), indent=2, sort_keys=True)
+            + "\n",
+            encoding="utf-8",
+        )
 
     if args.json:
-        _emit_json(
-            {
-                "command": "audit",
-                "ok": result.ok,
-                "total": result.total,
-                "bound": len(result.bound),
-                "suppressed": [_suppressed_span_payload(item) for item in result.suppressed],
-                "unbound": [_span_payload(span) for span in result.unbound],
-            }
-        )
+        payload: dict[str, object] = {
+            "command": "audit",
+            "ok": result.ok,
+            "total": result.total,
+            "bound": len(result.bound),
+            "suppressed": [_suppressed_span_payload(item) for item in result.suppressed],
+            "unbound": [_span_payload(span) for span in result.unbound],
+        }
+        if explain:
+            payload["explanations"] = [
+                _explanation_payload(item) for item in explained.explanations
+            ]
+        _emit_json(payload)
         return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
     print(
@@ -757,11 +847,74 @@ def _cmd_audit(args: argparse.Namespace) -> int:
             print(f"    (it is also the published value of {also}; rephrase so the two differ)")
     for span in result.unbound:
         print(f"  unverifiable: {span.text!r} at offset {span.start}")
+    _print_explanations(explained.explanations)
+    if args.fixes_out:
+        print(f"  fix plan: {args.fixes_out}")
     if result.suppressed:
         print(
             "\naudit: FAIL — the narrative states a cell suppression withholds",
             file=sys.stderr,
         )
+    return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
+
+
+def _apply_fixes(
+    args: argparse.Namespace,
+    narrative: str,
+    publishable: Sequence[Figure],
+    hidden: Sequence[Figure],
+) -> int:
+    """Apply a reviewed fix plan, then re-run the gate over what was written.
+
+    The gate is re-run on the *substituted* text, not on the plan's promises.
+    That is the whole point: a plan is a human's edited proposal, and the only
+    statement this command makes about the result is one the gate made about
+    the bytes now on disk.
+    """
+
+    if not args.fixed_out:
+        # Never in place. The narrative is the author's own file and the
+        # substitution is a proposal; writing over it would destroy the text a
+        # reviewer would compare the result against.
+        print(
+            "audit: --apply-fixes needs --fixed-out; the narrative is never rewritten in place",
+            file=sys.stderr,
+        )
+        return EXIT_VERIFY_FAIL
+    plan = json.loads(Path(args.apply_fixes).read_text(encoding="utf-8"))
+    try:
+        fixed = apply_fix_plan(narrative, plan, publishable, hidden)
+    except FixPlanRefused as refusal:
+        if args.json:
+            _emit_json({"command": "audit", "applied": False, "refused": str(refusal)})
+        else:
+            print(f"audit: refused to apply the fix plan — {refusal}", file=sys.stderr)
+        return EXIT_VERIFY_FAIL
+
+    Path(args.fixed_out).write_text(fixed, encoding="utf-8")
+    result = audit_narrative(fixed, publishable, hidden)
+    if args.json:
+        _emit_json(
+            {
+                "command": "audit",
+                "applied": True,
+                "written": args.fixed_out,
+                "ok": result.ok,
+                "total": result.total,
+                "bound": len(result.bound),
+                "suppressed": [_suppressed_span_payload(item) for item in result.suppressed],
+                "unbound": [_span_payload(span) for span in result.unbound],
+            }
+        )
+        return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
+
+    print(f"applied {len(plan.get('fixes', []))} fix(es); wrote {args.fixed_out}")
+    print(
+        f"numbers: {result.total}, bound: {len(result.bound)}, "
+        f"suppressed cells: {len(result.suppressed)}, unbound: {len(result.unbound)}"
+    )
+    for span in result.unbound:
+        print(f"  unverifiable: {span.text!r} at offset {span.start}")
     return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
 
@@ -1434,6 +1587,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip the interactive sign-off prompt; requires --approved-by, "
         "otherwise the export aborts with no approver",
     )
+    run_parser.add_argument(
+        "--explain",
+        action="store_true",
+        help=(
+            "when the gate refuses, say why each number missed and which receipted "
+            "displays are nearest. Advice only; the refusal and the exit code stand"
+        ),
+    )
     run_parser.set_defaults(func=_cmd_run)
 
     audit_parser = sub.add_parser(
@@ -1443,6 +1604,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     audit_parser.add_argument("--config", required=True, help="path to the report spec TOML")
     audit_parser.add_argument("--narrative", required=True, help="narrative text to check")
+    audit_parser.add_argument(
+        "--explain",
+        action="store_true",
+        help=(
+            "diagnose each failing number: the nearest receipted displays and why they "
+            "did not match. Advice only; the verdict and the exit code are unchanged"
+        ),
+    )
+    audit_parser.add_argument(
+        "--fixes-out",
+        help="write a reviewable fix plan (JSON) for the diagnosed spans; implies --explain",
+    )
+    audit_parser.add_argument(
+        "--apply-fixes",
+        help=(
+            "apply a reviewed fix plan, substituting only exact receipted displays, "
+            "then re-run the gate over the result"
+        ),
+    )
+    audit_parser.add_argument(
+        "--fixed-out",
+        help="where to write the fixed narrative; required with --apply-fixes",
+    )
     audit_parser.add_argument("--reproducible", action="store_true", help=argparse.SUPPRESS)
     audit_parser.set_defaults(func=_cmd_audit)
 
