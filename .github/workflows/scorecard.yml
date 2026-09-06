@@ -33,6 +33,17 @@ jobs:
           results_file: results.json
           results_format: json
           publish_results: false
+      - name: Report every measured score before any of them is enforced
+        # The enforcement below is a chain of `jq -e ... >/dev/null`, which
+        # exits 1 and prints nothing: on 2026-09-06 this job failed three times
+        # in a row on `main` and the log said only "Process completed with exit
+        # code 1", naming neither the floor that broke nor the value that broke
+        # it. The measurement is right there in results.json, so print it. This
+        # step cannot fail the job -- it asserts nothing.
+        run: |
+          set -euo pipefail
+          jq -r '"aggregate: \(.score)", (.checks[] | "  \(.name): \(.score)")' results.json
+
       - name: Enforce portfolio score floors
         run: |
           set -euo pipefail
@@ -51,6 +62,12 @@ jobs:
           jq -e '[.checks[] | select(.name == "Signed-Releases") | .score][0] == 10' results.json >/dev/null
           jq -e '[.checks[] | select(.name == "Vulnerabilities") | .score][0] == 10' results.json >/dev/null
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        # `if: always()` because this step used to run only after the floors
+        # passed, so the one run whose results.json a reader actually needs --
+        # the failing one -- was the one that never uploaded it. A gate that
+        # discards the measurement it failed on cannot be diagnosed after the
+        # fact, only re-run and hoped at.
+        if: always()
         with:
           name: scorecard-results
           path: results.json
