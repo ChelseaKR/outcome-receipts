@@ -20,8 +20,10 @@ concurrency:
   #
   # Measured 2026-09-05 over the 100 most recent `ci` runs on `main`: 6 ended
   # `cancelled`, every one of them with zero jobs dispatched — six commits that
-  # reached `main` without a single job being run against them. This workflow
-  # produces five of the six required status checks on `main`.
+  # reached `main` without a single job being run against them. Four of `main`'s
+  # six required status checks — `verify`, `security`, `accessibility` and
+  # `dogfood-action` — are produced by this workflow, so a run lost here is four
+  # of the six going unmeasured on that commit.
   #
   # Keying pushes on the SHA gives every merge its own group, so pushes never
   # contend. Pull requests keep the shared `-pr` key, so pushing again to a PR
