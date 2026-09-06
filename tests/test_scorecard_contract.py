@@ -71,3 +71,41 @@ def test_wvr_006_expiry_does_not_exceed_the_maintained_score_clear_date() -> Non
     expires_match = re.search(r"expires:\s*(\d{4}-\d{2}-\d{2})", block)
     assert expires_match is not None
     assert expires_match.group(1) <= "2026-09-25"
+
+
+def test_the_measured_scores_are_printed_and_kept_even_when_a_floor_fails() -> None:
+    """The floors are enforced with `jq -e ... >/dev/null`, which prints nothing.
+
+    On 2026-09-06 this job failed three consecutive times on `main` and the log
+    said only "Process completed with exit code 1" -- not which floor broke, nor
+    what the measurement was. `results.json` held the answer both times and was
+    uploaded by a step that ran only after the floors passed, so the one run
+    whose evidence a reader needs was the one that discarded it.
+
+    Two properties, so that cannot recur: the scores are printed before anything
+    is asserted, and the artifact upload is unconditional.
+    """
+
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    report = text.index("Report every measured score before any of them is enforced")
+    enforce = text.index("Enforce portfolio score floors")
+    upload = text.index("actions/upload-artifact@")
+    assert report < enforce, "the scores must be printed before a floor can abort the job"
+
+    # The upload step's own `if:` directive, read as a line rather than as a
+    # substring. Written as a substring first, this assertion passed while the
+    # directive was deleted, because the comment above it quotes `if: always()`
+    # in prose -- a check matching the explanation of the property instead of
+    # the property. Proven by deleting the directive: this now fails.
+    step = text[upload:]
+    header = step[: step.index("with:")]
+    directives = [
+        line.strip()
+        for line in header.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    assert "if: always()" in directives, (
+        "the scorecard results upload is conditional, so a failing run -- the "
+        "only run whose results.json anyone needs -- would not keep it"
+    )
