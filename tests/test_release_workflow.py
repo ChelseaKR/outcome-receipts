@@ -60,6 +60,23 @@ REUSABLE_AUTHORIZE_RE = re.compile(
 )
 
 
+def _assert_mutated(original: str, mutated: str) -> None:
+    """A negative control that did not change anything proves nothing.
+
+    Every regression test below builds its input by mutating the shipped file,
+    which keeps the fixture from drifting away from what is actually deployed
+    but makes each one a string match against text the workflow is free to
+    reformat. When a match stops applying, `str.replace` returns the original
+    silently and the test that follows reports the *checker* as broken. This
+    turns that into the true message, at the point where it is still true.
+    """
+
+    assert mutated != original, (
+        "the mutation did not apply: its anchor no longer matches "
+        f"{WORKFLOW.relative_to(ROOT)}, so this negative control proved nothing"
+    )
+
+
 def _text() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
 
@@ -140,10 +157,13 @@ def test_dispatch_only_no_push_trigger() -> None:
 
 
 def test_reintroduced_tag_push_trigger_is_caught() -> None:
-    mutated = _text().replace(
+    original = _text()
+    mutated = original.replace(
         "on:\n  workflow_dispatch:",
         "on:\n  push:\n    tags: ['v*']\n  workflow_dispatch:",
     )
+    _assert_mutated(original, mutated)
+
     trigger = _trigger_block(mutated)
     assert "push:" in trigger  # exactly the regression the real-file test forbids
 
@@ -158,9 +178,12 @@ def test_default_token_permission_is_contents_read_only() -> None:
 
 
 def test_widened_default_token_permission_is_caught() -> None:
-    mutated = _text().replace(
+    original = _text()
+    mutated = original.replace(
         "permissions:\n  contents: read\n", "permissions:\n  contents: write\n"
     )
+    _assert_mutated(original, mutated)
+
     assert _default_permissions(mutated) != ["contents: read"]
 
 
@@ -177,9 +200,10 @@ def test_authorize_delegates_to_the_pinned_reusable_workflow_by_full_sha() -> No
 
 
 def test_a_movable_ref_pin_on_authorize_is_caught() -> None:
-    mutated = _jobs(_text())["authorize"].replace(
-        "@315a513ff3b4e7c5c0628428909052d947f4f1ab", "@main"
-    )
+    original = _jobs(_text())["authorize"]
+    mutated = original.replace("@315a513ff3b4e7c5c0628428909052d947f4f1ab", "@main")
+    _assert_mutated(original, mutated)
+
     match = REUSABLE_AUTHORIZE_RE.search(mutated)
     assert match is not None
     assert not re.fullmatch(r"[0-9a-f]{40}", match.group(1))  # "main" is not a 40-hex-char pin
@@ -195,13 +219,19 @@ def test_exactly_one_job_holds_contents_write_and_it_is_github_release() -> None
 
 
 def test_widening_write_scope_onto_another_job_is_caught() -> None:
-    mutated = _text().replace(
-        "  verify:\n    name: verify at tagged commit\n"
-        "    needs: authorize\n    runs-on: ubuntu-latest\n    steps:",
-        "  verify:\n    name: verify at tagged commit\n"
-        "    needs: authorize\n    runs-on: ubuntu-latest\n"
-        "    permissions:\n      contents: write\n    steps:",
+    original = _text()
+    # Anchored on the job's `name:` line alone. The previous anchor spanned
+    # `needs:`, `runs-on:` and `steps:` as one literal block, so adding
+    # `timeout-minutes:` between them turned the mutation into a no-op and this
+    # test failed as "['github-release'] != ['github-release', 'verify']" --
+    # which reads like the checker regressed when in fact the sabotage never
+    # applied. _assert_mutated below is the general fix; this is the narrow one.
+    mutated = original.replace(
+        "    name: verify at tagged commit\n",
+        "    name: verify at tagged commit\n    permissions:\n      contents: write\n",
     )
+    _assert_mutated(original, mutated)
+
     assert sorted(_write_jobs(mutated)) == ["github-release", "verify"]
 
 
@@ -216,6 +246,8 @@ def test_a_checkout_added_to_github_release_is_caught() -> None:
         "    steps:\n      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5\n"
         "      - name: Download the attested release assets",
     )
+    _assert_mutated(original, mutated)
+
     assert _uses_checkout(mutated)
 
 
@@ -233,6 +265,8 @@ def test_removing_the_pypi_tag_recheck_is_caught() -> None:
     step_start = job.index("- name: Recheck the immutable tag object before PyPI publication")
     step_end = job.index("- name: Publish to PyPI")
     mutated = job[:step_start] + job[step_end:]
+    _assert_mutated(job, mutated)
+
     assert not _pypi_publish_rechecks_tag_before_publishing(mutated)
 
 
