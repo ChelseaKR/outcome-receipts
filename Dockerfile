@@ -24,7 +24,16 @@ FROM python:3.13-alpine@sha256:540c7d91f98ff6880174c40e99067bf5941eb54d818a7a5e0
 # "apk upgrade". Drop both pins, and this comment, once the base image itself
 # ships 3.5.8-r0 or later; the pinned add will start failing when v3.24 main
 # rotates the version out, which is the reminder to do exactly that.
-RUN apk add --no-cache libcrypto3=3.5.8-r0 libssl3=3.5.8-r0
+#
+# libuuid 2.42.1-r0 is the same story, one advisory batch later: container-scan
+# began flagging it for seven HIGH util-linux CVEs (CVE-2026-53612, -53613,
+# -53614, -76642, -78408, -78409, -78410) between 2026-09-02, when `main` last
+# scanned clean, and 2026-09-05. Nothing in this repository changed; the
+# vulnerability database did. The current `python:3.13-alpine` tag does not fix
+# it either -- its base layer is byte-for-byte the layer this digest already
+# pins, still carrying 2.42.1-r0 -- so a digest bump would not have helped.
+# Alpine v3.24 main carries 2.42.3-r1, past the 2.42.3-r0 the advisories name.
+RUN apk add --no-cache libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 libuuid=2.42.3-r1
 
 # The runtime is the copied venv and nothing else; pip exists in the base
 # image only for interactive installs this image never performs, and pip's
