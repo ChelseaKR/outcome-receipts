@@ -293,6 +293,37 @@ release-hardening work completed before the first public tag.
   from `>= 6.8` to `>= 7.0`.
 
 ### Fixed
+- The `scorecard` job's three consecutive failures on `main` are two npm
+  advisories no gate in this repository could see. `qs` 6.15.3 picked up
+  GHSA-4mjr-xmp4-gh2g and GHSA-x5fp-wj9c-mxmx, both published 2026-09-02 at
+  14:45 UTC — after the last green `scorecard` run on `main` that morning
+  (04:32 UTC) and before the first red one on 2026-09-06. Nothing in the
+  repository changed; the advisory database did, for the second time this week
+  and in a second scanner. `scorecard.yml` asserts `Vulnerabilities == 10`,
+  which counts OSV findings at every severity, while the two gates that run on
+  a pull request cannot reach these: `npm audit`'s floor is HIGH and both are
+  6.3 MEDIUM, and `security-osv` scans `uv.lock`, the Python half, only. So the
+  finding could only ever surface after a merge, in a workflow that does not run
+  on pull requests.
+  `qs` arrives transitively through `express`/`body-parser` under `@lhci/cli` at
+  `~6.15.1`, which cannot reach 6.16.0, so the fix is an `overrides` pin —
+  `"qs": "6.16.0"` — beside the four already there. The lockfile change is three
+  lines: one version, one `resolved`, one `integrity`.
+  It took two attempts, and the first one is the part worth recording. Running
+  `npm install` on the local toolchain (npm 11.19.0, Node 26.8.1) produced a
+  lock that changed `qs` **and silently pruned 24 nested entries** under
+  `puppeteer` and `puppeteer-core` — the proxy-agent chain. Local `npm ci` and a
+  full `make a11y` both passed against it, so it looked correct; CI rejected it
+  outright with `npm ci can only install packages when your package.json and
+  package-lock.json are in sync`, naming every one of those 24 as `Missing … from
+  lock file`. CI runs Node 22 with **npm 10.9.8**, and npm 10's resolver still
+  requires what npm 11's prunes. Regenerating the lock inside a `node:22`
+  container produced the three-line diff instead, npm 10 installs it, and npm 11
+  installs it too — so the lock this repository commits has to be written by the
+  npm that CI runs, not the one that happens to be on the machine. Verified:
+  `npm ci` under both npm versions, `osv-scanner --lockfile package-lock.json`
+  reporting no issues where it previously reported two, and the full local
+  `make verify`.
 - Issue 139, the environment half: `perf/baseline.json` and `perf/README.md`
   described a runner distribution tighter than the one that exists, and then
   described the replacement decision from three observations of it. Both now rest
