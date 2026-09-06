@@ -11,6 +11,8 @@ Commands:
   audit   run the grounding gate over an existing narrative file, against the
           figures the report may publish, and report both unbound numbers and
           numbers that state a cell small-cell suppression withholds
+  mcp     serve audit, verify, trace, and the publishable figure list to a
+          drafting tool over stdio, read-only (no export, no network)
   verify  re-derive every receipt in a manifest from the spec and data, and fail
           on any drift
   verify-ledger
@@ -918,6 +920,31 @@ def _apply_fixes(
     return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
 
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    """Serve the read-only tools on stdin/stdout until the client closes them.
+
+    The figure computation is passed in rather than imported by the server, so
+    ``mcp.py`` holds the transport and four projections and nothing that knows
+    how a spec is loaded. It also means the server answers from exactly the same
+    ``_publishable_and_hidden`` split that ``audit`` uses, rather than from a
+    second one that could come to disagree with it.
+
+    ``--reproducible`` is honoured so a client can pin ``computed_at``; the
+    figures are recomputed per call rather than cached, because a cache would
+    answer from data the file no longer holds.
+    """
+
+    from outcome_receipts.mcp import serve
+
+    def resolve(config: str) -> tuple[Sequence[Figure], Sequence[Figure]]:
+        _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+            config, reproducible=args.reproducible, quiet=True
+        )
+        return _publishable_and_hidden(figures)
+
+    return serve(sys.stdin, sys.stdout, resolve)
+
+
 def _check_payload(check: Check) -> dict[str, object]:
     """One check, carrying what it is a check *of*.
 
@@ -1596,6 +1623,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_parser.set_defaults(func=_cmd_run)
+
+    mcp_parser = sub.add_parser(
+        "mcp",
+        help="serve audit, verify, trace and the publishable figures to a drafting "
+        "tool over stdio (read-only: no export, no approval, no network)",
+    )
+    mcp_parser.add_argument("--reproducible", action="store_true", help=argparse.SUPPRESS)
+    mcp_parser.set_defaults(func=_cmd_mcp)
 
     audit_parser = sub.add_parser(
         "audit",

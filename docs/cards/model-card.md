@@ -58,6 +58,18 @@ The drafter must not compute, round, map, approve, or verify a figure. It is not
 case-management system, eligibility system, clinical tool, or source-data quality
 checker. It must not receive client rows or direct identifiers.
 
+## Models this card does not cover
+
+`receipts mcp` serves the audit, verify, trace, and publishable-figure surfaces
+to whatever assistant an organization already drafts in, over standard input and
+output. That model is chosen, hosted, and governed by the operator, so no claim
+here describes it. What the tool guarantees at that boundary is the same
+guarantee it makes everywhere: the four tools are read-only, none can export or
+approve, and every answer comes from the post-suppression figure set, so a
+withheld cell is returned as the redaction marker and never as its value. An
+assistant's draft is checked by the same mechanical gate; it is not trusted, and
+a passing audit is not an endorsement of the prose.
+
 ## Environmental footprint
 
 N/A — this repository trains and fine-tunes no model. Bedrock inference energy
