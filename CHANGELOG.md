@@ -133,6 +133,23 @@ release-hardening work completed before the first public tag.
   `tests/test_hud_suppression_calibration.py`.
 
 ### Changed
+- The container base image moves to the current `python:3.13-alpine` rebuild
+  (`sha256:7415fbc3…`), which retires the CVE-2026-14456 workaround the
+  Dockerfile had been carrying. That workaround pinned libcrypto3/libssl3
+  3.5.8-r0 into the final stage and recorded its own exit condition: "Drop both
+  pins, and this comment, once the base image itself ships 3.5.8-r0 or later."
+  The rebuild does, so they are dropped. Leaving them would not have been free:
+  a pinned `apk add` of an exact version fails the build the day Alpine v3.24
+  main rotates that version out, which is useful as a reminder while the pin is
+  load-bearing and is a scheduled outage once it is not. The libuuid 2.42.3-r1
+  pin added on 2026-09-06 stays, and the reason it cannot be retired the same
+  way is now recorded beside it: libuuid lives in the Alpine layer, and every
+  `python:3.13-alpine` rebuild published so far shares that layer byte for byte
+  (`sha256:55afa1ec…`, verified against the amd64 manifests of both the previous
+  and the current digest), so no digest bump reaches it. The layer above it is
+  the one a bump does reach, and that is where the openssl fix arrived. Verified
+  with `make container-verify` on the rebuilt image: 0 findings in both the
+  Alpine and python-pkg targets.
 - `tests/test_conformance.py` no longer describes its frozen `controls.yml`
   snapshot as coming from "the version this repository pins in
   `.standards-version`". It does not. The pin is `v1.0.1`, and `controls.yml`
