@@ -330,6 +330,28 @@ release-hardening work completed before the first public tag.
   line in `release.yml`: the guard fires with "the mutation did not apply: its
   anchor no longer matches .github/workflows/release.yml", and the file was
   restored.
+- The three workflows #147 did not reach can still lose a commit its verdict, and
+  two of them did, hours after #147 merged. A concurrency group holds one running
+  run and one *pending* run, and a third run joining evicts the pending one before
+  a single job dispatches: it ends `cancelled`, with no failure and no verdict.
+  #147 keyed `ci.yml`'s group on the commit; `standards.yml`, `scorecard.yml` and
+  `codeql.yml` were still keyed on `github.ref` alone. On 2026-09-06 two merges
+  landed six seconds apart, `ci` kept both of its runs, and commit `abde41c` lost
+  `portfolio standards` (run 34035866790) and `scorecard` (run 34035866788), each
+  `cancelled` with zero jobs — and `portfolio standards conformance` is a
+  *required* status check on `main`, so a required check has no result on that
+  commit. `cancel-in-progress: false` is not protection: it governs the running
+  run, and `scorecard.yml` had it set and was cancelled anyway. All three now use
+  the same key `ci.yml` does. `codeql.yml` has never lost a run — §11e dropped its
+  `push` trigger — and is changed for one idiom rather than two, which its comment
+  says rather than implying a loss it did not have.
+  `tests/test_workflow_concurrency.py` makes the rule mechanical: every workflow
+  declaring a concurrency group must key non-pull-request events on the commit,
+  `release.yml`'s single global group is a declared exemption with its reason
+  rather than a file quietly not checked, and the count of workflows actually
+  examined is asserted so the test cannot pass by finding none. Proven by
+  reverting `scorecard.yml` to the ref-only key: the suite fails naming the file
+  and the group.
 - Issue 118: `receipts eval` now scores every narrative the run would export,
   and refuses to report a pass over nothing. It drafted through
   `draft(spec.report, ...)`, which fills only the legacy single
