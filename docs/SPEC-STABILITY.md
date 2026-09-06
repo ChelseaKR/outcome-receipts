@@ -111,12 +111,29 @@ yet establish is stated under the matrix below rather than left as "pending".
 | Current implementation package | Workflow artifact `1.0`, all six kinds | `receipts verify-workflow` | PASS |
 | Signed `v0.2.0` tag, commit `b8f5a27e48283e6b97add1841d1f8a110f760265` | Report spec `1.0`, declared explicitly | Current loader | PASS |
 | Signed `v0.2.0` tag, same commit | Receipts manifest `1.0` | Current re-derivation verifier (reads `1.0`, writes `2.0`) | PASS |
+| Signed `v0.1.0` tag, manifest relabelled `schema_version: "3.0"` | A manifest major nothing implements | Current re-derivation verifier | REFUSED by name; every receipt in it still re-derives, so the refusal is the declared version and nothing else |
+| Signed `v0.1.0` tag, manifest with one figure edited by hand | Receipts manifest `1.0`, altered after release | Current re-derivation verifier | REFUSED as drift, on the edited metric by name |
+| Signed `v0.2.0` tag, spec relabelled `schema_version: "2.0"` | A report-spec major nothing implements | Current loader | REFUSED before computation; no output written |
 | Next tagged release | A contract that actually moves across the boundary | Next tagged verifier | Not yet observed — see below |
 
 The signed-release files are preserved byte-for-byte under
 `tests/fixtures/compat/v0.1.0/` and `tests/fixtures/compat/v0.2.0/`; each
 directory records its source commit and paths. `tests/test_release_compatibility.py`
 recomputes each tagged manifest with current code.
+
+The last three rows are the same released artifacts with one field changed, and
+they are in the table for a reason a PASS row cannot supply on its own. A
+verifier that accepts every document also accepts a released one, so "the
+`v0.1.0` manifest re-derives" is only evidence if some neighbouring document does
+not. Each refusal names what it refused: the relabelled manifest fails on
+`schema_version` while all four of its receipts still re-derive, so the failure
+is attributable to the declared version rather than to the data; the edited
+manifest fails on the single metric whose figure moved; and the relabelled spec
+is refused by the loader before any figure is computed, which is asserted by
+pointing that spec's `[data] path` at a CSV that does not exist — if refusal ever
+moved to after the read, the missing file would raise first and the test would
+say so. The refused run leaves its `--out` directory empty. A half-written bundle
+from a rejected spec would be a receipt set with nothing behind it.
 
 What the second tag established, and what it did not. `v0.2.0`'s
 `services.csv` and `receipts.json` are byte-identical to `v0.1.0`'s: the second

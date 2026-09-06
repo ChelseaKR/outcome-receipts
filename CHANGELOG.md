@@ -11,6 +11,29 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- The refusal half of the release-compatibility evidence, which the matrix in
+  `docs/SPEC-STABILITY.md` had only the accepting half of. Every row read PASS: a
+  released spec loads, a released manifest re-derives. None of them could
+  distinguish a discriminating verifier from one that accepts anything, and a
+  verifier that accepts anything accepts a released artifact too, so those rows
+  were carrying less weight than they appeared to. `tests/test_release_compatibility.py`
+  now exercises the same frozen artifacts with one field changed and asserts that
+  each refusal is *attributable*: a `v0.1.0` manifest relabelled to a manifest
+  major nothing implements fails on `schema_version` while all four of its
+  receipts still re-derive, so the refusal is the declared version and not the
+  data; a `v0.1.0` manifest with one figure edited by hand — one client added to a
+  count, small enough to be plausible — fails as drift on that metric by name; and
+  a `v0.2.0` spec relabelled to a report-spec major nothing implements is refused
+  before any figure is computed, with the error naming both the version it was
+  handed and the one this package implements, and with the `--out` directory left
+  empty. The last of those is asserted by pointing the relabelled spec's
+  `[data] path` at a CSV that does not exist: if the version check ever moved to
+  after the read, the missing file would raise first and the test would say so
+  rather than passing for the wrong reason. Three rows added to the compatibility
+  matrix. This closes issue 65's third and fourth acceptance criteria, which asked
+  for exactly these cases; what it does not do is manufacture the cross-release
+  evidence the issue's title asks for, which still needs a release that moves a
+  contract.
 - A second release baseline, `tests/fixtures/compat/v0.2.0/`, and the honest
   reading of what it does and does not prove. `docs/SPEC-STABILITY.md` said
   cross-release execution evidence "begins with the next two tags"; both of those
