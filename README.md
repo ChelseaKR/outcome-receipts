@@ -423,6 +423,7 @@ pinning guidance.
 | `receipts migrate-check` | Compare reviewed metrics across two schema-variant exports. Each metric is `equivalent`, `changed`, or `indeterminate` (withheld by suppression on one side, so no comparison is possible). |
 | `receipts requirements-diff` | Classify funder requirement changes by stable ID and text digest. |
 | `receipts contract-check` | Package receipted milestone, threshold, and financial evidence without making a legal determination. |
+| `receipts suppress-preview` | Preview what one or more suppression policies would withhold from a report, before anything is exported. Writes nothing. The shareable output never prints a withheld value; `--local` opts into them. |
 | `receipts rollup` | Compose an aggregate count from verified, unsuppressed partner bundles. |
 | `receipts equity-review` | Package allowlisted subgroup receipts after whole-report suppression, with required policy and consent context. |
 | `receipts verify-workflow` | Validate an evidence artifact's schema version, typed relationship, digests, aggregate-only boundary, and composed-receipt lineage. |

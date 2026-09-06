@@ -84,6 +84,18 @@ from outcome_receipts.models import (
     SuppressedSpan,
     TemplateSpec,
 )
+from outcome_receipts.policy import (
+    DEFAULT_POLICY_ID,
+    SuppressionPolicy,
+    UnknownPolicyError,
+    ad_hoc_policy,
+    get_policy,
+)
+from outcome_receipts.preview import (
+    preview_payload,
+    preview_policies,
+    render_preview_markdown,
+)
 from outcome_receipts.provenance import Provenance
 from outcome_receipts.report import (
     receipts_manifest,
@@ -1260,6 +1272,40 @@ def _cmd_contract_check(args: argparse.Namespace) -> int:
     return _finish_workflow(args, artifact)
 
 
+def _cmd_suppress_preview(args: argparse.Namespace) -> int:
+    """Preview policies without writing a report, a bundle, or a ledger entry.
+
+    The raw figures are computed once and every policy is measured against that
+    same set, so a difference between two rows is a difference the policy made
+    rather than a difference in what was computed.
+    """
+    policies: list[SuppressionPolicy] = []
+    seen: set[tuple[str, int]] = set()
+    for policy_id in args.policy or []:
+        policy = get_policy(policy_id)
+        if (policy.policy_id, policy.threshold) not in seen:
+            seen.add((policy.policy_id, policy.threshold))
+            policies.append(policy)
+    for threshold in args.threshold or []:
+        policy = ad_hoc_policy(threshold)
+        if (policy.policy_id, policy.threshold) not in seen:
+            seen.add((policy.policy_id, policy.threshold))
+            policies.append(policy)
+    if not policies:
+        policies.append(get_policy(DEFAULT_POLICY_ID))
+
+    _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+        args.config, reproducible=args.reproducible, quiet=args.json
+    )
+    previews = preview_policies(figures, policies)
+
+    if args.json:
+        _emit_json(preview_payload(previews, include_withheld_values=args.local))
+        return EXIT_OK
+    print(render_preview_markdown(previews, include_withheld_values=args.local), end="")
+    return EXIT_OK
+
+
 def _cmd_rollup(args: argparse.Namespace) -> int:
     artifact = build_rollup(
         plan_path=Path(args.plan),
@@ -1527,6 +1573,33 @@ def build_parser() -> argparse.ArgumentParser:
     contract_parser.add_argument("--reproducible", action="store_true")
     contract_parser.set_defaults(func=_cmd_contract_check)
 
+    preview_parser = sub.add_parser(
+        "suppress-preview",
+        help="preview what suppression policies would withhold, writing nothing",
+        parents=[json_parent],
+    )
+    preview_parser.add_argument("--config", required=True)
+    preview_parser.add_argument(
+        "--threshold",
+        type=int,
+        action="append",
+        metavar="N",
+        help="an uncited threshold to preview; repeatable",
+    )
+    preview_parser.add_argument(
+        "--policy",
+        action="append",
+        metavar="ID",
+        help="a registered policy id to preview; repeatable",
+    )
+    preview_parser.add_argument(
+        "--local",
+        action="store_true",
+        help="include the withheld values; omit for the shareable profile",
+    )
+    preview_parser.add_argument("--reproducible", action="store_true")
+    preview_parser.set_defaults(func=_cmd_suppress_preview)
+
     rollup_parser = sub.add_parser(
         "rollup",
         help="compose a count from verified partner bundles",
@@ -1578,6 +1651,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         label = "drafting policy" if isinstance(exc, DraftingPolicyError) else "workflow"
         print(f"{label}: FAIL — {exc}", file=sys.stderr)
         return EXIT_VERIFY_FAIL
+    except UnknownPolicyError as exc:
+        # Fails closed, naming the id. Falling back to the default here would
+        # let a typo silently preview -- and later record -- a different policy
+        # than the one the operator asked for.
+        print(f"suppression policy: FAIL — {exc}", file=sys.stderr)
+        return EXIT_GATE_FAIL
     return result
 
 
