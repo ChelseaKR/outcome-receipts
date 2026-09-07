@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -317,8 +318,6 @@ class TestPayload:
         assert entry["metric_ids"] == ["exits"]
 
     def test_the_payload_is_json_serialisable(self) -> None:
-        import json
-
         json.dumps(audit_payload(audit_claims("Exits rose.", (DirectionEvidence("e", DECREASE),))))
 
 
@@ -338,9 +337,6 @@ class TestKnownCollisions:
         """The committed examples and the compat fixtures must gate as before. Their
         caveats do use "dropped", which is why the gate is scoped to the drafted
         narrative and not to every string in a spec."""
-        import tomllib
-        from pathlib import Path
-
         root = Path(__file__).resolve().parents[1]
         specs = sorted(root.glob("examples/*/report.toml")) + sorted(
             root.glob("tests/fixtures/compat/*/report.toml")
