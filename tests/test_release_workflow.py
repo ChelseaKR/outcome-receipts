@@ -145,6 +145,46 @@ def _pypi_publish_rechecks_tag_before_publishing(job_text: str) -> bool:
     return recheck != -1 and publish != -1 and recheck < publish
 
 
+def _needs(job_text: str) -> list[str]:
+    """The job names one job's `needs:` declares, in either YAML form."""
+
+    match = re.search(r"^    needs:[ \t]*(.+)$", job_text, re.MULTILINE)
+    if match is None:
+        return []
+    value = match.group(1).split("#", 1)[0].strip()
+    if value.startswith("["):
+        value = value.strip("[]")
+    return [name.strip() for name in value.split(",") if name.strip()]
+
+
+def _needs_closure(jobs: dict[str, str], start: str) -> set[str]:
+    """Every job `start` transitively depends on."""
+
+    seen: set[str] = set()
+    pending = list(_needs(jobs[start]))
+    while pending:
+        name = pending.pop()
+        if name in seen or name not in jobs:
+            continue
+        seen.add(name)
+        pending.extend(_needs(jobs[name]))
+    return seen
+
+
+def _verify_checks_the_tag_against_the_manifest(job_text: str) -> bool:
+    """Does the `verify` job compare the release tag with `project.version`?
+
+    `uv build` in the `build` job stamps the wheel with `project.version` from
+    `pyproject.toml`, and nothing in this workflow used to compare that with
+    the tag being published. The existing CHANGELOG step is not the same check:
+    it greps for a section heading, which a tree with a stale
+    `pyproject.toml` satisfies -- and `main` was in exactly that state on
+    2026-09-07 (CHANGELOG `0.2.1`, manifest `0.2.0`) with every gate green.
+    """
+
+    return "check_release_version.py --tag" in job_text and '"$RELEASE_TAG"' in job_text
+
+
 # ---------------------------------------------------------------------------
 # Trigger: dispatch-only, no tag-push path.
 # ---------------------------------------------------------------------------
@@ -268,6 +308,61 @@ def test_removing_the_pypi_tag_recheck_is_caught() -> None:
     _assert_mutated(job, mutated)
 
     assert not _pypi_publish_rechecks_tag_before_publishing(mutated)
+
+
+# ---------------------------------------------------------------------------
+# The version the wheel will carry is compared with the tag, before the build.
+# ---------------------------------------------------------------------------
+
+
+def test_verify_compares_the_tag_with_the_version_the_wheel_will_carry() -> None:
+    assert _verify_checks_the_tag_against_the_manifest(_jobs(_text())["verify"])
+
+
+def test_removing_the_tagged_version_check_is_caught() -> None:
+    job = _jobs(_text())["verify"]
+    step_start = job.index("- name: The version the wheel will carry is the version being tagged")
+    mutated = job[:step_start].rstrip() + "\n"
+    _assert_mutated(job, mutated)
+
+    assert not _verify_checks_the_tag_against_the_manifest(mutated)
+
+
+def test_the_check_runs_in_verify_which_gates_every_job_that_publishes() -> None:
+    """Placement is the whole point: it must precede anything irreversible.
+
+    Every publishing job must reach `verify` through its `needs:` closure, so a
+    mismatch stops the run before `uv build` produces a wheel, before Sigstore
+    attests it, and above all before `pypi-publish` uploads it -- a PyPI
+    filename cannot be re-used, so `verify-published` catching a mismatch
+    afterwards is not a repair, only a report.
+
+    The closure is walked rather than substring-matched: the word "verify"
+    appears in several of these job bodies for unrelated reasons, and a test
+    that accepted any of them would pass on a workflow where the dependency had
+    actually been cut.
+    """
+
+    jobs = _jobs(_text())
+    assert _verify_checks_the_tag_against_the_manifest(jobs["verify"])
+    for downstream in ("build", "github-release", "pypi-publish"):
+        assert "verify" in _needs_closure(jobs, downstream), (
+            f"{downstream} no longer reaches the verify gate through its needs closure"
+        )
+
+
+def test_the_tag_is_passed_through_the_environment_not_interpolated() -> None:
+    """A tag name is attacker-influenced for anyone who can push a tag.
+
+    `${{ }}` interpolation directly into a `run:` body is a template-injection
+    vector, which is why this workflow routes the tag through `env:` as
+    `RELEASE_TAG`. The new step must not be the one place that regresses it.
+    """
+
+    job = _jobs(_text())["verify"]
+    step_start = job.index("- name: The version the wheel will carry is the version being tagged")
+    step = job[step_start:]
+    assert "${{" not in step.split("- name:")[1]
 
 
 # ---------------------------------------------------------------------------
