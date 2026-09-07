@@ -212,6 +212,43 @@ def test_approved_by_cannot_satisfy_a_role_policy(tmp_path: Path) -> None:
     assert not out.exists()
 
 
+def test_approved_by_alongside_role_approvals_is_refused(tmp_path: Path) -> None:
+    """The test above passes without the explicit refusal, so this one exists.
+
+    With no `--approve` flags, `--approved-by` against a role policy is already
+    refused by the missing-roles check, for a reason that has nothing to do with
+    `--approved-by`. The combination is what the explicit guard is for: without
+    it the run succeeds and the named single approver is silently dropped from a
+    record that says two people signed.
+    """
+
+    config = _spec_with_approval(tmp_path)
+    out = tmp_path / "export"
+    code = main(
+        [
+            "run",
+            "--config",
+            str(config),
+            "--out",
+            str(out),
+            "--reproducible",
+            "--approve",
+            "program:A. Lee",
+            "--approve",
+            "finance:B. Cruz",
+            "--approved-by",
+            "C. Diaz",
+        ]
+    )
+    assert code == 3
+    assert not out.exists()
+
+
+# `  A. Lee  ` is folded by the command-line parser's own strip before the
+# identity rule sees it, so it exercises that strip rather than the fold. The
+# other two are the cases only the folded comparison can catch, which a control
+# on `person_key` confirmed: identity comparison left the whitespace-padded case
+# green and turned the other two red.
 @pytest.mark.parametrize("second", ["a. lee", "A.  Lee", "  A. Lee  "])
 def test_one_person_cannot_fill_both_roles(tmp_path: Path, second: str) -> None:
     # Case and internal whitespace do not make one person into two. The rule is
