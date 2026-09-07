@@ -16,9 +16,132 @@ is assembled from the counts the gate already produced.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 from outcome_receipts.copy import Locale, get_copy
+from outcome_receipts.models import ApprovalPolicy, person_key, role_key
+
+
+class ApprovalError(Exception):
+    """A sign-off that does not satisfy the spec's approval policy.
+
+    Raised before anything is written. Every message names the role or the
+    person at fault, because "approval failed" tells the operator to guess which
+    of two or three sign-offs is the one missing.
+    """
+
+
+@dataclass(frozen=True)
+class Approval:
+    """One recorded human sign-off: which role, who filled it, and when.
+
+    ``approved_at`` is when this run recorded the approval, which is the same
+    instant for every role in one invocation: a ``run`` is a single sign-off
+    event, not an asynchronous workflow, and writing three different sub-second
+    stamps would imply a sequence the tool does not observe. The field is per
+    approval rather than per export so that a future flow which does collect
+    sign-offs over time has somewhere truthful to record them.
+    """
+
+    role: str
+    name: str
+    approved_at: str
+
+
+def _by_role(supplied: Sequence[tuple[str, str]]) -> dict[str, tuple[str, str]]:
+    """Index the supplied sign-offs by role key, refusing a role given twice."""
+
+    indexed: dict[str, tuple[str, str]] = {}
+    for role, name in supplied:
+        key = role_key(role)
+        if key in indexed:
+            raise ApprovalError(f"role {role!r} was approved more than once")
+        indexed[key] = (role, name.strip())
+    return indexed
+
+
+def _check_roles(policy: ApprovalPolicy, by_role: dict[str, tuple[str, str]]) -> None:
+    """Refuse a role the policy does not name, and a role it names that is unfilled."""
+
+    known = set(policy.normalized())
+    unknown = [role for key, (role, _name) in by_role.items() if key not in known]
+    if unknown:
+        raise ApprovalError(
+            ", ".join(repr(role) for role in unknown)
+            + " is not required by this spec; it requires "
+            + ", ".join(repr(role) for role in policy.required)
+        )
+    missing = [role for role in policy.required if role_key(role) not in by_role]
+    if missing:
+        raise ApprovalError(
+            "the spec requires a sign-off for "
+            + ", ".join(repr(role) for role in missing)
+            + " and none was given"
+        )
+
+
+def _check_distinct_people(approvals: Sequence[Approval]) -> None:
+    """Refuse one person filling two roles, comparing folded names."""
+
+    people: dict[str, str] = {}
+    for approval in approvals:
+        key = person_key(approval.name)
+        if key in people:
+            raise ApprovalError(
+                f"{approval.name!r} cannot fill both {people[key]!r} and {approval.role!r}; "
+                "a dual sign-off needs two people"
+            )
+        people[key] = approval.role
+
+
+def resolve_approvals(
+    policy: ApprovalPolicy | None,
+    supplied: Sequence[tuple[str, str]],
+    *,
+    approved_at: str,
+) -> tuple[Approval, ...]:
+    """Check ``role:name`` sign-offs against a spec's policy, or refuse.
+
+    Returns the approvals in the policy's own order, so the recorded set does not
+    depend on the order the roles were given on the command line. Every refusal
+    is an ``ApprovalError``; there is no partial result, because a partially
+    satisfied dual sign-off is exactly the evidence the policy exists to refuse.
+    """
+
+    if policy is None:
+        if supplied:
+            raise ApprovalError(
+                "this spec declares no [approval] policy, so --approve has no roles to "
+                "fill; record the single approver with --approved-by"
+            )
+        return ()
+
+    by_role = _by_role(supplied)
+    _check_roles(policy, by_role)
+
+    approvals: list[Approval] = []
+    for role in policy.required:
+        _given_role, name = by_role[role_key(role)]
+        if not name:
+            raise ApprovalError(f"the sign-off for role {role!r} has no approver name")
+        approvals.append(Approval(role=role, name=name, approved_at=approved_at))
+
+    _check_distinct_people(approvals)
+    return tuple(approvals)
+
+
+def approvals_summary(approvals: Sequence[Approval]) -> str:
+    """The approvers as one display string, in policy order.
+
+    This is what ``approved_by`` carries for a role-based spec. Keeping that
+    field populated rather than blank is deliberate: every reader that already
+    checks a bundle has a named human approval -- ``verify-workflow`` and the
+    rollup composition among them -- keeps working, and it keeps working by
+    reading a string that names all of the approvers rather than one of them.
+    """
+
+    return ", ".join(f"{approval.name} ({approval.role})" for approval in approvals)
 
 
 @dataclass(frozen=True)
@@ -43,6 +166,13 @@ class Provenance:
     suppression_applied: bool = False
     aggregate_only: bool = True
     narrative_drafter: str = "deterministic"
+    #: The role-based sign-offs this export recorded, in the spec's policy order.
+    #: Empty for a spec that declares no ``[approval]`` policy, and the manifest
+    #: then carries no ``approvals`` key at all -- such a spec has not satisfied
+    #: zero roles, it has declared none. ``verify --bundle`` re-reads the policy
+    #: from the spec, so a manifest missing the key against a spec that does
+    #: declare one fails there rather than reading as an empty pass.
+    approvals: tuple[Approval, ...] = field(default_factory=tuple)
 
     @property
     def gate_pass(self) -> bool:
@@ -95,4 +225,13 @@ def provenance_record(prov: Provenance) -> dict[str, object]:
     }
     if prov.approved_by is not None:
         record["approved_at"] = prov.approved_at
+    if prov.approvals:
+        record["approvals"] = [
+            {
+                "role": approval.role,
+                "approved_by": approval.name,
+                "approved_at": approval.approved_at,
+            }
+            for approval in prov.approvals
+        ]
     return record
