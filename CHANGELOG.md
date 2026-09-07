@@ -10,6 +10,8 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-07
+
 ### Added
 - **Nothing bound a requirement set to an export, so a spec that omitted a
   required metric ran, grounded, was approved, and exported a report that was
@@ -1208,6 +1210,7 @@ contract change is described in full under **Changed** below.
   suppressed, every percent figure is suppressed with it, documented as such in
   the module docstring.
 
-[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ChelseaKR/outcome-receipts/releases/tag/v0.1.0
