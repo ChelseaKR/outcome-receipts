@@ -87,6 +87,16 @@ jobs:
             echo "No CHANGELOG section found for ${RELEASE_TAG}"
             exit 1
           }
+      # The step above proves the CHANGELOG mentions this tag. It cannot see
+      # what `uv build` will actually stamp on the wheel, which is
+      # `project.version` in pyproject.toml -- and on 2026-09-07 those two
+      # disagreed on `main` (CHANGELOG `0.2.1`, pyproject `0.2.0`) with every
+      # gate green. A dispatch of `v0.2.1` over that tree would have built,
+      # Sigstore-attested and uploaded a `0.2.0` wheel; the first job to notice
+      # would have been `verify-published`, which runs after the PyPI upload,
+      # and a PyPI filename cannot be re-used once spent.
+      - name: The version the wheel will carry is the version being tagged
+        run: .venv/bin/python scripts/check_release_version.py --tag "$RELEASE_TAG"
 
   build:
     name: build · provenance · SBOM
