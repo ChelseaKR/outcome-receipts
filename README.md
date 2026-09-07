@@ -26,8 +26,11 @@ query, and those are receipt metadata rather than reported figures. Running the
 gate over a whole exported `report.md` reports them as unbound, which is the
 scope working as specified and not a gate failure.
 
-> **Status: Beta.** The current tagged release is `v0.2.0`; `v0.1.0` was the
-> first. The default path is
+> **Status: Beta.** This tree declares `0.2.1`, and `0.2.1` is not published
+> yet: its tag and its CHANGELOG section exist, and the newest release anyone
+> can obtain is `v0.2.0` (`v0.1.0` was the first). What remains is the
+> maintainer's alone and is recorded in
+> [docs/RELEASING.md](docs/RELEASING.md). The default path is
 > deterministic, offline, and tested end to end. The release includes the completed privacy,
 > verification, mapping, localization, multi-template, reconciliation, and
 > optional Bedrock-drafting roadmap work. The v1 implementation package adds
@@ -39,7 +42,7 @@ scope working as specified and not a gate failure.
 > See [CHANGELOG.md](CHANGELOG.md) and
 > [SECURITY.md](SECURITY.md#supported-versions).
 >
-> *Last verified: 2026-07-22 · Recheck cadence: quarterly*
+> *Last verified: 2026-09-07 · Recheck cadence: quarterly*
 
 **Start here:** [run the five-minute synthetic demo](docs/TRY_THE_DEMO.md),
 [inspect the current evaluation](eval/report.md), or

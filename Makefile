@@ -1,4 +1,5 @@
 .PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
+	release-version \
 	security-pip security-npm security-osv security-secrets security-semgrep security-workflows \
 	a11y perf build-html cards benchmark eval eval-check mutation run container-build \
 	container-smoke container-scan container-verify container-demo clean
@@ -12,8 +13,8 @@
 # exits non-zero if any of them failed. Nothing is muted; nothing is skipped.
 SECURITY_GATES := security-pip security-npm security-osv security-secrets \
 	security-semgrep security-workflows
-VERIFY_GATES := lint type test hygiene i18n security a11y perf cards eval-check compat \
-	container-verify
+VERIFY_GATES := lint type test hygiene release-version i18n security a11y perf cards \
+	eval-check compat container-verify
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
 # `uv lock --check` first, because `uv sync --frozen` cannot fail on drift. The
@@ -82,6 +83,15 @@ hygiene:
 	.venv/bin/python scripts/check_source_hygiene.py
 	.venv/bin/python scripts/check_conformance.py
 	.venv/bin/python scripts/check_semgrep_waivers.py
+
+# Its own gate rather than a fourth line of `hygiene`, for the reason the
+# comment above SECURITY_GATES gives: make stops a recipe at its first failing
+# line, so a source-hygiene failure would take this one with it and the release
+# path would silently go unchecked on exactly the commits that are already red.
+# release.yml runs it a second time with --tag, which is the comparison only a
+# release can make.
+release-version:
+	.venv/bin/python scripts/check_release_version.py
 
 # Keep ephemeral Python tools on the same interpreter as the locked project. In
 # particular, Semgrep's macOS source distribution does not carry semgrep-core.

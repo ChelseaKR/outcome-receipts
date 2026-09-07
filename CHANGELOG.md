@@ -10,6 +10,43 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Fixed
+- **Nothing compared the version the release would publish against the tag it
+  would publish it under, and the two had already drifted.** `main` carried a
+  dated `## [0.2.1] - 2026-09-07` CHANGELOG section and a signed `v0.2.1` tag
+  while `pyproject.toml` still read `version = "0.2.0"`: the release-prep
+  commit for `v0.2.0` moved the CHANGELOG *and* bumped every place carrying the
+  version together, and the promotion to `0.2.1` did only the first half.
+  `make verify` was green, `ci` was green, and `release.yml`'s one version
+  check — that `CHANGELOG.md` contains a section for the tag — was satisfied by
+  that tree.
+
+  What a `v0.2.1` dispatch would have done: `uv build` reads `pyproject.toml`,
+  so `build` produces a `0.2.0` wheel, Sigstore attests those bytes, the
+  GitHub release for `v0.2.1` publishes them, and `pypi-publish` uploads them —
+  which PyPI accepts, because it has never seen `0.2.0` and this is a first
+  upload. The first job that would notice is `verify-published`, which runs
+  `uvx --from "outcome-receipts==0.2.1"` *after* the upload, against a version
+  the index does not have and now never can, because the filename is spent.
+  The gate that would have caught it ran after the irreversible step.
+
+  `scripts/check_release_version.py` makes the comparison before the first one:
+  `pyproject.toml`, `CITATION.cff` and `CHANGELOG.md`'s newest dated section
+  must agree, `CITATION.cff`'s `date-released` must be that section's date, and
+  with `--tag` the tag must name what the tree declares. An unreadable
+  declaration — no `project.version`, no dated section, `## [0.2.1]` with the
+  date dropped — is unmeasurable and fails; a malformed newest heading is not
+  skipped in favour of the release below it, which would report agreement
+  reached by ignoring the release under test. It runs as its own `make` gate
+  rather than a fourth line of `hygiene`, so a source-hygiene failure cannot
+  take it down with it, and again in `release.yml` with the tag.
+
+  `pyproject.toml`, `uv.lock` and `CITATION.cff` are moved to `0.2.1` here, so
+  the tree the gate now guards is one it passes, and the README status note —
+  which said `v0.2.0` was "the current tagged release" after `v0.2.1` was
+  tagged — now separates what this tree declares from what anyone can actually
+  obtain.
+
 ## [0.2.1] - 2026-09-07
 
 ### Added
