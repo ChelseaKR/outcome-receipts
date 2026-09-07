@@ -735,6 +735,81 @@ def test_doc_staleness_fails_closed_on_an_unparseable_cadence(tmp_path: Path) ->
     assert any("names no recognized interval" in f for f in failures)
 
 
+def test_doc_staleness_refuses_a_stamp_dated_in_the_future(tmp_path: Path) -> None:
+    """A negative age satisfies `age > max_days` for as long as the file exists.
+
+    So the single edit that most obviously fakes currency -- typing tomorrow's
+    date into the footer -- was the one edit this gate could never report, and
+    it would have kept passing every day after that, forever. The literal here
+    is a full year ahead of the judged date so the assertion cannot be read as
+    an off-by-one about "today".
+    """
+
+    _doc(
+        tmp_path,
+        "docs/tomorrow.md",
+        "*Last verified: 2027-08-21 · Recheck cadence: monthly*",
+    )
+
+    failures = doc_staleness_failures(tmp_path, date(2026, 8, 21))
+    assert failures == [
+        "docs/tomorrow.md: 'Last verified: 2027-08-21' is 365d in the future, "
+        "so no verification it records has happened yet"
+    ]
+
+
+def test_doc_staleness_refuses_a_stamp_one_day_in_the_future(tmp_path: Path) -> None:
+    """The boundary, stated separately: today is fresh, tomorrow is not."""
+
+    _doc(tmp_path, "docs/today.md", "*Last verified: 2026-08-21 · Recheck cadence: monthly*")
+    assert doc_staleness_failures(tmp_path, date(2026, 8, 21)) == []
+
+    _doc(tmp_path, "docs/today.md", "*Last verified: 2026-08-22 · Recheck cadence: monthly*")
+    failures = doc_staleness_failures(tmp_path, date(2026, 8, 21))
+    assert any("is 1d in the future" in f for f in failures)
+
+
+def test_doc_staleness_refuses_a_date_shaped_stamp_that_is_not_a_date(tmp_path: Path) -> None:
+    """`LAST_VERIFIED_RE` matches a shape, not a date.
+
+    `2026-13-40` satisfies it and raised out of `date.fromisoformat`, aborting
+    the whole conformance run on a traceback -- so one typo in one footer
+    suppressed every other conformance failure in the same run. The same defect
+    was already found and fixed once in this repository, in the BASELINE
+    graduation check (`docs/PR-TRIAGE.md`).
+    """
+
+    _doc(
+        tmp_path,
+        "docs/typo.md",
+        "*Last verified: 2026-13-40 · Recheck cadence: quarterly*",
+    )
+
+    failures = doc_staleness_failures(tmp_path, date(2026, 8, 21))
+    assert failures == [
+        "docs/typo.md: 'Last verified: 2026-13-40' is date-shaped but is not a date, "
+        "so this document's currency cannot be measured at all"
+    ]
+
+
+def test_one_unmeasurable_stamp_does_not_hide_a_stale_one(tmp_path: Path) -> None:
+    """The consequence of the traceback, stated as a test.
+
+    A malformed stamp used to end the scan, so whichever documents came after
+    it in the walk went ungraded and the run reported none of them.
+    """
+
+    _doc(tmp_path, "docs/a-typo.md", "*Last verified: 2026-13-40 · Recheck cadence: quarterly*")
+    _doc(tmp_path, "docs/b-stale.md", "*Last verified: 2026-01-01 · Recheck cadence: monthly*")
+    _doc(tmp_path, "docs/c-future.md", "*Last verified: 2027-08-21 · Recheck cadence: monthly*")
+
+    failures = doc_staleness_failures(tmp_path, date(2026, 8, 21))
+    assert len(failures) == 3
+    assert any("a-typo.md" in f and "is not a date" in f for f in failures)
+    assert any("b-stale.md" in f and "stale" in f for f in failures)
+    assert any("c-future.md" in f and "in the future" in f for f in failures)
+
+
 def test_doc_staleness_reads_a_keyword_on_the_first_wrapped_line(tmp_path: Path) -> None:
     # Regression guard: an earlier draft of this fix wrapped a cadence
     # sentence across two Markdown source lines with the recognizable

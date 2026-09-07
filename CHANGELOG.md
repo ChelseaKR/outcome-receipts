@@ -46,6 +46,31 @@ release-hardening work completed before the first public tag.
   which said `v0.2.0` was "the current tagged release" after `v0.2.1` was
   tagged — now separates what this tree declares from what anyone can actually
   obtain.
+- **A `Last verified:` stamp dated in the future satisfied the staleness gate
+  permanently, and a date-shaped stamp that is not a date took the whole
+  conformance run down with it.** `doc_staleness_failures` compared
+  `(today - verified).days` against the cadence and failed only when the age
+  was *greater*. A stamp dated tomorrow gives a negative age, so it passed —
+  and went on passing every day after that, forever. That is the one edit that
+  most obviously fakes currency, and it was the one edit the gate could never
+  report. An age check needs three outcomes, not two: fresh, stale, and
+  unmeasurable; a future date is not fresh data, it is a wrong clock or a wrong
+  entry.
+
+  `LAST_VERIFIED_RE` also matches a date *shape*, not a date. `2026-13-40`
+  satisfies `\d{4}-\d{2}-\d{2}` and raised `ValueError` out of
+  `date.fromisoformat`, aborting the entire conformance run on a traceback that
+  named neither the file nor the stamp — so one typo in one footer suppressed
+  every other conformance failure in the same run, including real ones in
+  documents later in the walk. Both now fail closed, per document, naming the
+  file and the stamp, and the scan continues past them.
+
+  This repository had already found and fixed this exact class once, in the
+  BASELINE graduation check recorded in `docs/PR-TRIAGE.md` (*"a date-shaped
+  string that is not a date (`2026-13-40`) parsed as 'a date is present' and
+  passed. It now fails closed."*). This is the same defect in the second
+  checker. No document in the tree is currently in either state; every stamp is
+  a well-formed past date, so this changes no current verdict.
 
 ## [0.2.1] - 2026-09-07
 

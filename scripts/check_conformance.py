@@ -218,8 +218,38 @@ def doc_staleness_failures(root: Path, today: date) -> list[str]:
                 "mechanically checkable instead of unverifiable prose"
             )
             continue
-        verified = date.fromisoformat(verified_match.group(1))
+        stamp = verified_match.group(1)
+        # `LAST_VERIFIED_RE` matches a date *shape*, not a date. `2026-13-40`
+        # satisfies `\d{4}-\d{2}-\d{2}` and raises out of `date.fromisoformat`,
+        # which used to abort the whole conformance run on a traceback -- so one
+        # typo in one footer suppressed every other conformance failure in the
+        # same run, and the message a reader got named neither the file nor the
+        # stamp. This repository has already learned this exact lesson once:
+        # `docs/PR-TRIAGE.md` records the BASELINE graduation check reading
+        # `2026-13-40` as "a date is present" and passing, and it now fails
+        # closed. Same defect, second checker.
+        try:
+            verified = date.fromisoformat(stamp)
+        except ValueError:
+            failures.append(
+                f"{rel}: 'Last verified: {stamp}' is date-shaped but is not a date, "
+                "so this document's currency cannot be measured at all"
+            )
+            continue
         age = (today - verified).days
+        # An age check needs three outcomes, not two: fresh, stale, and
+        # unmeasurable. A stamp dated in the future gives a *negative* age,
+        # which satisfies `age > max_days` for as long as the file exists --
+        # so the single edit that most obviously fakes currency is the one
+        # edit this gate could never report. A future timestamp is not fresh
+        # data; it is a wrong clock or a wrong entry, and either way nobody
+        # verified this document on a day that has not happened.
+        if age < 0:
+            failures.append(
+                f"{rel}: 'Last verified: {verified.isoformat()}' is {-age}d in the future, "
+                "so no verification it records has happened yet"
+            )
+            continue
         if age > max_days:
             failures.append(
                 f"{rel}: stale -- last verified {verified.isoformat()} ({age}d ago), "
