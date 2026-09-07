@@ -42,7 +42,10 @@ release-hardening work completed before the first public tag.
   take it down with it, and again in `release.yml` with the tag.
 
   `pyproject.toml`, `uv.lock` and `CITATION.cff` are moved to `0.2.1` here, so
-  the tree the gate now guards is one it passes.
+  the tree the gate now guards is one it passes, and the README status note —
+  which said `v0.2.0` was "the current tagged release" after `v0.2.1` was
+  tagged — now separates what this tree declares from what anyone can actually
+  obtain.
 
 ## [0.2.1] - 2026-09-07
 
