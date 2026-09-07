@@ -10,6 +10,26 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Added
+- **The release path's new tag-versus-manifest check is now pinned by
+  `tests/test_release_workflow.py`, which is the only thing that reads
+  `release.yml` at all.** That workflow runs on `workflow_dispatch` only, so no
+  pull request exercises it and nothing but this file would notice a step being
+  deleted from it. The gate added alongside it — the one comparison standing
+  between a version mismatch and an irreversible PyPI upload — would have been
+  a step nothing guarded, in a workflow nothing runs, which is the shape it was
+  written to remove.
+
+  Four assertions, each with the mutation test this file's existing sections
+  use: the `verify` job runs `check_release_version.py --tag`; deleting that
+  step is caught; every publishing job reaches `verify` through its `needs:`
+  closure, walked rather than substring-matched, because the word "verify"
+  appears in several of these job bodies for unrelated reasons and a substring
+  test would pass on a workflow whose dependency had actually been cut; and the
+  tag reaches the step through `env:` rather than `${{ }}` interpolation into a
+  shell body, since a tag name is attacker-influenced for anyone who can push
+  one.
+
 ### Fixed
 - **The release checklist named three of the six files that carry the version,
   and the three it omitted are the ones that drifted.** `docs/RELEASING.md`
