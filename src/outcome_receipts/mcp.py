@@ -47,6 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any
 
+from outcome_receipts.claims import DirectionEvidence, audit_claims, audit_payload
 from outcome_receipts.grounding import audit_narrative
 from outcome_receipts.models import Figure, NumericSpan, SuppressedSpan
 from outcome_receipts.verify import VerifyResult, verify_manifest
@@ -68,7 +69,18 @@ INVALID_PARAMS = -32602
 #: imported so this module never reaches into the CLI: the computation lives
 #: where the CLI already does it, and this module stays a transport plus four
 #: read-only projections of a figure set.
-FigureResolver = Callable[[str], tuple[Sequence[Figure], Sequence[Figure]]]
+FigureResolver = Callable[
+    [str], tuple[Sequence[Figure], Sequence[Figure], Sequence[DirectionEvidence]]
+]
+"""What a spec resolves to: the publishable figures, the withheld ones, and the
+receipted comparison directions.
+
+The third element is what ``audit_narrative`` needs to answer about a comparative
+claim, and it is part of the resolver rather than a second callable because the CLI
+and this server must answer from the *same* computation. ``tests/test_mcp_server.py``
+requires this tool's payload to equal ``receipts audit --json`` exactly: a drafting
+tool told a narrative is clean while the CLI would refuse to export it is precisely
+the drift that test exists to prevent."""
 
 
 class ToolError(Exception):
@@ -186,15 +198,20 @@ def _verify_payload(result: VerifyResult) -> dict[str, Any]:
 def _tool_list_publishable_figures(
     arguments: Mapping[str, Any], resolve: FigureResolver
 ) -> dict[str, Any]:
-    publishable, _withheld = resolve(_require_str(arguments, "config"))
+    publishable, _withheld, _evidence = resolve(_require_str(arguments, "config"))
     return {"figures": [_figure_payload(figure) for figure in publishable]}
 
 
 def _tool_audit_narrative(arguments: Mapping[str, Any], resolve: FigureResolver) -> dict[str, Any]:
     config = _require_str(arguments, "config")
     text = _require_str(arguments, "text")
-    publishable, withheld = resolve(config)
+    publishable, withheld, evidence = resolve(config)
     result = audit_narrative(text, publishable, withheld)
+    # The comparative-claim gate, in the same call and from the same computation.
+    # Reporting the numbers as clean while saying nothing about a direction the
+    # export path refuses would make this tool the one place a drafter is told a
+    # narrative passes when it does not.
+    claims = audit_claims(text, evidence)
     return {
         "command": "audit",
         "ok": result.ok,
@@ -202,13 +219,14 @@ def _tool_audit_narrative(arguments: Mapping[str, Any], resolve: FigureResolver)
         "bound": len(result.bound),
         "suppressed": [_suppressed_span_payload(item) for item in result.suppressed],
         "unbound": [_span_payload(span) for span in result.unbound],
+        "comparative_claims": audit_payload(claims),
     }
 
 
 def _tool_verify_receipts(arguments: Mapping[str, Any], resolve: FigureResolver) -> dict[str, Any]:
     config = _require_str(arguments, "config")
     receipts = _require_str(arguments, "receipts")
-    publishable, _withheld = resolve(config)
+    publishable, _withheld, _evidence = resolve(config)
     try:
         manifest = json.loads(Path(receipts).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -230,7 +248,7 @@ def _tool_trace_figure(arguments: Mapping[str, Any], resolve: FigureResolver) ->
 
     config = _require_str(arguments, "config")
     metric_id = _require_str(arguments, "metric_id")
-    publishable, _withheld = resolve(config)
+    publishable, _withheld, _evidence = resolve(config)
     matches = [figure for figure in publishable if figure.metric_id == metric_id]
     if not matches:
         known = ", ".join(sorted(figure.metric_id for figure in publishable))
