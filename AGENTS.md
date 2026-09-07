@@ -181,6 +181,7 @@ outcome-receipts/
 │   ├── report.py                  # rendering for the report, the receipts manifest, and the eval
 │   ├── suppression.py             # primary, complementary, delta, and percentage disclosure controls
 │   ├── mapping.py                 # deterministic schema mapping and fail-closed review queue
+│   ├── coverage.py                # binds a funder requirement set to an export and refuses an unanswered one
 │   ├── model_draft.py             # optional policy-gated Bedrock prose seam
 │   ├── bundle.py                  # tamper-evident export bundle
 │   ├── ledger.py                  # hash-chained export history
@@ -193,7 +194,7 @@ outcome-receipts/
 │   ├── test_suppression.py        # MERGE-BLOCKING: no small or recoverable cell survives
 │   └── test_*.py                  # engine, draft, mapping, bundle, ledger, schemas, container, and docs gates
 ├── eval/                          # committed eval report (report.md)
-├── examples/                      # runnable example configs: board-report, grant-report, housing-demo
+├── examples/                      # runnable example configs: board-report, grant-report, housing-demo, multi-funder, requirement-coverage
 ├── docs/
 │   ├── ROADMAP.md
 │   ├── RESEARCH-ROADMAP.md
@@ -226,6 +227,15 @@ Decisions made now so they are not relitigated:
 * **Suppression runs before export, after grounding.** Order: compute → receipt
   → draft → ground → suppress → human-approve → export. Suppression is the last
   transform before a human sees the report, so what they approve is what ships.
+* **Requirement coverage is the other half of the claim, and it gates export.**
+  Grounding asks whether every number in the prose traces to a receipt;
+  coverage asks whether every number the funder required was published. A spec
+  that binds `[requirements]` must account for every requirement as `answered`,
+  `withheld`, or `unanswerable`, or `run` refuses on exit code 4 and writes
+  nothing. An `unanswerable` declaration carries both a blocker `mapping`
+  actually reproduces and a reason a person wrote, because a blocker alone is a
+  tool's excuse and a reason alone is unfalsifiable. A spec with no binding
+  behaves in every byte as it did before. See ADR 0013.
 
 ## Build plan
 

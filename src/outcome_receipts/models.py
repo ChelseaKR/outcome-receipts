@@ -84,6 +84,11 @@ class MetricSpec:
     ``caveat`` is an optional qualifying note (e.g. a data-quality limitation)
     that travels with the receipt, so a limitation on the figure rides inside the
     receipt chain and renders next to the figure instead of living as loose prose.
+
+    ``requirement_id`` names the requirement in the bound requirement document
+    that this metric answers. It is empty for a metric that answers no declared
+    requirement, and it is the only link between a funder's requirement set and
+    the figures an export publishes. See ``coverage.py`` and ADR 0012.
     """
 
     metric_id: str
@@ -98,6 +103,37 @@ class MetricSpec:
     data_source: str = ""
     collection_frequency: str = ""
     caveat: str = ""
+    requirement_id: str = ""
+
+
+@dataclass(frozen=True)
+class UnanswerableRequirement:
+    """An operator's declaration that a required figure cannot be produced.
+
+    Both halves are mandatory and neither is sufficient alone. ``blocker`` is a
+    machine-readable string that ``mapping.build_mapping_queue`` must actually
+    produce for this requirement against this data -- a blocker the tool does
+    not produce is refused, so the field cannot be used to wave a requirement
+    away. ``reason`` is a sentence a person wrote. A blocker without a reason is
+    a tool's excuse; a reason without a blocker is unfalsifiable.
+    """
+
+    requirement_id: str
+    blocker: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class RequirementsSpec:
+    """The requirement document an export must prove it answered.
+
+    ``path`` is the requirement JSON the spec is bound to -- the same document
+    ``receipts map`` and ``receipts requirements-diff`` read. ``unanswerable``
+    carries the operator's declarations for requirements no metric answers.
+    """
+
+    path: str
+    unanswerable: tuple[UnanswerableRequirement, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -356,6 +392,7 @@ class ReportSpec:
     reconciliation: ReconciliationSpec | None = None
     templates: tuple[TemplateSpec, ...] = field(default_factory=tuple)
     drafting: DraftingSpec = field(default_factory=DraftingSpec)
+    requirements: RequirementsSpec | None = None
 
     @property
     def effective_templates(self) -> tuple[TemplateSpec, ...]:

@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from outcome_receipts.coverage import RequirementCoverage
 from outcome_receipts.grounding import ground
 from outcome_receipts.models import (
     EMPTY_SLICE_HASH,
@@ -287,23 +288,47 @@ class ArtifactCheck:
 
 
 @dataclass(frozen=True)
+class CoverageCheck:
+    """Whether the manifest's requirement coverage still holds.
+
+    ``checked`` is false when neither the spec nor the manifest carries a
+    requirement binding -- nothing was compared, which is a different fact from
+    "the comparison passed". A verifier that reported ``ok`` for an unbound spec
+    and ``ok`` for a bound one that matched would be saying the same word about
+    two different situations.
+    """
+
+    checked: bool
+    ok: bool
+    detail: str
+
+
+@dataclass(frozen=True)
 class BundleResult:
     """The whole-bundle verification: receipts, artifact digests, and grounding.
 
     ``manifest`` is the per-receipt re-derivation. ``artifacts`` is one check per
     file the manifest hashes (``report.md``, ``trace.html``, each chart SVG).
-    ``grounding`` re-runs the gate over the exported narrative. The bundle is
-    ``ok`` only when all three hold, so any drift, swap, or ungrounded number
-    fails closed.
+    ``grounding`` re-runs the gate over the exported narrative. ``coverage``
+    re-derives the requirement coverage record and compares it, including the
+    digest of the requirement document, so an edit to that document after export
+    is caught. The bundle is ``ok`` only when all four hold, so any drift, swap,
+    ungrounded number, or moved requirement fails closed.
     """
 
     manifest: VerifyResult
     artifacts: tuple[ArtifactCheck, ...]
     grounding: GroundingResult
+    coverage: CoverageCheck = CoverageCheck(False, True, "no requirement binding to check")
 
     @property
     def ok(self) -> bool:
-        return self.manifest.ok and all(check.ok for check in self.artifacts) and self.grounding.ok
+        return (
+            self.manifest.ok
+            and all(check.ok for check in self.artifacts)
+            and self.grounding.ok
+            and self.coverage.ok
+        )
 
     @property
     def failed_artifacts(self) -> tuple[ArtifactCheck, ...]:
@@ -355,7 +380,59 @@ def _check_artifacts(bundle_dir: Path, manifest: Mapping[str, Any]) -> tuple[Art
     return tuple(checks)
 
 
-def verify_bundle(bundle_dir: Path, figures: Sequence[Figure]) -> BundleResult:
+def _check_coverage(
+    manifest: Mapping[str, Any], coverage: RequirementCoverage | None
+) -> CoverageCheck:
+    """Compare the manifest's coverage record with a freshly derived one.
+
+    Both directions are failures, and both are real. A manifest that records a
+    binding the spec no longer declares was exported against a requirement set
+    somebody has since removed. A spec that declares a binding the manifest does
+    not carry was exported before the binding existed, and its report proves
+    nothing about the requirement set now in force.
+    """
+
+    recorded = manifest.get("requirements")
+    if recorded is None and coverage is None:
+        return CoverageCheck(False, True, "no requirement binding to check")
+    if recorded is None:
+        return CoverageCheck(
+            True,
+            False,
+            "the spec binds a requirement document but the manifest carries no coverage record",
+        )
+    if coverage is None:
+        return CoverageCheck(
+            True,
+            False,
+            "the manifest carries a coverage record but the spec binds no requirement document",
+        )
+    if not isinstance(recorded, Mapping):
+        return CoverageCheck(True, False, "the manifest's requirements record is not an object")
+    derived = coverage.payload()
+    recorded_digest = recorded.get("document_sha256")
+    if recorded_digest != derived["document_sha256"]:
+        return CoverageCheck(
+            True,
+            False,
+            f"requirement document sha256 {recorded_digest} does not match "
+            f"{derived['document_sha256']} recomputed from {coverage.document_path}",
+        )
+    if dict(recorded) != derived:
+        return CoverageCheck(
+            True,
+            False,
+            "the coverage record does not match the coverage re-derived from the spec and data",
+        )
+    return CoverageCheck(True, True, f"coverage matches; document sha256 {recorded_digest}")
+
+
+def verify_bundle(
+    bundle_dir: Path,
+    figures: Sequence[Figure],
+    *,
+    coverage: RequirementCoverage | None = None,
+) -> BundleResult:
     """Verify an exported bundle is internally coherent, not just re-derivable.
 
     Beyond re-deriving every receipt (``verify_manifest``), this reads each file
@@ -374,4 +451,4 @@ def verify_bundle(bundle_dir: Path, figures: Sequence[Figure]) -> BundleResult:
     report_path = bundle_dir / "report.md"
     report_text = report_path.read_text(encoding="utf-8") if report_path.is_file() else ""
     grounding = ground(_report_narrative(report_text), figures)
-    return BundleResult(manifest_result, artifacts, grounding)
+    return BundleResult(manifest_result, artifacts, grounding, _check_coverage(manifest, coverage))

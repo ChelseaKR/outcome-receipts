@@ -11,6 +11,37 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- **Nothing bound a requirement set to an export, so a spec that omitted a
+  required metric ran, grounded, was approved, and exported a report that was
+  fully receipted and silently incomplete.** `map` returned per-requirement
+  candidates that could come back `blocked`, `requirements-diff` compared two
+  requirement documents by stable id, and `contract-check` refused a milestone
+  whose metric was absent — and none of them looked at what an export actually
+  published. A requirement nobody could answer and a requirement nobody was
+  asked about rendered identically, as nothing on the page, which is the error
+  ADR 0009 already refuses one level down inside a figure.
+  A spec may now declare `[requirements] path = "..."` and each metric a
+  `requirement_id`. Export accounts for every requirement in the bound document
+  as `answered`, `withheld` (a suppressed cell — answered, and reading as
+  unanswered nowhere), or `unanswerable`; anything else refuses the export,
+  writes nothing, and names the requirement, on the new exit code **4**.
+  An `unanswerable` declaration carries **both** the machine-readable blocker
+  and a human-authored reason, and neither is sufficient: the blocker is
+  re-derived at export by running `mapping.build_mapping_queue` over the same
+  data and document, so a blocker the mapper does not produce is refused with
+  what the mapper did say, and a requirement that maps cleanly cannot be
+  declared unanswerable at all.
+  The coverage table renders in the report appendix in EN and ES, the
+  requirement document's sha256 rides in `receipts.json`, and `verify --bundle`
+  re-derives both — an edited requirement document fails naming the digest, and
+  a doctored coverage record fails as a mismatch against what the spec and data
+  produce. A spec with no binding is unchanged in every byte: its manifest
+  carries no `requirements` key at all, and `verify --bundle` reports
+  `not checked` rather than `ok`.
+  `examples/requirement-coverage/` demonstrates all three exportable states.
+  See [ADR 0013](docs/decisions/0013-requirement-coverage-is-proven-at-export.md)
+  and `docs/SPEC-STABILITY.md`.
+
 - The comparative-claim gate. `grounding` finds numbers, so a sentence carrying no
   numeral was invisible to it and "placements rose this quarter" blocked nothing. The
   drafter was forbidden to invent a digit and not forbidden to invent a direction.

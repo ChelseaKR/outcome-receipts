@@ -1,0 +1,21 @@
+client_id,program,enrolled_date,exit_date,exit_destination,referral_source
+C001,housing,2025-01-05,2025-04-10,permanent,street outreach
+C002,housing,2025-01-06,2025-05-01,permanent,street outreach
+C003,housing,2025-01-10,2025-05-15,permanent,coordinated entry
+C004,housing,2025-02-01,2025-06-01,permanent,coordinated entry
+C005,housing,2025-02-03,2025-06-10,permanent,coordinated entry
+C006,housing,2025-02-15,2025-06-20,permanent,shelter
+C007,housing,2025-03-01,2025-06-25,temporary,shelter
+C008,housing,2025-03-05,2025-06-28,temporary,shelter
+C009,housing,2025-03-10,2025-06-30,unknown,shelter
+C010,housing,2025-03-12,2025-07-01,temporary,street outreach
+C011,housing,2025-04-01,,,coordinated entry
+C012,housing,2025-04-05,,,coordinated entry
+C013,housing,2025-04-08,,,shelter
+C014,housing,2025-04-11,2025-07-02,permanent,shelter
+C015,housing,2025-04-14,2025-07-05,temporary,street outreach
+C016,housing,2025-04-18,2025-07-08,permanent,coordinated entry
+C017,housing,2025-04-21,2025-07-11,permanent,shelter
+C018,housing,2025-04-25,2025-07-14,temporary,shelter
+C019,housing,2025-05-01,,,street outreach
+C020,housing,2025-05-04,,,coordinated entry

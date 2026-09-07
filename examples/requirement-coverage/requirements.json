@@ -1,0 +1,46 @@
+{
+  "requirements": [
+    {
+      "aggregation": "count_distinct",
+      "definition": "Distinct participants in the reporting export.",
+      "description": "Unduplicated clients served",
+      "field": "client_id",
+      "metric_id": "clients_served",
+      "requirement_id": "R-1"
+    },
+    {
+      "aggregation": "count_rows",
+      "definition": "Enrollments recorded in the housing program during the period.",
+      "description": "Housing program enrollments",
+      "filters": [
+        {
+          "equals": "housing",
+          "field": "program"
+        }
+      ],
+      "metric_id": "housing_enrollments",
+      "requirement_id": "R-2"
+    },
+    {
+      "aggregation": "count_rows",
+      "definition": "Enrollments whose recorded exit destination is permanent.",
+      "description": "Exits to permanent housing",
+      "filters": [
+        {
+          "equals": "permanent",
+          "field": "exit_destination"
+        }
+      ],
+      "metric_id": "permanent_exits",
+      "requirement_id": "R-3"
+    },
+    {
+      "aggregation": "count_distinct",
+      "definition": "Distinct participants who returned to homelessness within six months of exit.",
+      "description": "Returns to homelessness within six months",
+      "field": "return_within_180_days",
+      "metric_id": "returns_to_homelessness",
+      "requirement_id": "R-4"
+    }
+  ]
+}

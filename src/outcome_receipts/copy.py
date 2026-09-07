@@ -35,6 +35,16 @@ class ReportCopy:
     charts_heading: str
     chart_data_caption_template: str
     chart_alt_template: str
+    coverage_heading: str
+    coverage_sentence_template: str
+    coverage_header_requirement: str
+    coverage_header_status: str
+    coverage_header_evidence: str
+    coverage_status_answered: str
+    coverage_status_withheld: str
+    coverage_status_unanswerable: str
+    coverage_status_unanswered: str
+    coverage_no_evidence: str
     receipts_heading: str
     receipt_kind_label: str
     receipt_definition_label: str
@@ -102,6 +112,16 @@ def _build_copy(locale: Locale) -> ReportCopy:
         charts_heading=_("charts_heading"),
         chart_data_caption_template=_("chart_data_caption_template"),
         chart_alt_template=_("chart_alt_template"),
+        coverage_heading=_("coverage_heading"),
+        coverage_sentence_template=_("coverage_sentence_template"),
+        coverage_header_requirement=_("coverage_header_requirement"),
+        coverage_header_status=_("coverage_header_status"),
+        coverage_header_evidence=_("coverage_header_evidence"),
+        coverage_status_answered=_("coverage_status_answered"),
+        coverage_status_withheld=_("coverage_status_withheld"),
+        coverage_status_unanswerable=_("coverage_status_unanswerable"),
+        coverage_status_unanswered=_("coverage_status_unanswered"),
+        coverage_no_evidence=_("coverage_no_evidence"),
         receipts_heading=_("receipts_heading"),
         receipt_kind_label=_("receipt_kind_label"),
         receipt_definition_label=_("receipt_definition_label"),

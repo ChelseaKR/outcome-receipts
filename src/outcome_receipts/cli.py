@@ -51,7 +51,7 @@ import argparse
 import hashlib
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from outcome_receipts import __version__
@@ -76,6 +76,11 @@ from outcome_receipts.comparison import (
     compute_reconciliation,
 )
 from outcome_receipts.config import Spec, load_spec
+from outcome_receipts.coverage import (
+    CoverageError,
+    RequirementCoverage,
+    build_requirement_coverage,
+)
 from outcome_receipts.diff import diff_manifests
 from outcome_receipts.draft import draft, draft_template
 from outcome_receipts.engine import compute_figures, read_csv_meta
@@ -175,6 +180,15 @@ EXIT_GATE_FAIL = 2
 nothing."""
 
 EXIT_APPROVAL_FAIL = 3
+
+# 4: the export answers a bound requirement set incompletely. Distinct from the
+# grounding gate (2), which asks whether every number in the prose traces to a
+# receipt, and from approval (3). This asks the other half: whether every number
+# the funder required was published, withheld with its cell marked, or declared
+# unanswerable with a reason. A run can pass the gate, be approved, and still
+# ship a report that silently omits a required figure -- that is the failure this
+# code names.
+EXIT_COVERAGE_FAIL = 4
 """The export was not approved: the grounding gate passed but no named human
 signed off, so ``run`` wrote nothing."""
 
@@ -428,6 +442,7 @@ def _export_outputs(
     out_dir: Path | None = None,
     title: str | None = None,
     ledger_path: Path | None = None,
+    coverage: RequirementCoverage | None = None,
 ) -> tuple[dict[str, str | None], LedgerEntry, Path]:
     """Write the report, trace, charts, and manifest, then append the export ledger.
 
@@ -448,6 +463,7 @@ def _export_outputs(
         charts=charts,
         chart_dir=_CHART_DIR,
         provenance=provenance,
+        coverage=coverage,
         locale=args.locale,
     )
     trace_text = render_trace_html(
@@ -464,7 +480,9 @@ def _export_outputs(
     }
     for chart in charts:
         digests[f"{_CHART_DIR}/{chart.chart_id}.svg"] = _sha256(chart.svg)
-    manifest_text = receipts_manifest(figures, provenance=provenance, artifacts=digests)
+    manifest_text = receipts_manifest(
+        figures, provenance=provenance, artifacts=digests, coverage=coverage
+    )
 
     out_dir = out_dir or Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -610,6 +628,7 @@ def _write_template_exports(
     *,
     suppression_applied: bool = False,
     narrative_drafter: str = "deterministic",
+    coverage: RequirementCoverage | None = None,
 ) -> tuple[list[tuple[TemplateSpec, dict[str, str | None], LedgerEntry]], Path, bool]:
     base_out = Path(args.out)
     fan_out = bool(spec.report.templates)
@@ -638,6 +657,7 @@ def _write_template_exports(
             out_dir=out_dir,
             title=template.title,
             ledger_path=ledger_path,
+            coverage=coverage,
         )
         bundle_path = out_dir / _BUNDLE_NAME
         bundle_path.write_text(bundle_manifest(_bundle_members(out_dir), key=key), encoding="utf-8")
@@ -656,6 +676,166 @@ def _redact_report_structures(
     if reconciliation is not None:
         reconciliation = redact_reconciliation(reconciliation, figures)
     return comparison, reconciliation
+
+
+def _requirement_coverage(spec: Spec, figures: Sequence[Figure]) -> RequirementCoverage | None:
+    """Coverage for a bound spec, or ``None`` when the spec binds no requirements.
+
+    ``None`` means "this spec makes no coverage claim". It is not the same fact
+    as a coverage record whose counts are all zero, and the two are never
+    rendered the same way: an unbound spec carries no `requirements` key in its
+    manifest at all.
+    """
+
+    if spec.requirements_path is None or spec.report.requirements is None:
+        return None
+    return build_requirement_coverage(
+        requirements=spec.report.requirements,
+        requirements_path=spec.requirements_path,
+        data_path=spec.data_path,
+        metric_requirements={
+            metric.metric_id: metric.requirement_id
+            for metric in spec.report.metrics
+            if metric.requirement_id
+        },
+        figures=figures,
+    )
+
+
+def _print_coverage_failure(coverage: RequirementCoverage) -> None:
+    print(
+        f"\nrequirement coverage: FAIL — {len(coverage.unanswered)} of "
+        f"{len(coverage.records)} requirements in {coverage.document_path} "
+        "are neither answered nor declared unanswerable",
+        file=sys.stderr,
+    )
+    for record in coverage.unanswered:
+        print(f"  {record.requirement_id}: {record.detail}", file=sys.stderr)
+
+
+def _refuse_for_grounding(
+    args: argparse.Namespace,
+    *,
+    gate_pass: bool,
+    raw_gate_pass: bool,
+    raw_claims: GroundingResult,
+    raw_drafts: Sequence[tuple[TemplateSpec, str, GroundingResult]],
+    figures: Sequence[Figure],
+    publishable: Sequence[Figure],
+    claims_result: GroundingResult,
+    drafts: Sequence[tuple[TemplateSpec, str, GroundingResult]],
+    combined_result: GroundingResult,
+    outputs: object,
+    template_payload: Mapping[str, object],
+    claim_audits: Sequence[tuple[TemplateSpec, ClaimAudit]],
+    claim_payload: object,
+) -> int | None:
+    """Refuse the export when the grounding gate failed, or ``None`` when it passed."""
+
+    if gate_pass:
+        return None
+    if args.json:
+        payload = _run_payload(
+            gate_pass=False,
+            figures=publishable,
+            narrative_result=combined_result,
+            claims_result=claims_result,
+            outputs=outputs,
+            ledger=None,
+            approval=None,
+        )
+        payload["templates"] = dict(template_payload)
+        payload["comparative_claims"] = claim_payload
+        _emit_json(payload)
+        return EXIT_GATE_FAIL
+    if not raw_gate_pass:
+        # The raw drafts failed, so the raw figure set is the one they were
+        # written against and the only set a diagnosis of them can be true
+        # about. Explaining raw spans against the publishable set would
+        # report a suppressed figure as simply missing.
+        _print_gate_failure(
+            raw_claims, raw_drafts, figures, explain=args.explain, claim_audits=claim_audits
+        )
+    else:
+        _print_gate_failure(
+            claims_result,
+            drafts,
+            publishable,
+            explain=args.explain,
+            claim_audits=claim_audits,
+        )
+    return EXIT_GATE_FAIL
+
+
+def _print_coverage_pass(coverage: RequirementCoverage | None) -> None:
+    """One line for a bound spec, and nothing at all for an unbound one."""
+
+    if coverage is None:
+        return
+    counts = coverage.counts()
+    print(
+        f"requirement coverage: PASS — {counts['answered']} answered, "
+        f"{counts['withheld']} withheld, {counts['unanswerable']} unanswerable "
+        f"of {len(coverage.records)} in {coverage.document_path}"
+    )
+
+
+def _with_coverage(
+    payload: dict[str, object], coverage: RequirementCoverage | None
+) -> dict[str, object]:
+    """Add the coverage record, or leave the payload without the key entirely.
+
+    Absent, not an empty object: a spec that binds no requirement document has
+    not answered zero requirements, it has made no coverage claim at all.
+    """
+
+    if coverage is not None:
+        payload["requirements"] = coverage.payload()
+    return payload
+
+
+def _refuse_for_coverage(
+    args: argparse.Namespace,
+    coverage: RequirementCoverage | None,
+    *,
+    figures: Sequence[Figure],
+    narrative_result: GroundingResult,
+    claims_result: GroundingResult,
+    outputs: object,
+    template_payload: Mapping[str, object],
+    claim_payload: object,
+) -> int | None:
+    """Refuse the export and write nothing, naming every unanswered requirement.
+
+    ``None`` means there is nothing to refuse: either the spec binds no
+    requirement document, or every requirement is answered, withheld, or
+    declared unanswerable with a blocker `map` reproduced.
+
+    ``gate_pass`` is reported as true in the JSON because it was: the grounding
+    gate passed and this is the other gate. Reporting it as a grounding failure
+    would send whoever reads the JSON to look for an unbound number that is not
+    there.
+    """
+
+    if coverage is None or coverage.ok:
+        return None
+    if args.json:
+        payload = _run_payload(
+            gate_pass=True,
+            figures=figures,
+            narrative_result=narrative_result,
+            claims_result=claims_result,
+            outputs=outputs,
+            ledger=None,
+            approval=None,
+        )
+        payload["templates"] = dict(template_payload)
+        payload["comparative_claims"] = claim_payload
+        payload["requirements"] = coverage.payload()
+        _emit_json(payload)
+        return EXIT_COVERAGE_FAIL
+    _print_coverage_failure(coverage)
+    return EXIT_COVERAGE_FAIL
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
@@ -724,38 +904,43 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if not args.json:
         _print_run_summary(publishable, claims_result, drafts, claim_audits, suppression)
 
-    if not gate_pass:
-        if args.json:
-            payload = _run_payload(
-                gate_pass=False,
-                figures=publishable,
-                narrative_result=combined_result,
-                claims_result=claims_result,
-                outputs=failed_outputs,
-                ledger=None,
-                approval=None,
-            )
-            payload["templates"] = template_payload
-            payload["comparative_claims"] = claim_payload
-            _emit_json(payload)
-            return EXIT_GATE_FAIL
-        if not raw_gate_pass:
-            # The raw drafts failed, so the raw figure set is the one they were
-            # written against and the only set a diagnosis of them can be true
-            # about. Explaining raw spans against the publishable set would
-            # report a suppressed figure as simply missing.
-            _print_gate_failure(
-                raw_claims, raw_drafts, figures, explain=args.explain, claim_audits=claim_audits
-            )
-        else:
-            _print_gate_failure(
-                claims_result,
-                drafts,
-                publishable,
-                explain=args.explain,
-                claim_audits=claim_audits,
-            )
-        return EXIT_GATE_FAIL
+    refusal = _refuse_for_grounding(
+        args,
+        gate_pass=gate_pass,
+        raw_gate_pass=raw_gate_pass,
+        raw_claims=raw_claims,
+        raw_drafts=raw_drafts,
+        figures=figures,
+        publishable=publishable,
+        claims_result=claims_result,
+        drafts=drafts,
+        combined_result=combined_result,
+        outputs=failed_outputs,
+        template_payload=template_payload,
+        claim_audits=claim_audits,
+        claim_payload=claim_payload,
+    )
+    if refusal is not None:
+        return refusal
+
+    # The second half of the claim, and it runs after the grounding gate on
+    # purpose: grounding asks whether every number in the prose traces to a
+    # receipt, coverage asks whether every number the funder required was
+    # published. A run that fails grounding has nothing worth grading for
+    # coverage, and a run that passes both is the only one that may be approved.
+    coverage = _requirement_coverage(spec, publishable)
+    refusal = _refuse_for_coverage(
+        args,
+        coverage,
+        figures=publishable,
+        narrative_result=combined_result,
+        claims_result=claims_result,
+        outputs=failed_outputs,
+        template_payload=template_payload,
+        claim_payload=claim_payload,
+    )
+    if refusal is not None:
+        return refusal
 
     approver = _approver(spec.report.title, combined_result, claims_result, args)
     if approver is None:
@@ -791,6 +976,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         key,
         suppression_applied=True,
         narrative_drafter="bedrock" if narrative_drafter is not None else "deterministic",
+        coverage=coverage,
     )
     if args.json:
         flat_outputs: object = (
@@ -813,10 +999,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         payload["templates"] = template_payload
         payload["comparative_claims"] = claim_payload
-        _emit_json(payload)
+        _emit_json(_with_coverage(payload, coverage))
         return EXIT_OK
 
     print("\ngrounding gate: PASS")
+    _print_coverage_pass(coverage)
     print(f"  approved: {approver}")
     for template, outputs, entry in written:
         prefix = f"{template.template_id}: " if fan_out else ""
@@ -1162,6 +1349,11 @@ def _bundle_payload(result: BundleResult) -> dict[str, object]:
             "bound": len(result.grounding.bound),
             "unbound": [_span_payload(span) for span in result.grounding.unbound],
         },
+        "coverage": {
+            "checked": result.coverage.checked,
+            "ok": result.coverage.ok,
+            "detail": result.coverage.detail,
+        },
     }
 
 
@@ -1217,13 +1409,13 @@ def _verify_failure_reason(result: VerifyResult) -> str:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+    spec, _rows, figures, _comparison, _reconciliation = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
     )
     # Apply suppression to re-derived figures so they match the exported manifest.
     suppressed_figures, _suppression_result = suppress_figures(figures)
     if args.bundle is not None:
-        return _verify_bundle(args, suppressed_figures)
+        return _verify_bundle(args, spec, suppressed_figures)
     manifest = json.loads(Path(args.receipts).read_text(encoding="utf-8"))
     result = verify_manifest(suppressed_figures, manifest)
 
@@ -1311,8 +1503,13 @@ def _cmd_verify_ledger(args: argparse.Namespace) -> int:
     return EXIT_VERIFY_FAIL
 
 
-def _verify_bundle(args: argparse.Namespace, figures: Sequence[Figure]) -> int:
-    result = verify_bundle(Path(args.bundle), figures)
+def _verify_bundle(args: argparse.Namespace, spec: Spec, figures: Sequence[Figure]) -> int:
+    # The coverage is re-derived from the spec and the requirement document as
+    # they are *now*, not read back from the manifest, so an edit to the
+    # requirement document after export changes the digest and fails here.
+    result = verify_bundle(
+        Path(args.bundle), figures, coverage=_requirement_coverage(spec, figures)
+    )
     manifest = result.manifest
 
     if args.json:
@@ -1330,6 +1527,11 @@ def _verify_bundle(args: argparse.Namespace, figures: Sequence[Figure]) -> int:
     )
     for span in result.grounding.unbound:
         print(f"  unverifiable number: {span.text!r}")
+    print(
+        "requirement coverage: "
+        + ("not checked" if not result.coverage.checked else "checked")
+        + f" — {result.coverage.detail}"
+    )
 
     if result.ok:
         print("\nverify: PASS — the whole bundle is coherent")
@@ -1342,6 +1544,8 @@ def _verify_bundle(args: argparse.Namespace, figures: Sequence[Figure]) -> int:
     if not result.grounding.ok:
         for span in result.grounding.unbound:
             print(f"  ungrounded number in report.md: {span.text!r}", file=sys.stderr)
+    if not result.coverage.ok:
+        print(f"  requirement coverage: {result.coverage.detail}", file=sys.stderr)
     return EXIT_VERIFY_FAIL
 
 
@@ -2014,6 +2218,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         label = "drafting policy" if isinstance(exc, DraftingPolicyError) else "workflow"
         print(f"{label}: FAIL — {exc}", file=sys.stderr)
         return EXIT_VERIFY_FAIL
+    except CoverageError as exc:
+        # An unusable requirement binding is an authoring defect in the spec or
+        # the requirement document, not a coverage result. It exits on the
+        # coverage code because nothing was exported, and it names what is wrong
+        # rather than reporting zero requirements answered -- which would be a
+        # measurement of a set that was never read.
+        print(f"requirement coverage: FAIL — {exc}", file=sys.stderr)
+        return EXIT_COVERAGE_FAIL
     except UnknownPolicyError as exc:
         # Fails closed, naming the id. Falling back to the default here would
         # let a typo silently preview -- and later record -- a different policy

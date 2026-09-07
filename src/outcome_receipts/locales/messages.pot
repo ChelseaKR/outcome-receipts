@@ -49,6 +49,36 @@ msgstr ""
 msgid "chart_alt_template"
 msgstr ""
 
+msgid "coverage_heading"
+msgstr ""
+
+msgid "coverage_sentence_template"
+msgstr ""
+
+msgid "coverage_header_requirement"
+msgstr ""
+
+msgid "coverage_header_status"
+msgstr ""
+
+msgid "coverage_header_evidence"
+msgstr ""
+
+msgid "coverage_status_answered"
+msgstr ""
+
+msgid "coverage_status_withheld"
+msgstr ""
+
+msgid "coverage_status_unanswerable"
+msgstr ""
+
+msgid "coverage_status_unanswered"
+msgstr ""
+
+msgid "coverage_no_evidence"
+msgstr ""
+
 msgid "receipts_heading"
 msgstr ""
 

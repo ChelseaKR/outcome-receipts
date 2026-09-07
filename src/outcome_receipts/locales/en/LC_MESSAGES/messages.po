@@ -64,6 +64,36 @@ msgstr "Data for the chart above ({title}):"
 msgid "chart_alt_template"
 msgstr "{title} (see data table below)"
 
+msgid "coverage_heading"
+msgstr "## Requirement coverage"
+
+msgid "coverage_sentence_template"
+msgstr "This report answers {answered} of {total} requirements in {document}: {withheld} withheld by the small-cell suppression policy and {unanswerable} declared unanswerable with a recorded reason. A requirement no metric answers and no declaration covers refuses the export; none is listed as absent here because none could reach this page."
+
+msgid "coverage_header_requirement"
+msgstr "Requirement"
+
+msgid "coverage_header_status"
+msgstr "Status"
+
+msgid "coverage_header_evidence"
+msgstr "Evidence"
+
+msgid "coverage_status_answered"
+msgstr "Answered"
+
+msgid "coverage_status_withheld"
+msgstr "Withheld (suppressed cell)"
+
+msgid "coverage_status_unanswerable"
+msgstr "Unanswerable"
+
+msgid "coverage_status_unanswered"
+msgstr "Unanswered"
+
+msgid "coverage_no_evidence"
+msgstr "none"
+
 msgid "receipts_heading"
 msgstr "## Receipts"
 

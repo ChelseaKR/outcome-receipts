@@ -1,0 +1,66 @@
+# The same housing report, bound to the funder's requirement document.
+#
+# `[requirements]` is what makes export prove the report answered the set. Every
+# requirement in requirements.json is either answered by a metric that names it,
+# withheld because the small-cell suppression policy hid the cell, or declared
+# unanswerable with a blocker `receipts map` actually produces and a reason a
+# person wrote. A requirement in none of those states refuses the export, writes
+# nothing, and names the requirement -- exit code 4.
+#
+#   receipts run --config examples/requirement-coverage/report.toml --out out
+#   receipts map --data examples/requirement-coverage/services.csv \
+#     --requirements examples/requirement-coverage/requirements.json
+
+schema_version = "1.0"
+
+[data]
+path = "services.csv"
+
+[requirements]
+path = "requirements.json"
+
+# R-4 asks for returns to homelessness within six months. The export has no such
+# column, so no query can answer it. Both halves are required and neither is
+# enough on its own: `blocker` must be a string `receipts map` really produces
+# for this requirement against this data -- it is re-derived at export and the
+# run is refused if it does not match -- and `reason` is a sentence a person
+# wrote and signed for.
+[[requirements.unanswerable]]
+requirement_id = "R-4"
+blocker = "no source column matches logical field 'return_within_180_days'"
+reason = "The HMIS export carries no re-entry field. Returns are tracked in the continuum's separate quarterly reconciliation and were not available for this period."
+
+[report]
+title = "Housing Program Funder Report"
+template = """
+In the reporting period, our housing program served {clients_served} clients \
+across {housing_enrollments} enrollments. Of those enrollments, \
+{permanent_exits} ended in a move to permanent housing.
+"""
+
+[metrics.clients_served]
+requirement_id = "R-1"
+description = "Distinct clients with any enrollment in the period."
+definition = "Each person enrolled in the housing program during the reporting period, counted once by client_id even if they enrolled more than once. The unit is the person, not the enrollment."
+kind = "output"
+unit = "count"
+value_sql = "SELECT COUNT(DISTINCT client_id) FROM data"
+slice_sql = "SELECT client_id FROM data"
+
+[metrics.housing_enrollments]
+requirement_id = "R-2"
+description = "Enrollments recorded in the housing program."
+definition = "Rows in the export whose program is 'housing'. The unit is the enrollment, so a client who enrolled twice counts twice."
+kind = "output"
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE program = 'housing'"
+slice_sql = "SELECT * FROM data WHERE program = 'housing'"
+
+[metrics.permanent_exits]
+requirement_id = "R-3"
+description = "Exits whose destination was permanent housing."
+definition = "Exits whose exit_destination is 'permanent'. Destination categories are taken as recorded; an unrecorded destination is not counted as permanent."
+kind = "outcome"
+unit = "count"
+value_sql = "SELECT COUNT(*) FROM data WHERE exit_destination = 'permanent'"
+slice_sql = "SELECT * FROM data WHERE exit_destination = 'permanent'"
