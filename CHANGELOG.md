@@ -11,6 +11,18 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Fixed
+- **The release checklist named three of the six files that carry the version,
+  and the three it omitted are the ones that drifted.** `docs/RELEASING.md`
+  step 1 read *"Update `pyproject.toml`, `CHANGELOG.md`, and generated
+  cards … in one pull request"*, so `uv.lock`, `CITATION.cff` and the README
+  status note were carried by memory. The promotion to `0.2.1` moved
+  `CHANGELOG.md` alone and the rest sat at `0.2.0` behind a green gate set.
+  The step now names every one of them and what moves in each, says which are
+  machine-checked (`make release-version`, and `uv lock --check` inside `make
+  install`) and which are still read by a person, and records that
+  `action.yml`'s `version` default moves *after* publication rather than with
+  the bump, because it names a tag a consumer can install and that is not true
+  until the release exists.
 - **Nothing compared the version the release would publish against the tag it
   would publish it under, and the two had already drifted.** `main` carried a
   dated `## [0.2.1] - 2026-09-07` CHANGELOG section and a signed `v0.2.1` tag

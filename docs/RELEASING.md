@@ -40,8 +40,34 @@ rationale and history.
 
 ## Prepare a release
 
-1. Update `pyproject.toml`, `CHANGELOG.md`, and generated cards
-   (`uv run receipts cards --out docs/cards`) in one pull request.
+1. Update **every place that carries the version**, in one pull request. This
+   list is exhaustive as of `0.2.1`, and it is written out because a shorter
+   version of this step is what produced the `0.2.1` drift: the promotion to
+   `0.2.1` moved `CHANGELOG.md` alone, and `pyproject.toml` sat at `0.2.0`
+   through a green `make verify`, a green `ci`, and a `release.yml` whose only
+   version check was satisfied by that tree.
+
+   | File | What moves |
+   |---|---|
+   | `CHANGELOG.md` | `## [Unreleased]` becomes `## [X.Y.Z] - <date>`, and a fresh empty `## [Unreleased]` opens above it |
+   | `pyproject.toml` | `project.version` — this is what `uv build` stamps on the wheel |
+   | `uv.lock` | the `outcome-receipts` editable-root entry's `version`; `make install` runs `uv lock --check`, which fails closed on the drift a bump creates |
+   | `CITATION.cff` | `version` **and** `date-released` |
+   | `README.md` | the status note, and its `Last verified:` stamp |
+   | `docs/cards/` | regenerate: `uv run receipts cards --out docs/cards` |
+
+   Three of those six are now checked against each other by
+   `make release-version` (`CHANGELOG.md`, `pyproject.toml`, `CITATION.cff`),
+   and `uv.lock` is caught by the `uv lock --check` that `make install` runs.
+   The README prose and the cards are not machine-checked and are still read by
+   a person.
+
+   **After** the release is published, `action.yml`'s `version` input default
+   and the places `docs/ci-action.md` restates it move to the new tag —
+   separately, because that default names the newest tag a downstream consumer
+   can install, which is not true until the release exists.
+   `scripts/check_conformance.py` already fails when the action's default and
+   the documentation disagree, so they move together or not at all.
 2. Merge only after the complete `make verify` gate passes.
 3. On current `main`, create an SSH-signed annotated tag:
 
