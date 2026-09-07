@@ -256,6 +256,21 @@ reports two distinct failures, and exits non-zero on either:
   used to pass it. Writing it into a report publishes a protected count, so
   `audit` names the metric it discloses rather than calling it unbound.
 
+A sentence carrying no numeral is invisible to all of that, so `audit` and `run`
+also check the narrative's **comparative claims** against the directions the
+comparison actually computed. "Placements rose" binds only when some declared
+comparison row's own `direction` is an increase; a claim every row contradicts is
+refused and named beside what the receipts say; a claim that agrees only with a row
+suppression withheld is reported as a disclosure, because writing it publishes a
+direction the comparison table itself redacts. Four families are detected and can
+never bind, for the reason a written-out numeral never binds: an evaluative word
+("improved") needs a metric polarity no spec declares, a magnitude word ("doubled")
+needs a ratio nothing here computes, a quantifier ("most") needs a proportion of a
+total no figure states, and a superlative ("highest") needs a ranking the tool does
+not model. See
+[ADR 0012](docs/decisions/0012-comparative-claims-bind-to-receipted-directions.md),
+which also records what it deliberately leaves open.
+
 `--explain` says *why* each of those numbers missed: which receipted displays are
 nearest and by how much, whether the miss is a rounding, a magnitude slip, a
 percentage written as a count, or the thousands/decimal ambiguity

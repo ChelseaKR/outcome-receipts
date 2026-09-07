@@ -11,6 +11,32 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- The comparative-claim gate. `grounding` finds numbers, so a sentence carrying no
+  numeral was invisible to it and "placements rose this quarter" blocked nothing. The
+  drafter was forbidden to invent a digit and not forbidden to invent a direction.
+  A closed, bilingual vocabulary of comparative and quantifying forms is now detected
+  in the drafted narrative, and each claim must bind to a receipted comparison
+  direction or it refuses export exactly as an unbound number does. A claim every
+  declared comparison contradicts is named alongside what the receipts actually say.
+  A claim that agrees only with a comparison suppression withheld is reported as a
+  disclosure rather than as unbound, because the remedies differ: that one is the #75
+  leak arriving through prose instead of through the table.
+  Four kinds are detected and can never bind, which is the `_NUMBER_WORD` precedent
+  and not an omission. An evaluative word ("improved") asserts a direction whose sign
+  depends on a metric polarity no spec declares. A magnitude word ("doubled") asserts
+  a ratio, and `compute_reconciliation` deliberately computes no ratios. A quantifier
+  ("most") asserts a share of a whole no figure states. A superlative ("highest")
+  asserts a rank over a set the gate does not model. Each is reported with the reason
+  it cannot be checked rather than passed in silence.
+  The gate is scoped to the drafted narrative, which is the surface a model writes;
+  an author's metric caveat is not drafted and is not gated. `receipts run`,
+  `receipts audit` and the MCP `audit_narrative` tool answer from the same
+  computation and emit the same payload. ADR 0012 records the decision, including
+  what it deliberately leaves open.
+  Measured while building it: every comparison row in the committed grant-report
+  example is withheld, so its direction column already renders as the suppression
+  sentinel while a sentence could have stated the direction anyway.
+  A narrative containing no vocabulary entry gates exactly as before.
 - The refusal half of the release-compatibility evidence, which the matrix in
   `docs/SPEC-STABILITY.md` had only the accepting half of. Every row read PASS: a
   released spec loads, a released manifest re-derives. None of them could
