@@ -64,6 +64,36 @@ msgstr "Datos del gráfico anterior ({title}):"
 msgid "chart_alt_template"
 msgstr "{title} (véase la tabla de datos a continuación)"
 
+msgid "coverage_heading"
+msgstr "## Cobertura de requisitos"
+
+msgid "coverage_sentence_template"
+msgstr "Este informe responde a {answered} de {total} requisitos de {document}: {withheld} retenidos por la política de supresión de celdas pequeñas y {unanswerable} declarados sin respuesta posible con un motivo registrado. Un requisito que ninguna métrica responde y ninguna declaración cubre impide la exportación; aquí no figura ninguno como ausente porque ninguno pudo llegar a esta página."
+
+msgid "coverage_header_requirement"
+msgstr "Requisito"
+
+msgid "coverage_header_status"
+msgstr "Estado"
+
+msgid "coverage_header_evidence"
+msgstr "Evidencia"
+
+msgid "coverage_status_answered"
+msgstr "Respondido"
+
+msgid "coverage_status_withheld"
+msgstr "Retenido (celda suprimida)"
+
+msgid "coverage_status_unanswerable"
+msgstr "Sin respuesta posible"
+
+msgid "coverage_status_unanswered"
+msgstr "Sin responder"
+
+msgid "coverage_no_evidence"
+msgstr "ninguna"
+
 msgid "receipts_heading"
 msgstr "## Recibos"
 

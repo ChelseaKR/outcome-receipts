@@ -174,6 +174,13 @@ It writes `out/report.md` (the narrative, provenance, and receipts appendix),
 export). Runs also append to `export-ledger.jsonl` by default. Specs with charts
 add accessible SVG files under `out/charts/`.
 
+A spec may also bind the funder's requirement document. Then the export must
+account for every requirement in it — answered by a metric, withheld because
+small-cell suppression hid the cell, or declared unanswerable with a blocker
+`receipts map` actually reproduces and a reason a person wrote — or it names the
+requirement, writes nothing, and exits 4. See
+[Proving the report answered the requirement set](#proving-the-report-answered-the-requirement-set).
+
 An export also needs a named human sign-off. `--approved-by NAME` records the
 approver non-interactively; without it, an interactive run prompts you to type
 your name after the grounding gate passes, and a non-interactive run aborts with
@@ -521,6 +528,63 @@ and JSON forms.
 | 1 | A check failed closed: mapping was blocked, grounding/eval failed, receipts or a bundle drifted, a ledger chain broke, or generated cards were stale. |
 | 2 | The grounding gate refused to export. `run` found an unbound number and wrote nothing. |
 | 3 | The export was not approved. The grounding gate passed but no named human signed off (no `--approved-by`, and no interactive sign-off), so `run` wrote nothing. |
+| 4 | The export did not answer its bound requirement set. A requirement was neither answered by a metric, withheld as a suppressed cell, nor declared unanswerable with a blocker `map` reproduces and a reason a person wrote — so `run` named it and wrote nothing. Only a spec with a `[requirements]` binding can return this. |
+
+### Proving the report answered the requirement set
+
+The project proves every published number traces to a receipt. That is one half
+of the claim. The other is that every *required* number was published, and it is
+the half an auditor checks first: a spec that simply omitted a required metric
+used to run, ground, be approved, and export a report that was fully receipted
+and silently incomplete.
+
+Bind the spec to the requirement document `receipts map` already reads, and name
+the requirement each metric answers:
+
+```toml
+[requirements]
+path = "requirements.json"
+
+[[requirements.unanswerable]]
+requirement_id = "R-4"
+blocker = "no source column matches logical field 'return_within_180_days'"
+reason = "The HMIS export carries no re-entry field. Returns are tracked in the continuum's separate quarterly reconciliation."
+
+[metrics.clients_served]
+requirement_id = "R-1"
+# ...
+```
+
+Every requirement then lands in one of four states, and only three of them may
+be exported:
+
+| status | meaning |
+| ------ | ------- |
+| `answered` | a metric names it and its figure was published with a receipt |
+| `withheld` | a metric names it, the figure exists, and suppression withheld the cell — **answered**, and it reads as unanswered nowhere |
+| `unanswerable` | no metric answers it, and the spec carries both a blocker and a reason |
+| `unanswered` | anything else: the export is refused, exit 4, nothing written |
+
+An `unanswerable` declaration needs **both** halves and neither is enough alone.
+A blocker without a reason is a tool's excuse; a reason without a blocker is
+unfalsifiable. So the declared `blocker` is re-derived at export by running the
+mapper over the same data and the same requirement document, and the declaration
+is refused unless the mapper produces that exact string. A requirement that maps
+cleanly cannot be declared unanswerable at all.
+
+The coverage table renders in the report appendix in both locales, the
+requirement document's sha256 rides in `receipts.json`, and `verify --bundle`
+re-derives both — so editing the requirement document after export fails naming
+the digest, and doctoring the coverage record fails as a mismatch. A spec with no
+`[requirements]` binding is unchanged in every byte and its manifest carries no
+coverage key at all; `verify --bundle` says `not checked`, not `ok`.
+
+```sh
+receipts run --config examples/requirement-coverage/report.toml --out out --approved-by "Program director"
+```
+
+See [ADR 0013](docs/decisions/0013-requirement-coverage-is-proven-at-export.md)
+for the reasoning and for the one question it deliberately leaves to the owner.
 
 ## What it does not do
 

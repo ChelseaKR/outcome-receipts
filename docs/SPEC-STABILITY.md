@@ -150,3 +150,41 @@ no contract changed across it. That is what issue 65's remaining criteria need,
 and it cannot be written before a release moves one; recording the gap here is
 the honest alternative to reading two identical artifacts as a compatibility
 result.
+
+## Report spec 1.0: `[requirements]` is an additive, optional binding
+
+The reasoning is recorded in
+[ADR 0013](decisions/0013-requirement-coverage-is-proven-at-export.md).
+
+`[requirements] path = "..."` binds a spec to a funder's requirement document,
+and each metric may carry `requirement_id`. Both are optional at spec `1.0`, in
+exactly the way `[[data_checks]]` is: a spec that declares neither loads,
+computes, grounds, approves, and exports precisely what it did before, and the
+version does not move.
+
+The receipts manifest stays at `2.0` and gains one optional member,
+`requirements`, present only for a bound spec. Three things follow, and the
+third is a real limitation rather than a footnote:
+
+- **A manifest from an unbound spec is byte-identical to what it was.** The key
+  is absent, not an empty record — such a spec has not answered zero
+  requirements, it has made no coverage claim at all. `verify --bundle` reports
+  `not checked` rather than `ok` for the same reason.
+- **A `2.0` consumer that ignores unknown members reads a bound manifest
+  unchanged.** The coverage record is beside the receipts, never inside one, so
+  nothing a `2.0` reader already parses has moved.
+- **A consumer validating against a copy of the `2.0` schema taken before this
+  change will reject a bound manifest**, because that schema sets
+  `additionalProperties: false`. The published schema now describes
+  `requirements`; a pinned older copy does not. The alternative — a `2.1` —
+  would have moved the version on every manifest including those from unbound
+  specs, breaking the byte-identity above for every consumer in order to
+  describe a member none of them would receive. That trade was chosen this way
+  deliberately and is the one thing here worth revisiting if a real consumer
+  turns out to validate against a pinned copy.
+
+`verify --bundle` re-derives the coverage record and the requirement document's
+sha256 rather than reading either back from the manifest, so editing the
+requirement document after export fails naming the digest, and editing the
+coverage record itself fails as a mismatch against what the spec and data
+actually produce.

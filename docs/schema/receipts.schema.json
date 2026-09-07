@@ -4,7 +4,11 @@
   "title": "Outcome Receipts manifest",
   "description": "The receipts.json manifest exported alongside a report. Every figure carries a receipt: the exact query, the slice it was computed over, the value, and how the slice hash was produced. A figure withheld by small-cell suppression carries suppressed: true and null for every numeric field, so a withheld cell is never readable as a count of zero. The schema is versioned; see docs/decisions/0005-receipt-canonicalization-and-schema.md and docs/SPEC-STABILITY.md.",
   "type": "object",
-  "required": ["schema_version", "hash", "receipts"],
+  "required": [
+    "schema_version",
+    "hash",
+    "receipts"
+  ],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
@@ -15,7 +19,11 @@
     "hash": {
       "description": "How every slice_hash was produced.",
       "type": "object",
-      "required": ["algorithm", "digest_size", "canonicalization"],
+      "required": [
+        "algorithm",
+        "digest_size",
+        "canonicalization"
+      ],
       "additionalProperties": false,
       "properties": {
         "algorithm": {
@@ -56,24 +64,56 @@
         "allOf": [
           {
             "description": "A withheld figure asserts no number: every numeric field is null.",
-            "if": { "properties": { "suppressed": { "const": true } }, "required": ["suppressed"] },
+            "if": {
+              "properties": {
+                "suppressed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "suppressed"
+              ]
+            },
             "then": {
               "properties": {
-                "value": { "type": "null" },
-                "row_count": { "type": "null" },
-                "slice_hash": { "type": "null" },
-                "column_names": { "type": "null" }
+                "value": {
+                  "type": "null"
+                },
+                "row_count": {
+                  "type": "null"
+                },
+                "slice_hash": {
+                  "type": "null"
+                },
+                "column_names": {
+                  "type": "null"
+                }
               }
             }
           },
           {
             "description": "A published figure asserts a real number: no numeric field is null.",
-            "if": { "properties": { "suppressed": { "const": false } }, "required": ["suppressed"] },
+            "if": {
+              "properties": {
+                "suppressed": {
+                  "const": false
+                }
+              },
+              "required": [
+                "suppressed"
+              ]
+            },
             "then": {
               "properties": {
-                "value": { "type": "number" },
-                "row_count": { "type": "integer" },
-                "slice_hash": { "type": "string" }
+                "value": {
+                  "type": "number"
+                },
+                "row_count": {
+                  "type": "integer"
+                },
+                "slice_hash": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -89,7 +129,10 @@
           },
           "value": {
             "description": "The numeric value the figure asserts, or null when the figure is suppressed. Null is not zero: it means the report declines to state this number, and a consumer must not read, plot, or sum it as a count.",
-            "type": ["number", "null"]
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "display": {
             "description": "The canonical rendering the grounding gate matches on. A suppressed figure displays the redaction marker [SUPPRESSED]; the marker is a redaction sentinel, never translated, and is not a number the gate binds.",
@@ -125,23 +168,37 @@
           },
           "row_count": {
             "description": "The number of rows in the slice, or null when the figure is suppressed. For an ordinary count metric the row count is the withheld value again, so it is withheld with it rather than zeroed. A row_count of 0 means a query ran and matched nothing.",
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0
           },
           "slice_hash": {
             "description": "The hex digest over the canonicalized slice, or null when the figure is suppressed. The all-zero sentinel marks a genuinely empty slice; it is deliberately not reused for a withheld one, because a hash of a guessed row set could otherwise be compared against a published one to confirm the guess.",
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "pattern": "^[0-9a-f]+$"
           },
           "column_names": {
             "description": "The slice's column names, in query order, or null when the figure is suppressed. Folded into the slice hash under canonicalization v1.",
-            "type": ["array", "null"],
-            "items": { "type": "string" }
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
           },
           "kind": {
             "description": "Whether the figure is an activity count (output) or a change in condition (outcome).",
             "type": "string",
-            "enum": ["output", "outcome"]
+            "enum": [
+              "output",
+              "outcome"
+            ]
           },
           "computed_at": {
             "description": "ISO timestamp from the injected clock. Not checked by verify.",
@@ -161,6 +218,113 @@
       "additionalProperties": {
         "type": "string",
         "pattern": "^[0-9a-f]{64}$"
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "description": "Requirement coverage, present only when the report spec binds a requirement document. Absent means the spec made no coverage claim, which is not the same as answering zero requirements. See ADR 0013.",
+      "required": [
+        "schema_version",
+        "document_path",
+        "document_sha256",
+        "counts",
+        "requirements"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "document_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "counts": {
+          "type": "object",
+          "required": [
+            "answered",
+            "withheld",
+            "unanswerable",
+            "unanswered"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "answered": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "withheld": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unanswerable": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unanswered": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "requirement_id",
+              "description",
+              "status",
+              "metric_id",
+              "blocker",
+              "reason",
+              "detail"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "requirement_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "answered",
+                  "withheld",
+                  "unanswerable",
+                  "unanswered"
+                ]
+              },
+              "metric_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "blocker": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
+          }
+        }
       }
     }
   }

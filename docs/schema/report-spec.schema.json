@@ -4,7 +4,12 @@
   "title": "Outcome Receipts report specification",
   "description": "The stable 1.0 contract for parsed report TOML. Existing unversioned beta specs are interpreted as 1.0, while newly scaffolded and maintained specs declare schema_version explicitly.",
   "type": "object",
-  "required": ["schema_version", "data", "report", "metrics"],
+  "required": [
+    "schema_version",
+    "data",
+    "report",
+    "metrics"
+  ],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
@@ -12,7 +17,9 @@
     },
     "data": {
       "type": "object",
-      "required": ["path"],
+      "required": [
+        "path"
+      ],
       "additionalProperties": false,
       "properties": {
         "path": {
@@ -36,7 +43,10 @@
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["id", "template"],
+            "required": [
+              "id",
+              "template"
+            ],
             "additionalProperties": false,
             "properties": {
               "id": {
@@ -57,7 +67,10 @@
           "additionalProperties": false,
           "properties": {
             "provider": {
-              "enum": ["deterministic", "bedrock"]
+              "enum": [
+                "deterministic",
+                "bedrock"
+              ]
             },
             "enabled": {
               "type": "boolean"
@@ -74,10 +87,14 @@
       },
       "anyOf": [
         {
-          "required": ["template"]
+          "required": [
+            "template"
+          ]
         },
         {
-          "required": ["templates"]
+          "required": [
+            "templates"
+          ]
         }
       ]
     },
@@ -105,12 +122,18 @@
     },
     "reconciliation": {
       "$ref": "#/$defs/reconciliation"
+    },
+    "requirements": {
+      "$ref": "#/$defs/requirements"
     }
   },
   "$defs": {
     "metric": {
       "type": "object",
-      "required": ["value_sql", "slice_sql"],
+      "required": [
+        "value_sql",
+        "slice_sql"
+      ],
       "additionalProperties": false,
       "properties": {
         "description": {
@@ -120,10 +143,19 @@
           "type": "string"
         },
         "kind": {
-          "enum": ["output", "outcome"]
+          "enum": [
+            "output",
+            "outcome"
+          ]
         },
         "unit": {
-          "enum": ["count", "percent", "money", "duration", "rate"]
+          "enum": [
+            "count",
+            "percent",
+            "money",
+            "duration",
+            "rate"
+          ]
         },
         "decimals": {
           "type": "integer",
@@ -146,12 +178,18 @@
         },
         "caveat": {
           "type": "string"
+        },
+        "requirement_id": {
+          "type": "string"
         }
       }
     },
     "data_check": {
       "type": "object",
-      "required": ["id", "assert_sql"],
+      "required": [
+        "id",
+        "assert_sql"
+      ],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -172,7 +210,11 @@
     },
     "chart": {
       "type": "object",
-      "required": ["id", "kind", "metrics"],
+      "required": [
+        "id",
+        "kind",
+        "metrics"
+      ],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -183,7 +225,10 @@
           "type": "string"
         },
         "kind": {
-          "enum": ["bar", "line"]
+          "enum": [
+            "bar",
+            "line"
+          ]
         },
         "metrics": {
           "type": "array",
@@ -202,7 +247,10 @@
     },
     "period": {
       "type": "object",
-      "required": ["id", "predicate"],
+      "required": [
+        "id",
+        "predicate"
+      ],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -220,7 +268,12 @@
     },
     "comparison": {
       "type": "object",
-      "required": ["current", "prior", "periods", "metrics"],
+      "required": [
+        "current",
+        "prior",
+        "periods",
+        "metrics"
+      ],
       "additionalProperties": false,
       "properties": {
         "current": {
@@ -247,7 +300,11 @@
     },
     "reconciliation_metric_pair": {
       "type": "object",
-      "required": ["label", "outcome", "financial"],
+      "required": [
+        "label",
+        "outcome",
+        "financial"
+      ],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -266,7 +323,12 @@
     },
     "reconciliation": {
       "type": "object",
-      "required": ["current", "prior", "periods", "rows"],
+      "required": [
+        "current",
+        "prior",
+        "periods",
+        "rows"
+      ],
       "additionalProperties": false,
       "properties": {
         "current": {
@@ -287,6 +349,48 @@
           "minItems": 1,
           "items": {
             "$ref": "#/$defs/reconciliation_metric_pair"
+          }
+        }
+      }
+    },
+    "unanswerable_requirement": {
+      "type": "object",
+      "required": [
+        "requirement_id",
+        "blocker",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "requirement_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocker": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unanswerable": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unanswerable_requirement"
           }
         }
       }

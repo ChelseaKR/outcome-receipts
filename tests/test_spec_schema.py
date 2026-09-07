@@ -37,7 +37,23 @@ def test_report_spec_schema_declares_every_loader_section() -> None:
         "charts",
         "comparison",
         "reconciliation",
+        "requirements",
     }
+
+
+def _assert_requirements_shape(
+    requirements: Any,
+    requirements_properties: set[str],
+    unanswerable_properties: set[str],
+    path: Path,
+) -> None:
+    """The optional ``[requirements]`` binding and its unanswerable declarations."""
+
+    if not requirements:
+        return
+    assert set(requirements) <= requirements_properties, path
+    for declaration in requirements.get("unanswerable", []):
+        assert set(declaration) <= unanswerable_properties, path
 
 
 def test_maintained_examples_declare_the_current_schema() -> None:
@@ -50,6 +66,8 @@ def test_maintained_examples_declare_the_current_schema() -> None:
     period_properties = set(schema["$defs"]["period"]["properties"])
     reconciliation_properties = set(schema["$defs"]["reconciliation"]["properties"])
     row_properties = set(schema["$defs"]["reconciliation_metric_pair"]["properties"])
+    requirements_properties = set(schema["$defs"]["requirements"]["properties"])
+    unanswerable_properties = set(schema["$defs"]["unanswerable_requirement"]["properties"])
 
     specs = sorted((ROOT / "examples").glob("*/report.toml"))
     assert specs
@@ -69,6 +87,12 @@ def test_maintained_examples_declare_the_current_schema() -> None:
                 assert set(period) <= period_properties, path
             for metric in comparison["metrics"].values():
                 assert set(metric) <= metric_properties, path
+        _assert_requirements_shape(
+            parsed.get("requirements"),
+            requirements_properties,
+            unanswerable_properties,
+            path,
+        )
         if reconciliation := parsed.get("reconciliation"):
             assert set(reconciliation) <= reconciliation_properties, path
             for period in reconciliation["periods"]:
