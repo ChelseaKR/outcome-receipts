@@ -58,6 +58,10 @@ def test_make_verify_uses_the_digest_pinned_container_scan() -> None:
         "type",
         "test",
         "hygiene",
+        # Its own entry rather than a fourth line of `hygiene`'s recipe: make
+        # stops a recipe at its first failing line, so a source-hygiene failure
+        # would take the release-version check down with it.
+        "release-version",
         "i18n",
         "security",
         "a11y",
