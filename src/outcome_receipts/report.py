@@ -399,6 +399,15 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
     grounding_rate_display = (
         _pct(report.grounding_rate) if report.n_numbers else "N/A (no numeric spans)"
     )
+    # The row beneath it, over the same empty denominator. The hallucinated
+    # rate substitutes 0.0 rather than 1.0 (see evaluate.py), and 0.0 is the
+    # best possible value for it, so "0.0%" reads as a measured absence of
+    # invented numbers rather than as no measurement. The 95% CI printed beside
+    # it is already the widest honest [0.0%, 100.0%]; the point estimate has to
+    # agree with the interval next to it.
+    hallucinated_rate_display = (
+        _pct(report.hallucinated_rate) if report.n_numbers else "N/A (no numeric spans)"
+    )
     gate_observed = (
         f"(observed {grounding_rate_display})."
         if report.n_numbers
@@ -477,7 +486,7 @@ def render_eval_markdown(report: EvalReport, *, dataset: str) -> str:
         f"| **Grounding rate (gated)** | **{grounding_rate_display}** "
         f"({report.n_bound}/{report.n_numbers}) | {_ci(report.grounding_ci)} |",
         f"| Unverifiable numbers | {report.n_unbound} | |",
-        f"| Hallucinated-number rate | {_pct(report.hallucinated_rate)} "
+        f"| Hallucinated-number rate | {hallucinated_rate_display} "
         f"({report.n_unbound}/{report.n_numbers}) | {_ci(report.hallucinated_ci)} |",
         "",
         "## Gate",
