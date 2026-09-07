@@ -509,3 +509,45 @@ def summarize(audit: ClaimAudit) -> ClaimSummary:
         disclosed=len(audit.disclosed),
         by_kind=by_kind,
     )
+
+
+def verdict_payload(verdict: ClaimVerdict) -> dict[str, object]:
+    """One verdict as JSON."""
+
+    return {
+        "text": verdict.span.text,
+        "start": verdict.span.start,
+        "end": verdict.span.end,
+        "kind": verdict.span.kind,
+        "direction": verdict.span.direction,
+        "status": verdict.status,
+        "detail": verdict.detail,
+        "metric_ids": list(verdict.metric_ids),
+    }
+
+
+def audit_payload(audit: ClaimAudit) -> dict[str, object]:
+    """The audit as JSON, in the one shape both the CLI and the MCP server emit.
+
+    It lives here rather than in either caller because ``tests/test_mcp_server.py``
+    requires the two to be byte-identical for the same inputs: a drafting tool told
+    over MCP that a narrative is clean, while the CLI would refuse to export it, is
+    the drift that test exists to prevent.
+
+    Only the blocking verdicts are listed. A bound claim is reported as a count,
+    because listing every one would bury the ones an author has to act on.
+    """
+
+    summary = summarize(audit)
+    return {
+        "ok": audit.ok,
+        "total": summary.total,
+        "bound": summary.bound,
+        "unbound": summary.unbound,
+        "contradicted": summary.contradicted,
+        "disclosed": summary.disclosed,
+        "by_kind": dict(sorted(summary.by_kind.items())),
+        "blocking": [
+            verdict_payload(verdict) for verdict in audit.verdicts if verdict.status != STATUS_BOUND
+        ],
+    }

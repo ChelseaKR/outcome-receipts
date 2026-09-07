@@ -62,9 +62,9 @@ from outcome_receipts.charts import Chart, render_charts
 from outcome_receipts.claims import (
     STATUS_BOUND,
     ClaimAudit,
-    ClaimVerdict,
     DirectionEvidence,
     audit_claims,
+    audit_payload,
     evidence_from_rows,
     summarize,
 )
@@ -333,39 +333,6 @@ def _direction_evidence(
             rows.append(line.outcome)
             rows.append(line.financial)
     return evidence_from_rows(rows, withheld_metric_ids)
-
-
-def _claim_verdict_payload(verdict: ClaimVerdict) -> dict[str, object]:
-    return {
-        "text": verdict.span.text,
-        "start": verdict.span.start,
-        "end": verdict.span.end,
-        "kind": verdict.span.kind,
-        "direction": verdict.span.direction,
-        "status": verdict.status,
-        "detail": verdict.detail,
-        "metric_ids": list(verdict.metric_ids),
-    }
-
-
-def _claim_audit_payload(audit: ClaimAudit) -> dict[str, object]:
-    summary = summarize(audit)
-    return {
-        "ok": audit.ok,
-        "total": summary.total,
-        "bound": summary.bound,
-        "unbound": summary.unbound,
-        "contradicted": summary.contradicted,
-        "disclosed": summary.disclosed,
-        "by_kind": dict(sorted(summary.by_kind.items())),
-        # Only the verdicts that block. A bound claim is reported as a count; listing
-        # every one of them would bury the four that need an author's attention.
-        "blocking": [
-            _claim_verdict_payload(verdict)
-            for verdict in audit.verdicts
-            if verdict.status != STATUS_BOUND
-        ],
-    }
 
 
 def _print_claim_audit(label: str, audit: ClaimAudit) -> None:
@@ -740,9 +707,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     template_payload = {
         template.template_id: _grounding_payload(result) for template, _n, result in drafts
     }
-    claim_payload = {
-        template.template_id: _claim_audit_payload(audit) for template, audit in claim_audits
-    }
+    claim_payload = {template.template_id: audit_payload(audit) for template, audit in claim_audits}
     empty_outputs = {
         "report": None,
         "receipts": None,
@@ -1001,7 +966,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
             "bound": len(result.bound),
             "suppressed": [_suppressed_span_payload(item) for item in result.suppressed],
             "unbound": [_span_payload(span) for span in result.unbound],
-            "comparative_claims": _claim_audit_payload(claims),
+            "comparative_claims": audit_payload(claims),
         }
         if explain:
             payload["explanations"] = [
@@ -1109,11 +1074,17 @@ def _cmd_mcp(args: argparse.Namespace) -> int:
 
     from outcome_receipts.mcp import serve
 
-    def resolve(config: str) -> tuple[Sequence[Figure], Sequence[Figure]]:
-        _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+    def resolve(
+        config: str,
+    ) -> tuple[Sequence[Figure], Sequence[Figure], Sequence[DirectionEvidence]]:
+        _spec, _rows, figures, comparison, reconciliation = _compute_all(
             config, reproducible=args.reproducible, quiet=True
         )
-        return _publishable_and_hidden(figures)
+        publishable, hidden = _publishable_and_hidden(figures)
+        evidence = _direction_evidence(
+            comparison, reconciliation, [figure.metric_id for figure in hidden]
+        )
+        return publishable, hidden, evidence
 
     return serve(sys.stdin, sys.stdout, resolve)
 

@@ -21,7 +21,13 @@ from typing import Any
 
 import pytest
 
-from outcome_receipts.cli import _compute_all, _publishable_and_hidden, main
+from outcome_receipts.claims import DirectionEvidence
+from outcome_receipts.cli import (
+    _compute_all,
+    _direction_evidence,
+    _publishable_and_hidden,
+    main,
+)
 from outcome_receipts.mcp import (
     INVALID_PARAMS,
     METHOD_NOT_FOUND,
@@ -42,11 +48,17 @@ SENTINEL_VALUE = 424242.0
 SENTINEL_DISPLAY = "424,242"
 
 
-def _demo_resolver(config: str) -> tuple[Sequence[Figure], Sequence[Figure]]:
-    _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+def _demo_resolver(
+    config: str,
+) -> tuple[Sequence[Figure], Sequence[Figure], Sequence[DirectionEvidence]]:
+    _spec, _rows, figures, comparison, reconciliation = _compute_all(
         config, reproducible=True, quiet=True
     )
-    return _publishable_and_hidden(figures)
+    publishable, hidden = _publishable_and_hidden(figures)
+    evidence = _direction_evidence(
+        comparison, reconciliation, [figure.metric_id for figure in hidden]
+    )
+    return publishable, hidden, evidence
 
 
 def _exchange(
@@ -170,7 +182,9 @@ def test_an_audit_that_discloses_a_withheld_cell_reports_it_as_a_disclosure() ->
 # --- "Done when": a withheld figure returns the marker, never the value -----
 
 
-def _sentinel_resolver(_config: str) -> tuple[Sequence[Figure], Sequence[Figure]]:
+def _sentinel_resolver(
+    _config: str,
+) -> tuple[Sequence[Figure], Sequence[Figure], Sequence[DirectionEvidence]]:
     """Publishable figures plus one withheld figure carrying a unique display.
 
     The withheld figure's *raw* form is what a leak would expose, so it is the
@@ -201,7 +215,7 @@ def _sentinel_resolver(_config: str) -> tuple[Sequence[Figure], Sequence[Figure]
         figure("tiny", None, REDACTED_DISPLAY, suppressed=True),
     ]
     withheld = [figure("tiny", SENTINEL_VALUE, SENTINEL_DISPLAY, suppressed=False)]
-    return publishable, withheld
+    return publishable, withheld, ()
 
 
 @pytest.mark.parametrize(
@@ -386,7 +400,9 @@ def test_a_handler_that_raises_reports_the_exception_type_and_not_the_draft() ->
 
     draft = "the author's confidential draft about 1,234 households"
 
-    def exploding(_config: str) -> tuple[Sequence[Figure], Sequence[Figure]]:
+    def exploding(
+        _config: str,
+    ) -> tuple[Sequence[Figure], Sequence[Figure], Sequence[DirectionEvidence]]:
         raise RuntimeError(draft)
 
     response = _call("audit_narrative", {"config": DEMO, "text": draft}, exploding)
