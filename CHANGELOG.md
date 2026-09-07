@@ -103,6 +103,35 @@ release-hardening work completed before the first public tag.
   passed. It now fails closed."*). This is the same defect in the second
   checker. No document in the tree is currently in either state; every stamp is
   a well-formed past date, so this changes no current verdict.
+- **Nothing said that the version on the index is not the current release, and
+  is not a supported one.** PyPI holds `0.1.0` and nothing else. `v0.2.0` was
+  tagged on 2026-08-16 and published as a GitHub release with signed artifacts;
+  it was never uploaded. So `pip install outcome-receipts` hands a reader the
+  older release, silently, and `SECURITY.md` records `0.1.x` as having stopped
+  receiving security fixes when `0.2.0` shipped. The two documents together
+  said, without either saying it, that the only installable version is
+  unsupported. The README's status note, `SECURITY.md`'s supported-versions
+  table, and `docs/drafting.md` (which promised the package install as a future
+  state, months after the first release) now say it in one place each, and each
+  note says what removes it.
+
+  `docs/RELEASING.md` records why, measured from the run history rather than
+  guessed. The `v0.2.0` run (`31955281617`) succeeded through `github-release`;
+  `pypi-publish` then sat pending for thirteen days and was cancelled. It did
+  not fail. The `pypi` deployment environment carries a `required_reviewers`
+  protection rule, so every job declaring `environment: pypi` waits at
+  *Waiting for review* until it is approved on the run page. The rule is worth
+  keeping; what was missing was anywhere saying it exists, so a run that looks
+  finished is not. A release is done when `verify-published` is green, not when
+  the GitHub release appears.
+
+  The obvious repair is also recorded, because it does not work: re-dispatching
+  the unchanged `v0.2.0` tag on 2026-09-07 (run `34150000690`) failed at
+  `verify at tagged commit`, before anything was built or published, on
+  `container-verify` — 9 HIGH advisories against the base image that tag pins
+  (`CVE-2026-14456` in libcrypto3/libssl3, and seven util-linux advisories
+  against libuuid), both fixed on `main` after `v0.2.0` was tagged. A tag is
+  immutable, so re-running it cannot pass. The route to the index is a new tag.
 
 ## [0.2.1] - 2026-09-07
 

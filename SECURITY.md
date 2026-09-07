@@ -18,6 +18,15 @@ version.
 | 0.1.x   | No        | Support ended when `0.2.0` shipped.        |
 | < 0.1.0 | No        | Pre-release snapshots are not supported.  |
 
+**The index does not currently serve a supported version.** PyPI holds only
+`0.1.0`; `0.2.0` is tagged and published as a GitHub release and was never
+uploaded. A reader who runs `pip install outcome-receipts` therefore receives
+an unsupported release with no indication that it is one. `0.2.0` is available
+from the GitHub release, with Sigstore build provenance and a CycloneDX SBOM,
+and why the index is behind is recorded in
+[docs/RELEASING.md](docs/RELEASING.md#why-the-index-is-behind-the-repository).
+This paragraph goes when the index catches up.
+
 When a `0.3.0` ships, `0.2.x` security support ends and this table is updated in the same
 release.
 

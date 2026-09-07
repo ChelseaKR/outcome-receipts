@@ -1,16 +1,19 @@
 # Optional Bedrock narrative drafting
 
 The deterministic template drafter is the default and makes no network calls.
-Claude on Amazon Bedrock is an optional prose-rewrite seam. Until the first
-package release, install the locked optional dependency from a repository clone:
+Claude on Amazon Bedrock is an optional prose-rewrite seam. Install the locked
+optional dependency from a repository clone:
 
 ```console
 uv sync --locked --python 3.12 --group dev --extra bedrock
 source .venv/bin/activate
 ```
 
-After a package is published, the equivalent package install will be
-`pip install 'outcome-receipts[bedrock]'`.
+`pip install 'outcome-receipts[bedrock]'` resolves, and today it resolves to
+`0.1.0`: that is the only version on PyPI, and it is not the current release.
+The clone above is what gives you the current tree and the `bedrock` extra as
+this document describes them. See the README's status note and
+[RELEASING.md](RELEASING.md#why-the-index-is-behind-the-repository).
 
 Opt in in the report spec:
 

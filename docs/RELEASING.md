@@ -95,6 +95,68 @@ The PyPI project must have a Trusted Publisher bound to repository
 `ChelseaKR/outcome-receipts`, workflow `release.yml`, and environment `pypi`.
 No long-lived PyPI token belongs in repository secrets.
 
+## Why the index is behind the repository
+
+Measured 2026-09-07, from the run history and the live APIs rather than
+inferred. PyPI serves `0.1.0` and nothing else (uploaded 2026-07-12); the
+newest GitHub release is `v0.2.0`, published 2026-08-16 with signed artifacts,
+Sigstore provenance and a CycloneDX SBOM, and never uploaded to the index.
+
+### The `v0.2.0` run was never approved
+
+`v0.2.0` was dispatched on 2026-08-16 (run `31955281617`). `authorize`,
+`verify`, `build` and `github-release` all succeeded, and the GitHub release
+was published at 15:21:31. `pypi-publish` then started at 15:21:34 and **sat
+pending for thirteen days**, until it was cancelled on 2026-08-29 at 17:31:20.
+`verify-published` was cancelled with it. The workflow did not fail. It was
+never approved.
+
+The cause is a protection rule on the `pypi` deployment environment: it
+carries `required_reviewers` naming the repository owner. Every job that
+declares `environment: pypi` therefore stops at *Waiting for review* until
+somebody presses **Review deployments → Approve and deploy** on the run page.
+That rule is deliberate and is worth keeping. What was missing is anywhere
+saying it exists, so a run that looks finished (a GitHub release appeared,
+with assets) is not.
+
+**A release is not done when the GitHub release appears.** It is done when
+`verify-published` is green, because that job is the one that pulls the
+version from PyPI and runs it.
+
+### Re-dispatching `v0.2.0` no longer gets there
+
+The obvious repair — dispatch the same unchanged tag and approve it this time
+— was tried on 2026-09-07 (run `34150000690`) and **failed at `verify at
+tagged commit`**, before anything was built, signed or published.
+
+It failed on `container-verify`. Trivy reported **9 HIGH** advisories against
+the image `v0.2.0` pins: `CVE-2026-14456` in `libcrypto3`/`libssl3` 3.5.7-r0,
+and seven util-linux advisories against `libuuid` 2.42-r0. Both were fixed on
+`main` after `v0.2.0` was tagged — by the base-image digest bump and the
+`libuuid=2.42.3-r1` pin the `Dockerfile` now carries and explains. `v0.2.0`'s
+tree predates both, and a tag is immutable, so nothing about that run will
+change by re-running it.
+
+This is the release gate doing its job: it refuses to publish a tree that no
+longer passes the product gates, even one that passed them three weeks ago.
+**The route to the index is a new tag, not a re-run of the old one.** That is
+also what "never move or reuse a published tag" below means in practice.
+
+### What `33265870115` was
+
+A dispatch on 2026-08-29 (run `33265870115`) failed in `authorize` after three
+seconds, on the input `v0.2.1` — a tag that did not exist until 2026-09-07. It
+is not evidence of anything wrong with the workflow, and is recorded here so it
+is not re-diagnosed later.
+
+### Until the index catches up
+
+`pip install outcome-receipts` resolves to `0.1.0`, which
+[SECURITY.md](../SECURITY.md#supported-versions) records as out of security
+support. The README status note, the paragraph under SECURITY.md's
+supported-versions table, and [drafting.md](drafting.md) all say so; all three
+go when the index catches up.
+
 ## Failure and recovery
 
 A failed run is safe to rerun with the same unchanged tag. Never move or
