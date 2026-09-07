@@ -59,6 +59,15 @@ from outcome_receipts.bundle import bundle_manifest
 from outcome_receipts.bundle import verify_bundle as verify_signed_bundle
 from outcome_receipts.cards import write_cards
 from outcome_receipts.charts import Chart, render_charts
+from outcome_receipts.claims import (
+    STATUS_BOUND,
+    ClaimAudit,
+    ClaimVerdict,
+    DirectionEvidence,
+    audit_claims,
+    evidence_from_rows,
+    summarize,
+)
 from outcome_receipts.clock import Clock, FixedClock, SystemClock
 from outcome_receipts.comparison import (
     ComparisonResult,
@@ -88,6 +97,7 @@ from outcome_receipts.model_draft import (
     build_narrative_drafter,
 )
 from outcome_receipts.models import (
+    AuditResult,
     Explanation,
     Figure,
     GroundingResult,
@@ -117,6 +127,7 @@ from outcome_receipts.report import (
 )
 from outcome_receipts.scaffold import scaffold_spec
 from outcome_receipts.suppression import (
+    SuppressionResult,
     filter_for_aggregate_only,
     redact_comparison,
     redact_reconciliation,
@@ -298,6 +309,76 @@ def _claims_text(
         parts.append(" ".join(figure.display for figure in reconciliation.figures))
     parts.extend(chart.claims_text for chart in charts)
     return " ".join(parts)
+
+
+def _direction_evidence(
+    comparison: ComparisonResult | None,
+    reconciliation: ReconciliationResult | None,
+    withheld_metric_ids: Sequence[str] = (),
+) -> tuple[DirectionEvidence, ...]:
+    """Every receipted direction a comparative claim in prose may be checked against.
+
+    A reconciliation line is two comparison rows -- an outcome and its spend -- and
+    both are evidence, because a claim about either is a claim about a direction this
+    report computed. The rows must be the *pre*-suppression ones: a redacted row's
+    ``direction`` is a sentinel, and reading it would turn a claim that discloses a
+    withheld comparison into a claim that merely has nothing to bind to.
+    """
+
+    rows: list[object] = []
+    if comparison is not None:
+        rows.extend(comparison.rows)
+    if reconciliation is not None:
+        for line in reconciliation.rows:
+            rows.append(line.outcome)
+            rows.append(line.financial)
+    return evidence_from_rows(rows, withheld_metric_ids)
+
+
+def _claim_verdict_payload(verdict: ClaimVerdict) -> dict[str, object]:
+    return {
+        "text": verdict.span.text,
+        "start": verdict.span.start,
+        "end": verdict.span.end,
+        "kind": verdict.span.kind,
+        "direction": verdict.span.direction,
+        "status": verdict.status,
+        "detail": verdict.detail,
+        "metric_ids": list(verdict.metric_ids),
+    }
+
+
+def _claim_audit_payload(audit: ClaimAudit) -> dict[str, object]:
+    summary = summarize(audit)
+    return {
+        "ok": audit.ok,
+        "total": summary.total,
+        "bound": summary.bound,
+        "unbound": summary.unbound,
+        "contradicted": summary.contradicted,
+        "disclosed": summary.disclosed,
+        "by_kind": dict(sorted(summary.by_kind.items())),
+        # Only the verdicts that block. A bound claim is reported as a count; listing
+        # every one of them would bury the four that need an author's attention.
+        "blocking": [
+            _claim_verdict_payload(verdict)
+            for verdict in audit.verdicts
+            if verdict.status != STATUS_BOUND
+        ],
+    }
+
+
+def _print_claim_audit(label: str, audit: ClaimAudit) -> None:
+    summary = summarize(audit)
+    print(
+        f"comparative claims in {label!r}: {summary.total} "
+        f"(bound {summary.bound}, unbound {summary.unbound}, "
+        f"contradicted {summary.contradicted}, disclosed {summary.disclosed})"
+    )
+    for verdict in audit.verdicts:
+        if verdict.status == STATUS_BOUND:
+            continue
+        print(f"  {verdict.status}: at offset {verdict.span.start}, {verdict.detail}")
 
 
 def _approver(
@@ -489,12 +570,29 @@ def _print_template_summary(
         )
 
 
+def _print_run_summary(
+    publishable: Sequence[Figure],
+    claims_result: GroundingResult,
+    drafts: Sequence[tuple[TemplateSpec, str, GroundingResult]],
+    claim_audits: Sequence[tuple[TemplateSpec, ClaimAudit]],
+    suppression: SuppressionResult,
+) -> None:
+    """What the run found, before it says whether it will export."""
+
+    _print_template_summary(publishable, claims_result, drafts)
+    for template, audit in claim_audits:
+        _print_claim_audit(template.template_id, audit)
+    n_hidden = len(suppression.suppressed) + len(suppression.complementary_suppressed)
+    print(f"suppression policy: applied (threshold {suppression.threshold}; hidden {n_hidden})")
+
+
 def _print_gate_failure(
     claims_result: GroundingResult,
     drafts: Sequence[tuple[TemplateSpec, str, GroundingResult]],
     publishable: Sequence[Figure] = (),
     *,
     explain: bool = False,
+    claim_audits: Sequence[tuple[TemplateSpec, ClaimAudit]] = (),
 ) -> None:
     """Report the refusal, and on request why each number missed.
 
@@ -504,6 +602,14 @@ def _print_gate_failure(
     """
 
     print("\ngrounding gate: FAIL — refusing to export", file=sys.stderr)
+    for template, audit in claim_audits:
+        for verdict in audit.verdicts:
+            if verdict.status == STATUS_BOUND:
+                continue
+            print(
+                f"  {verdict.status} claim in {template.template_id!r}: {verdict.detail}",
+                file=sys.stderr,
+            )
     for span in claims_result.unbound:
         print(f"  unverifiable number: {span.text!r}", file=sys.stderr)
     for template, _narrative, result in drafts:
@@ -599,6 +705,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
     raw_drafts = _draft_templates(spec, figures, narrative_drafter)
     raw_gate_pass = raw_claims.ok and all(result.ok for _t, _n, result in raw_drafts)
 
+    # The pre-suppression rows, kept before `_redact_report_structures` overwrites
+    # each row's `direction` with the redaction sentinel. The comparative-claim gate
+    # needs the real direction of a withheld row to report a claim about it as a
+    # disclosure rather than as merely unbound, exactly as `audit_narrative` is given
+    # the pre-suppression figures for the same reason.
+    raw_comparison, raw_reconciliation = comparison, reconciliation
+
     suppressed_figures, suppression = suppress_figures(figures)
     publishable = filter_for_aggregate_only(suppressed_figures)
     comparison, reconciliation = _redact_report_structures(comparison, reconciliation, publishable)
@@ -606,9 +719,29 @@ def _cmd_run(args: argparse.Namespace) -> int:
     claims_result = ground(_claims_text(comparison, reconciliation, charts), publishable)
     drafts = _draft_templates(spec, publishable, narrative_drafter)
     combined_result = ground(" ".join(narrative for _t, narrative, _r in drafts), publishable)
-    gate_pass = raw_gate_pass and claims_result.ok and all(result.ok for _t, _n, result in drafts)
+    # The comparative-claim gate over the drafted prose: a direction word binds only
+    # to a receipted comparison direction. Scoped to the narratives, which is the one
+    # surface a model writes; a metric's author-written caveat is not drafted and is
+    # not gated here.
+    evidence = _direction_evidence(
+        raw_comparison,
+        raw_reconciliation,
+        (*suppression.suppressed, *suppression.complementary_suppressed),
+    )
+    claim_audits = [
+        (template, audit_claims(narrative, evidence)) for template, narrative, _r in drafts
+    ]
+    gate_pass = (
+        raw_gate_pass
+        and claims_result.ok
+        and all(result.ok for _t, _n, result in drafts)
+        and all(audit.ok for _t, audit in claim_audits)
+    )
     template_payload = {
         template.template_id: _grounding_payload(result) for template, _n, result in drafts
+    }
+    claim_payload = {
+        template.template_id: _claim_audit_payload(audit) for template, audit in claim_audits
     }
     empty_outputs = {
         "report": None,
@@ -624,9 +757,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     )
 
     if not args.json:
-        _print_template_summary(publishable, claims_result, drafts)
-        n_hidden = len(suppression.suppressed) + len(suppression.complementary_suppressed)
-        print(f"suppression policy: applied (threshold {suppression.threshold}; hidden {n_hidden})")
+        _print_run_summary(publishable, claims_result, drafts, claim_audits, suppression)
 
     if not gate_pass:
         if args.json:
@@ -640,6 +771,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 approval=None,
             )
             payload["templates"] = template_payload
+            payload["comparative_claims"] = claim_payload
             _emit_json(payload)
             return EXIT_GATE_FAIL
         if not raw_gate_pass:
@@ -647,9 +779,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
             # written against and the only set a diagnosis of them can be true
             # about. Explaining raw spans against the publishable set would
             # report a suppressed figure as simply missing.
-            _print_gate_failure(raw_claims, raw_drafts, figures, explain=args.explain)
+            _print_gate_failure(
+                raw_claims, raw_drafts, figures, explain=args.explain, claim_audits=claim_audits
+            )
         else:
-            _print_gate_failure(claims_result, drafts, publishable, explain=args.explain)
+            _print_gate_failure(
+                claims_result,
+                drafts,
+                publishable,
+                explain=args.explain,
+                claim_audits=claim_audits,
+            )
         return EXIT_GATE_FAIL
 
     approver = _approver(spec.report.title, combined_result, claims_result, args)
@@ -665,6 +805,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 approval=None,
             )
             payload["templates"] = template_payload
+            payload["comparative_claims"] = claim_payload
             _emit_json(payload)
         print("export aborted: no approver sign-off", file=sys.stderr)
         return EXIT_APPROVAL_FAIL
@@ -706,6 +847,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             approval={"approved_by": approver, "approved_at": approved_at},
         )
         payload["templates"] = template_payload
+        payload["comparative_claims"] = claim_payload
         _emit_json(payload)
         return EXIT_OK
 
@@ -787,11 +929,36 @@ def _print_explanations(explanations: Sequence[Explanation]) -> None:
             print(f"    also: {candidate.detail}")
 
 
+def _print_audit_refusals(result: AuditResult, claims: ClaimAudit) -> None:
+    """The refusal lines, each naming which gate refused and why.
+
+    Kept apart because they are different findings with different remedies: a
+    disclosed number and a disclosed direction are both recoveries of a withheld
+    cell, while an unbound claim is a sentence nothing receipts.
+    """
+
+    if result.suppressed:
+        print(
+            "\naudit: FAIL — the narrative states a cell suppression withholds",
+            file=sys.stderr,
+        )
+    if claims.disclosed:
+        print(
+            "\naudit: FAIL — the narrative states the direction of a withheld comparison",
+            file=sys.stderr,
+        )
+    elif not claims.ok:
+        print(
+            "\naudit: FAIL — a comparative claim binds to no receipted direction",
+            file=sys.stderr,
+        )
+
+
 def _cmd_audit(args: argparse.Namespace) -> int:
     # The full figure set, not just the narrative metrics: complementary
     # suppression is computed over every figure in the report, so auditing
     # against a subset would leave a cell visible here that `run` redacts.
-    _spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+    _spec, _rows, figures, comparison, reconciliation = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
     )
     publishable, hidden = _publishable_and_hidden(figures)
@@ -811,6 +978,14 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     # returns a copy carrying the diagnoses; `ok` does not read them, so the
     # exit code below is the same number whether or not `--explain` was given.
     explained = explain_audit(result, publishable, hidden) if explain else result
+    # The same narrative's comparative claims, against the receipted directions.
+    # `_compute_all` returns the pre-suppression comparison, which is the set this
+    # needs: a claim agreeing with a withheld row is a disclosure, and a redacted
+    # row no longer carries the direction that makes it one.
+    claims = audit_claims(
+        narrative,
+        _direction_evidence(comparison, reconciliation, [figure.metric_id for figure in hidden]),
+    )
     if args.fixes_out:
         Path(args.fixes_out).write_text(
             json.dumps(build_fix_plan(narrative, explained.explanations), indent=2, sort_keys=True)
@@ -826,13 +1001,14 @@ def _cmd_audit(args: argparse.Namespace) -> int:
             "bound": len(result.bound),
             "suppressed": [_suppressed_span_payload(item) for item in result.suppressed],
             "unbound": [_span_payload(span) for span in result.unbound],
+            "comparative_claims": _claim_audit_payload(claims),
         }
         if explain:
             payload["explanations"] = [
                 _explanation_payload(item) for item in explained.explanations
             ]
         _emit_json(payload)
-        return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
+        return EXIT_OK if result.ok and claims.ok else EXIT_VERIFY_FAIL
 
     print(
         f"numbers: {result.total}, bound: {len(result.bound)}, "
@@ -850,14 +1026,11 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     for span in result.unbound:
         print(f"  unverifiable: {span.text!r} at offset {span.start}")
     _print_explanations(explained.explanations)
+    _print_claim_audit("narrative", claims)
     if args.fixes_out:
         print(f"  fix plan: {args.fixes_out}")
-    if result.suppressed:
-        print(
-            "\naudit: FAIL — the narrative states a cell suppression withholds",
-            file=sys.stderr,
-        )
-    return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
+    _print_audit_refusals(result, claims)
+    return EXIT_OK if result.ok and claims.ok else EXIT_VERIFY_FAIL
 
 
 def _apply_fixes(
