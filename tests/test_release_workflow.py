@@ -241,7 +241,7 @@ def test_authorize_delegates_to_the_pinned_reusable_workflow_by_full_sha() -> No
 
 def test_a_movable_ref_pin_on_authorize_is_caught() -> None:
     original = _jobs(_text())["authorize"]
-    mutated = original.replace("@315a513ff3b4e7c5c0628428909052d947f4f1ab", "@main")
+    mutated = original.replace("@7be4c3e44e2acf20e8a98eeea4351c1e5d2789bc", "@main")
     _assert_mutated(original, mutated)
 
     match = REUSABLE_AUTHORIZE_RE.search(mutated)
