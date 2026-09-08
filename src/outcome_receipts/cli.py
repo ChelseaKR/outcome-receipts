@@ -102,6 +102,7 @@ from outcome_receipts.model_draft import (
     build_narrative_drafter,
 )
 from outcome_receipts.models import (
+    ApprovalPolicy,
     AuditResult,
     Explanation,
     Figure,
@@ -110,6 +111,7 @@ from outcome_receipts.models import (
     SpanCandidate,
     SuppressedSpan,
     TemplateSpec,
+    role_key,
 )
 from outcome_receipts.policy import (
     DEFAULT_POLICY_ID,
@@ -123,7 +125,13 @@ from outcome_receipts.preview import (
     preview_policies,
     render_preview_markdown,
 )
-from outcome_receipts.provenance import Provenance
+from outcome_receipts.provenance import (
+    Approval,
+    ApprovalError,
+    Provenance,
+    approvals_summary,
+    resolve_approvals,
+)
 from outcome_receipts.report import (
     receipts_manifest,
     render_diff_markdown,
@@ -402,6 +410,163 @@ def _approver(
     return entered_name or None
 
 
+def _approve_pairs(args: argparse.Namespace) -> list[tuple[str, str]]:
+    """The ``--approve ROLE:NAME`` sign-offs as ``(role, name)`` pairs.
+
+    Split on the first colon only, so a name may contain one. A value with no
+    colon is refused rather than read as a role with a blank approver, which
+    would otherwise reach the policy check as a missing name and blame the spec
+    for a typo on the command line.
+    """
+
+    pairs: list[tuple[str, str]] = []
+    for raw in getattr(args, "approve", None) or []:
+        role, separator, name = str(raw).partition(":")
+        if not separator or not role.strip():
+            raise ApprovalError(f"--approve expects ROLE:NAME, got {raw!r}")
+        pairs.append((role.strip(), name.strip()))
+    return pairs
+
+
+def _prompt_for_roles(
+    policy: ApprovalPolicy,
+    supplied: Sequence[tuple[str, str]],
+    args: argparse.Namespace,
+) -> list[tuple[str, str]]:
+    """Prompt for each required role the command line did not fill.
+
+    Only on a TTY, and never under ``--json`` (stdout carries exactly one JSON
+    object) or ``--no-confirm``. Off a TTY there is nobody to prompt, so the
+    unfilled roles stay unfilled and ``resolve_approvals`` refuses by name --
+    which is the fail-closed direction, and the same one the single-approver path
+    already takes.
+    """
+
+    if args.no_confirm or args.json or not sys.stdin.isatty():
+        return []
+    given = {role_key(role) for role, _name in supplied}
+    collected: list[tuple[str, str]] = []
+    for role in policy.required:
+        if role_key(role) in given:
+            continue
+        try:
+            entered = input(f"Sign off as {role!r}? Type your name (blank to abort): ")
+        except EOFError:
+            return collected
+        name = entered.strip()
+        if not name:
+            return collected
+        collected.append((role, name))
+    return collected
+
+
+def _resolve_role_approvals(
+    spec: Spec, args: argparse.Namespace, *, approved_at: str, interactive: bool
+) -> tuple[Approval, ...]:
+    """The role sign-offs this invocation records, checked against the spec.
+
+    Returns an empty tuple when the spec declares no ``[approval]`` policy, which
+    leaves the single-approver path exactly as it was. Raises ``ApprovalError``
+    when a policy exists and the sign-offs do not satisfy it.
+    """
+
+    policy = spec.report.approval
+    supplied = _approve_pairs(args)
+    if policy is None:
+        resolve_approvals(None, supplied, approved_at=approved_at)
+        return ()
+    if getattr(args, "approved_by", None) is not None:
+        raise ApprovalError(
+            "this spec requires sign-off from "
+            + ", ".join(repr(role) for role in policy.required)
+            + "; --approved-by records one unnamed role and cannot satisfy that policy, "
+            "so use --approve ROLE:NAME once per role"
+        )
+    if interactive:
+        supplied = [*supplied, *_prompt_for_roles(policy, supplied, args)]
+    return resolve_approvals(policy, supplied, approved_at=approved_at)
+
+
+def _workflow_approver(config_path: str, args: argparse.Namespace) -> str:
+    """The ``approved_by`` string a workflow command records, policy checked.
+
+    A workflow artifact is evidence packaged from a spec's receipts, so the
+    spec's sign-off policy governs it too. Without this, a two-role spec could be
+    packaged as a contract-check or an equity review with one signature, which is
+    the bypass the policy exists to close: the requirement has to travel with the
+    report definition rather than with the flag the operator happened to type.
+    """
+
+    spec = load_spec(config_path)
+    approvals = _resolve_role_approvals(
+        spec,
+        args,
+        approved_at=_clock(reproducible=args.reproducible).now_iso(),
+        interactive=False,
+    )
+    if approvals:
+        return approvals_summary(approvals)
+    approved_by = str(getattr(args, "approved_by", None) or "").strip()
+    if not approved_by:
+        raise ApprovalError("no approver sign-off: pass --approved-by NAME")
+    return approved_by
+
+
+def _export_approval(
+    spec: Spec,
+    args: argparse.Namespace,
+    narrative_result: GroundingResult,
+    claims_result: GroundingResult,
+    *,
+    approved_at: str,
+) -> tuple[tuple[Approval, ...], str | None, str]:
+    """Who signed this export off, or why nobody did.
+
+    Returns the role approvals (empty for a spec with no policy), the display
+    string to record as ``approved_by``, and the reason to print when that string
+    is ``None``. The refusal is returned rather than raised so ``run --json``
+    still emits exactly one JSON object on the way out.
+    """
+
+    try:
+        approvals = _resolve_role_approvals(spec, args, approved_at=approved_at, interactive=True)
+    except ApprovalError as exc:
+        return (), None, str(exc)
+    if approvals:
+        return approvals, approvals_summary(approvals), ""
+    approver = _approver(spec.report.title, narrative_result, claims_result, args)
+    return (), approver, "no approver sign-off"
+
+
+def _print_approval(approver: str, approvals: Sequence[Approval]) -> None:
+    """Report who signed off, one line per role when the spec declares any."""
+
+    if not approvals:
+        print(f"  approved: {approver}")
+        return
+    for approval in approvals:
+        print(f"  approved ({approval.role}): {approval.name}")
+
+
+def _approval_payload(
+    approver: str, approved_at: str, approvals: Sequence[Approval]
+) -> dict[str, object]:
+    """The ``approval`` block of a ``run --json`` payload.
+
+    ``approved_by`` is present either way and names every approver, so a consumer
+    reading only that field reads a complete answer for a role-based export as
+    well as a single-approver one. ``approvals`` appears only when the spec
+    declared a policy, matching the manifest.
+    """
+
+    payload: dict[str, object] = {"approved_by": approver, "approved_at": approved_at}
+    if approvals:
+        payload["approvals"] = [
+            {"role": a.role, "approved_by": a.name, "approved_at": a.approved_at} for a in approvals
+        ]
+    return payload
+
+
 def _run_payload(
     *,
     gate_pass: bool,
@@ -629,6 +794,7 @@ def _write_template_exports(
     suppression_applied: bool = False,
     narrative_drafter: str = "deterministic",
     coverage: RequirementCoverage | None = None,
+    approvals: Sequence[Approval] = (),
 ) -> tuple[list[tuple[TemplateSpec, dict[str, str | None], LedgerEntry]], Path, bool]:
     base_out = Path(args.out)
     fan_out = bool(spec.report.templates)
@@ -643,6 +809,7 @@ def _write_template_exports(
             suppression_applied=suppression_applied,
             aggregate_only=True,
             narrative_drafter=narrative_drafter,
+            approvals=tuple(approvals),
         )
         out_dir = base_out / template.template_id if fan_out else base_out
         outputs, entry, _ = _export_outputs(
@@ -942,7 +1109,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if refusal is not None:
         return refusal
 
-    approver = _approver(spec.report.title, combined_result, claims_result, args)
+    approved_at = _clock(reproducible=args.reproducible).now_iso()
+    approvals, approver, reason = _export_approval(
+        spec, args, combined_result, claims_result, approved_at=approved_at
+    )
     if approver is None:
         if args.json:
             payload = _run_payload(
@@ -957,11 +1127,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             payload["templates"] = template_payload
             payload["comparative_claims"] = claim_payload
             _emit_json(payload)
-        print("export aborted: no approver sign-off", file=sys.stderr)
+        print(f"export aborted: {reason}", file=sys.stderr)
         return EXIT_APPROVAL_FAIL
 
     key = _load_key(getattr(args, "sign_key_file", None))
-    approved_at = _clock(reproducible=args.reproducible).now_iso()
     written, ledger_path, fan_out = _write_template_exports(
         args,
         spec,
@@ -977,6 +1146,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         suppression_applied=True,
         narrative_drafter="bedrock" if narrative_drafter is not None else "deterministic",
         coverage=coverage,
+        approvals=approvals,
     )
     if args.json:
         flat_outputs: object = (
@@ -995,7 +1165,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             claims_result=claims_result,
             outputs=flat_outputs,
             ledger=ledgers[0] if not fan_out else {"entries": ledgers},
-            approval={"approved_by": approver, "approved_at": approved_at},
+            approval=_approval_payload(approver, approved_at, approvals),
         )
         payload["templates"] = template_payload
         payload["comparative_claims"] = claim_payload
@@ -1004,7 +1174,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     print("\ngrounding gate: PASS")
     _print_coverage_pass(coverage)
-    print(f"  approved: {approver}")
+    _print_approval(approver, approvals)
     for template, outputs, entry in written:
         prefix = f"{template.template_id}: " if fan_out else ""
         print(f"  {prefix}report:   {outputs['report']}")
@@ -1354,6 +1524,11 @@ def _bundle_payload(result: BundleResult) -> dict[str, object]:
             "ok": result.coverage.ok,
             "detail": result.coverage.detail,
         },
+        "approval": {
+            "checked": result.approval.checked,
+            "ok": result.approval.ok,
+            "detail": result.approval.detail,
+        },
     }
 
 
@@ -1508,7 +1683,10 @@ def _verify_bundle(args: argparse.Namespace, spec: Spec, figures: Sequence[Figur
     # they are *now*, not read back from the manifest, so an edit to the
     # requirement document after export changes the digest and fails here.
     result = verify_bundle(
-        Path(args.bundle), figures, coverage=_requirement_coverage(spec, figures)
+        Path(args.bundle),
+        figures,
+        coverage=_requirement_coverage(spec, figures),
+        approval_policy=spec.report.approval,
     )
     manifest = result.manifest
 
@@ -1532,13 +1710,25 @@ def _verify_bundle(args: argparse.Namespace, spec: Spec, figures: Sequence[Figur
         + ("not checked" if not result.coverage.checked else "checked")
         + f" — {result.coverage.detail}"
     )
+    print(
+        "approval policy: "
+        + ("not checked" if not result.approval.checked else "checked")
+        + f" — {result.approval.detail}"
+    )
 
     if result.ok:
         print("\nverify: PASS — the whole bundle is coherent")
         return EXIT_OK
+    _print_bundle_failure(result)
+    return EXIT_VERIFY_FAIL
+
+
+def _print_bundle_failure(result: BundleResult) -> None:
+    """Name every check that failed, on stderr, one line each."""
+
     print("\nverify: FAIL — the exported bundle does not verify", file=sys.stderr)
-    if not manifest.ok:
-        print(f"  receipts manifest: {_verify_failure_reason(manifest)}", file=sys.stderr)
+    if not result.manifest.ok:
+        print(f"  receipts manifest: {_verify_failure_reason(result.manifest)}", file=sys.stderr)
     for artifact in result.failed_artifacts:
         print(f"  offending file: {artifact.path} ({artifact.detail})", file=sys.stderr)
     if not result.grounding.ok:
@@ -1546,7 +1736,8 @@ def _verify_bundle(args: argparse.Namespace, spec: Spec, figures: Sequence[Figur
             print(f"  ungrounded number in report.md: {span.text!r}", file=sys.stderr)
     if not result.coverage.ok:
         print(f"  requirement coverage: {result.coverage.detail}", file=sys.stderr)
-    return EXIT_VERIFY_FAIL
+    if not result.approval.ok:
+        print(f"  approval policy: {result.approval.detail}", file=sys.stderr)
 
 
 def _eval_payload(report: EvalReport, *, out: str | None) -> dict[str, object]:
@@ -1769,7 +1960,7 @@ def _cmd_restate(args: argparse.Namespace) -> int:
         prior_bundle=Path(args.prior_bundle),
         current_config=Path(args.config),
         reason=args.reason,
-        approved_by=args.approved_by,
+        approved_by=_workflow_approver(args.config, args),
         reproducible=args.reproducible,
     )
     return _finish_workflow(args, artifact)
@@ -1794,7 +1985,7 @@ def _cmd_contract_check(args: argparse.Namespace) -> int:
     artifact = build_contract_evidence(
         config_path=Path(args.config),
         contract_path=Path(args.contract),
-        approved_by=args.approved_by,
+        approved_by=_workflow_approver(args.config, args),
         reproducible=args.reproducible,
     )
     return _finish_workflow(args, artifact)
@@ -1847,7 +2038,7 @@ def _cmd_equity_review(args: argparse.Namespace) -> int:
     artifact = build_equity_review(
         config_path=Path(args.config),
         plan_path=Path(args.plan),
-        approved_by=args.approved_by,
+        approved_by=_workflow_approver(args.config, args),
         reproducible=args.reproducible,
     )
     return _finish_workflow(args, artifact)
@@ -1953,6 +2144,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help="record NAME as the human approver, non-interactively (for CI); "
         "skips the interactive sign-off prompt",
+    )
+    run_parser.add_argument(
+        "--approve",
+        action="append",
+        metavar="ROLE:NAME",
+        help="record a sign-off for one role the spec's [approval] policy requires, as ROLE:NAME; repeat once per role",
     )
     run_parser.add_argument(
         "--yes",
@@ -2101,7 +2298,18 @@ def build_parser() -> argparse.ArgumentParser:
     restate_parser.add_argument("--prior-bundle", required=True)
     restate_parser.add_argument("--config", required=True, help="current report spec TOML")
     restate_parser.add_argument("--reason", required=True)
-    restate_parser.add_argument("--approved-by", required=True, metavar="NAME")
+    restate_parser.add_argument(
+        "--approved-by",
+        metavar="NAME",
+        help="record NAME as the single human approver; refused when the spec's "
+        "[approval] policy names roles",
+    )
+    restate_parser.add_argument(
+        "--approve",
+        action="append",
+        metavar="ROLE:NAME",
+        help="record a sign-off for one role the spec's [approval] policy requires, as ROLE:NAME; repeat once per role",
+    )
     restate_parser.add_argument("--out", required=True)
     restate_parser.add_argument("--reproducible", action="store_true")
     restate_parser.set_defaults(func=_cmd_restate)
@@ -2135,7 +2343,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     contract_parser.add_argument("--config", required=True)
     contract_parser.add_argument("--contract", required=True)
-    contract_parser.add_argument("--approved-by", required=True, metavar="NAME")
+    contract_parser.add_argument(
+        "--approved-by",
+        metavar="NAME",
+        help="record NAME as the single human approver; refused when the spec's "
+        "[approval] policy names roles",
+    )
+    contract_parser.add_argument(
+        "--approve",
+        action="append",
+        metavar="ROLE:NAME",
+        help="record a sign-off for one role the spec's [approval] policy requires, as ROLE:NAME; repeat once per role",
+    )
     contract_parser.add_argument("--out", required=True)
     contract_parser.add_argument("--reproducible", action="store_true")
     contract_parser.set_defaults(func=_cmd_contract_check)
@@ -2185,7 +2404,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     equity_parser.add_argument("--config", required=True)
     equity_parser.add_argument("--plan", required=True)
-    equity_parser.add_argument("--approved-by", required=True, metavar="NAME")
+    equity_parser.add_argument(
+        "--approved-by",
+        metavar="NAME",
+        help="record NAME as the single human approver; refused when the spec's "
+        "[approval] policy names roles",
+    )
+    equity_parser.add_argument(
+        "--approve",
+        action="append",
+        metavar="ROLE:NAME",
+        help="record a sign-off for one role the spec's [approval] policy requires, as ROLE:NAME; repeat once per role",
+    )
     equity_parser.add_argument("--out", required=True)
     equity_parser.add_argument("--reproducible", action="store_true")
     equity_parser.set_defaults(func=_cmd_equity_review)
@@ -2226,6 +2456,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         # measurement of a set that was never read.
         print(f"requirement coverage: FAIL — {exc}", file=sys.stderr)
         return EXIT_COVERAGE_FAIL
+    except ApprovalError as exc:
+        # A sign-off that does not satisfy the spec's policy exits on the
+        # approval code, because nothing was written and the reason is the same
+        # one `run` reports: the export was not approved. `run` handles this
+        # itself so its --json mode still emits exactly one object; the workflow
+        # commands land here.
+        print(f"approval: FAIL — {exc}", file=sys.stderr)
+        return EXIT_APPROVAL_FAIL
     except UnknownPolicyError as exc:
         # Fails closed, naming the id. Falling back to the default here would
         # let a typo silently preview -- and later record -- a different policy

@@ -365,6 +365,47 @@ class DraftingSpec:
 
 
 @dataclass(frozen=True)
+class ApprovalPolicy:
+    """The sign-off roles a spec requires before an export may be written.
+
+    ``required`` is the ordered list of role names, as the spec author wrote
+    them. Order is the spec's, not the command line's, so the recorded approvals
+    read the same way whichever order the roles were supplied in.
+
+    A spec that declares no ``[approval]`` section has no policy at all, which is
+    ``None`` rather than an empty ``ApprovalPolicy``. The two are different facts:
+    no policy means the single-approver path applies unchanged, while a policy
+    that required nobody would be a declared gate that cannot fail. The loader
+    refuses the second shape rather than representing it here.
+    """
+
+    required: tuple[str, ...]
+
+    def normalized(self) -> tuple[str, ...]:
+        """The role names as comparison keys, in the spec's own order."""
+
+        return tuple(role_key(role) for role in self.required)
+
+
+def role_key(role: str) -> str:
+    """A comparison key for "is this the same role", never for display."""
+
+    return " ".join(role.casefold().split())
+
+
+def person_key(name: str) -> str:
+    """A comparison key for "is this the same person", never for display.
+
+    Mirrors ``constituent-reconciler``'s ``_reviewer_identity_key``: case and
+    internal whitespace do not make one person into two. A dual sign-off whose
+    two roles can be filled by ``A. Lee`` and ``a.  lee`` is a single signature
+    wearing two names, which is the failure mode that rule exists to stop.
+    """
+
+    return " ".join(name.casefold().split())
+
+
+@dataclass(frozen=True)
 class ReportSpec:
     """A report template plus the metrics it needs.
 
@@ -393,6 +434,7 @@ class ReportSpec:
     templates: tuple[TemplateSpec, ...] = field(default_factory=tuple)
     drafting: DraftingSpec = field(default_factory=DraftingSpec)
     requirements: RequirementsSpec | None = None
+    approval: ApprovalPolicy | None = None
 
     @property
     def effective_templates(self) -> tuple[TemplateSpec, ...]:

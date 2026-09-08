@@ -192,6 +192,36 @@ in the provenance statement of the report and in the receipts manifest
 (`provenance.approved_by`, `provenance.approved_at`; `approved_by` is `null`
 when nothing was approved, which no export should ever carry).
 
+#### Requiring more than one signature
+
+Boards and contracts often require two people, a program lead and a finance
+lead. A spec can say so, and then the requirement travels with the report
+definition rather than with the flag whoever ran the export happened to type:
+
+```toml
+[approval]
+required = ["program", "finance"]
+```
+
+```
+receipts run --config report.toml --out out \
+  --approve program:"A. Lee" --approve finance:"B. Cruz"
+```
+
+A run missing a required role writes nothing and exits 3 naming the role. The
+same person cannot fill two roles; the comparison folds case and internal
+whitespace, so `A. Lee` and `a.  lee` are one person. `--approved-by` is refused
+against a role policy, because a policy a different flag can satisfy is not a
+policy. An interactive run prompts once per unfilled role.
+
+Each approval is recorded in the manifest under `provenance.approvals` with its
+role, approver and timestamp, and `provenance.approved_by` names every approver
+so a reader that only knows that field still reads a complete answer.
+`receipts verify --bundle` re-reads the policy from the spec, so a bundle stops
+verifying if the policy later gains a role or an approval is edited out of the
+manifest. `restate`, `contract-check` and `equity-review` honour the same
+policy. A spec with no `[approval]` section behaves exactly as it did before.
+
 ### Minimal report specification
 
 A report spec identifies the CSV, narrative template, and deterministic query for
@@ -530,7 +560,7 @@ and JSON forms.
 | 0 | Success. The command ran and the grounding gate, where one applies, passed. |
 | 1 | A check failed closed: mapping was blocked, grounding/eval failed, receipts or a bundle drifted, a ledger chain broke, or generated cards were stale. |
 | 2 | The grounding gate refused to export. `run` found an unbound number and wrote nothing. |
-| 3 | The export was not approved. The grounding gate passed but no named human signed off (no `--approved-by`, and no interactive sign-off), so `run` wrote nothing. |
+| 3 | The export was not approved. The grounding gate passed but no named human signed off (no `--approved-by`, and no interactive sign-off), or the sign-off did not satisfy the spec's `[approval]` policy, so `run` wrote nothing. |
 | 4 | The export did not answer its bound requirement set. A requirement was neither answered by a metric, withheld as a suppressed cell, nor declared unanswerable with a blocker `map` reproduces and a reason a person wrote — so `run` named it and wrote nothing. Only a spec with a `[requirements]` binding can return this. |
 
 ### Proving the report answered the requirement set

@@ -125,6 +125,9 @@
     },
     "requirements": {
       "$ref": "#/$defs/requirements"
+    },
+    "approval": {
+      "$ref": "#/$defs/approval"
     }
   },
   "$defs": {
@@ -391,6 +394,24 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/unanswerable_requirement"
+          }
+        }
+      }
+    },
+    "approval": {
+      "description": "The sign-off roles an export must record before it may be written. Optional: a spec that omits the section records one approver as before. 'required' must name at least one role; an [approval] table that requires nobody is a declared gate that cannot fail, and the loader refuses it.",
+      "type": "object",
+      "required": [
+        "required"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }

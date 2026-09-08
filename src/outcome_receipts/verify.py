@@ -31,9 +31,11 @@ from outcome_receipts.models import (
     HASH_DIGEST_SIZE,
     SCHEMA_VERSION,
     SUPPORTED_SCHEMA_VERSIONS,
+    ApprovalPolicy,
     Figure,
     GroundingResult,
 )
+from outcome_receipts.provenance import ApprovalError, resolve_approvals
 
 # The receipt fields re-derivation compares. ``computed_at`` is excluded on
 # purpose; see the module docstring.
@@ -304,6 +306,21 @@ class CoverageCheck:
 
 
 @dataclass(frozen=True)
+class ApprovalCheck:
+    """Whether the manifest's recorded sign-offs still satisfy the spec's policy.
+
+    ``checked`` is false only when neither the spec declares an ``[approval]``
+    policy nor the manifest records one, which is "there was nothing to compare"
+    rather than "the comparison passed". The two are reported with different
+    words for the same reason ``CoverageCheck`` does.
+    """
+
+    checked: bool
+    ok: bool
+    detail: str
+
+
+@dataclass(frozen=True)
 class BundleResult:
     """The whole-bundle verification: receipts, artifact digests, and grounding.
 
@@ -312,14 +329,17 @@ class BundleResult:
     ``grounding`` re-runs the gate over the exported narrative. ``coverage``
     re-derives the requirement coverage record and compares it, including the
     digest of the requirement document, so an edit to that document after export
-    is caught. The bundle is ``ok`` only when all four hold, so any drift, swap,
-    ungrounded number, or moved requirement fails closed.
+    is caught. ``approval`` re-reads the spec's sign-off policy and checks the
+    recorded approvals against it. The bundle is ``ok`` only when all five hold,
+    so any drift, swap, ungrounded number, moved requirement, or sign-off that no
+    longer satisfies the policy fails closed.
     """
 
     manifest: VerifyResult
     artifacts: tuple[ArtifactCheck, ...]
     grounding: GroundingResult
     coverage: CoverageCheck = CoverageCheck(False, True, "no requirement binding to check")
+    approval: ApprovalCheck = ApprovalCheck(False, True, "no approval policy to check")
 
     @property
     def ok(self) -> bool:
@@ -328,6 +348,7 @@ class BundleResult:
             and all(check.ok for check in self.artifacts)
             and self.grounding.ok
             and self.coverage.ok
+            and self.approval.ok
         )
 
     @property
@@ -427,11 +448,79 @@ def _check_coverage(
     return CoverageCheck(True, True, f"coverage matches; document sha256 {recorded_digest}")
 
 
+def _recorded_approvals(manifest: Mapping[str, Any]) -> list[tuple[str, str]] | None:
+    """The ``role``/``approved_by`` pairs a manifest records, or ``None``.
+
+    ``None`` means the manifest carries no ``approvals`` list at all. A list that
+    is present but malformed returns an empty list instead, so a hand-edited
+    record fails the policy comparison rather than being read as "no policy was
+    in force" and skipping the check.
+    """
+
+    provenance = manifest.get("provenance")
+    if not isinstance(provenance, Mapping):
+        return None
+    recorded = provenance.get("approvals")
+    if recorded is None:
+        return None
+    if not isinstance(recorded, list):
+        return []
+    pairs: list[tuple[str, str]] = []
+    for entry in recorded:
+        if not isinstance(entry, Mapping):
+            continue
+        pairs.append((str(entry.get("role", "")), str(entry.get("approved_by", ""))))
+    return pairs
+
+
+def _check_approval(manifest: Mapping[str, Any], policy: ApprovalPolicy | None) -> ApprovalCheck:
+    """Compare the manifest's recorded sign-offs with the spec's policy now.
+
+    The policy is read from the spec, never from the manifest, for the reason the
+    issue behind this check gives: a requirement that travels with the report
+    definition cannot be satisfied by a different invocation. Both directions are
+    failures. A manifest with no approvals against a spec that requires them was
+    exported before the policy existed, so its report proves nothing about the
+    policy in force. A manifest carrying approvals against a spec that declares
+    none records a gate nothing now defines.
+    """
+
+    recorded = _recorded_approvals(manifest)
+    if policy is None:
+        if recorded is None:
+            return ApprovalCheck(False, True, "no approval policy to check")
+        return ApprovalCheck(
+            True,
+            False,
+            "the manifest records role approvals but the spec declares no [approval] policy",
+        )
+    if recorded is None:
+        return ApprovalCheck(
+            True,
+            False,
+            "the spec requires sign-off from "
+            + ", ".join(repr(role) for role in policy.required)
+            + " but the manifest records no role approvals",
+        )
+    try:
+        approvals = resolve_approvals(policy, recorded, approved_at="")
+    except ApprovalError as exc:
+        return ApprovalCheck(
+            True, False, f"the recorded approvals do not satisfy the policy: {exc}"
+        )
+    return ApprovalCheck(
+        True,
+        True,
+        "sign-off recorded for " + ", ".join(f"{a.role} ({a.name})" for a in approvals),
+    )
+
+
 def verify_bundle(
     bundle_dir: Path,
     figures: Sequence[Figure],
     *,
     coverage: RequirementCoverage | None = None,
+    approval_policy: ApprovalPolicy | None = None,
 ) -> BundleResult:
     """Verify an exported bundle is internally coherent, not just re-derivable.
 
@@ -451,4 +540,10 @@ def verify_bundle(
     report_path = bundle_dir / "report.md"
     report_text = report_path.read_text(encoding="utf-8") if report_path.is_file() else ""
     grounding = ground(_report_narrative(report_text), figures)
-    return BundleResult(manifest_result, artifacts, grounding, _check_coverage(manifest, coverage))
+    return BundleResult(
+        manifest_result,
+        artifacts,
+        grounding,
+        _check_coverage(manifest, coverage),
+        _check_approval(manifest, approval_policy),
+    )
