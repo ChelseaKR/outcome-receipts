@@ -11,6 +11,29 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- **A spec can require sign-off from named roles, and the requirement travels
+  with the report definition rather than with the flag the operator typed.**
+  `[approval] required = ["program", "finance"]` makes `run --approve
+  program:"A. Lee" --approve finance:"B. Cruz"` the only way to export: a run
+  missing a required role writes nothing and exits 3 naming the role, one person
+  cannot fill two roles (compared with case and internal whitespace folded, the
+  rule `constituent-reconciler` settled on for its own two-person gate), and
+  `--approved-by` is refused against a role policy. `restate`, `contract-check`
+  and `equity-review` resolve their approver through the same check, so a
+  two-role spec cannot be packaged as contract evidence with one signature.
+
+  The manifest gains `provenance.approvals`, one object per role with the
+  approver and the timestamp, and `approved_by` stays populated with every
+  approver so nothing that already requires a named human approval has to learn
+  a new field. `verify --bundle` re-reads the policy from the spec, never from
+  the manifest, so a bundle stops verifying when the policy gains a role, when
+  an approval is edited out, or when the manifest records approvals a spec no
+  longer asks for. A spec with no `[approval]` section behaves in every byte as
+  it did before and its manifest carries no `approvals` key at all: such a spec
+  has not satisfied zero roles, it has declared none.
+
+  Compatible: the report spec stays at `1.0` and the receipts manifest at `2.0`.
+  See `docs/SPEC-STABILITY.md`.
 - **The release path's new tag-versus-manifest check is now pinned by
   `tests/test_release_workflow.py`, which is the only thing that reads
   `release.yml` at all.** That workflow runs on `workflow_dispatch` only, so no
