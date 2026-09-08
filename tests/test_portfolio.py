@@ -15,12 +15,14 @@ and that is the only case the table says so about.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
 
 import pytest
 
+from outcome_receipts.bundle import bundle_manifest
 from outcome_receipts.cli import main
 from outcome_receipts.portfolio import (
     AGREES,
@@ -239,22 +241,63 @@ def test_a_bundle_edited_after_the_batch_shows_as_failed(tmp_path: Path) -> None
     assert "Verified" in page, "the untouched report still verifies"
 
 
-def test_a_re_sealed_bundle_manifest_is_caught_by_the_digest_the_batch_recorded(
+def _reseal(bundle_dir: Path) -> None:
+    """Make a bundle internally consistent again after an artifact was edited.
+
+    Re-hashes the edited artifact into the receipts manifest's ``artifacts``
+    block, then re-seals ``bundle.json`` over the resulting members. Everything
+    inside the directory now agrees with everything else, which is exactly the
+    state the digest recorded by the batch exists to refuse.
+    """
+
+    manifest_path = bundle_dir / "receipts.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"] = {
+        name: hashlib.sha256((bundle_dir / name).read_bytes()).hexdigest()
+        for name in manifest["artifacts"]
+    }
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    members = {
+        path.relative_to(bundle_dir).as_posix(): path.read_bytes()
+        for path in sorted(bundle_dir.rglob("*"))
+        if path.is_file() and path.name != "bundle.json"
+    }
+    (bundle_dir / "bundle.json").write_text(bundle_manifest(members), encoding="utf-8")
+
+
+def test_a_re_sealed_bundle_is_caught_by_the_digest_the_batch_recorded(
     tmp_path: Path,
 ) -> None:
-    # Editing an artifact and re-sealing bundle.json makes the bundle internally
-    # consistent again. The digest recorded when the batch ran is what refuses
-    # it, which is the only reason recording it is worth anything.
+    """Only the recorded digest can refuse a bundle that was made consistent again.
+
+    The first version of this test set ``bundle_digest`` to a run of zeroes and
+    left everything else alone, so the sealed-bundle check refused it before the
+    recorded digest was ever consulted. A control that removed the recorded-digest
+    comparison left the whole file green, which is what exposed the fixture: it
+    sat where the failure it was meant to prove is impossible.
+    """
+
     spec = _spec(tmp_path / "one", title="One", definition="Clients, counted once.")
     out = tmp_path / "portfolio"
     assert _batch(out, spec) == 0
 
-    bundle_path = out / "one" / "bundle.json"
-    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-    bundle["bundle_digest"] = "0" * 64
-    bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    bundle_dir = out / "one"
+    report = bundle_dir / "report.md"
+    report.write_text(
+        report.read_text(encoding="utf-8") + "\nA sentence nobody approved.\n", encoding="utf-8"
+    )
+    _reseal(bundle_dir)
+
+    # Everything inside the directory now agrees: the artifact digests match the
+    # files, and the seal matches the members.
+    assert main(["verify-bundle", "--dir", str(bundle_dir)]) == 0
+
     assert _verify(out) == 1
-    assert "Did not verify" in (out / "index.html").read_text(encoding="utf-8")
+    page = (out / "index.html").read_text(encoding="utf-8")
+    assert "Did not verify" in page
+    assert "recorded when the batch ran" in page
 
 
 def test_a_missing_bundle_is_a_failed_row_not_an_aborted_run(tmp_path: Path) -> None:
