@@ -508,6 +508,8 @@ pinning guidance.
 | `receipts rollup` | Compose an aggregate count from verified, unsuppressed partner bundles. |
 | `receipts equity-review` | Package allowlisted subgroup receipts after whole-report suppression, with required policy and consent context. |
 | `receipts verify-workflow` | Validate an evidence artifact's schema version, typed relationship, digests, aggregate-only boundary, and composed-receipt lineage. |
+| `receipts portfolio` | Export several report specs as one batch through the ordinary gate, into one directory and one shared ledger. The first spec that fails stops the batch and no portfolio record is written. |
+| `receipts portfolio-verify` | Re-verify every bundle in a portfolio from its own spec and render `index.html`: per report the gate result, who signed off, the bundle digest and its ledger entry, plus the figures more than one report states. |
 | `receipts cards` | Generate or drift-check the model and data cards. |
 
 Run `receipts <command> --help` for the complete option reference. Every command
@@ -562,6 +564,45 @@ and JSON forms.
 | 2 | The grounding gate refused to export. `run` found an unbound number and wrote nothing. |
 | 3 | The export was not approved. The grounding gate passed but no named human signed off (no `--approved-by`, and no interactive sign-off), or the sign-off did not satisfy the spec's `[approval]` policy, so `run` wrote nothing. |
 | 4 | The export did not answer its bound requirement set. A requirement was neither answered by a metric, withheld as a suppressed cell, nor declared unanswerable with a blocker `map` reproduces and a reason a person wrote — so `run` named it and wrote nothing. Only a spec with a `[requirements]` binding can return this. |
+
+### Publishing more than one report
+
+An organization rarely publishes one report. It publishes a grant report, a
+board report, and a template per funder, each from its own spec. The receipts
+prove every figure in each one and prove nothing about the set, and an auditor
+holding five output directories has no page saying which reports exist, which
+still verify, and whether two of them state the same metric differently.
+
+```sh
+receipts portfolio \
+  --specs examples/grant-report/report.toml examples/board-report/report.toml \
+  --out out/portfolio --approved-by "A. Reviewer"
+receipts portfolio-verify --dir out/portfolio
+```
+
+The batch takes no shortcut: each spec is exported by `run` itself, so the
+grounding gate, the requirement-coverage refusal, suppression and the human
+sign-off apply exactly as they do to a single report, and a spec's `[approval]`
+policy applies too. Every export appends to one shared ledger. The first spec
+that fails stops the batch, names itself, and returns its own exit code, and no
+portfolio record is written. Specs run in path order, so the batch is the same
+whichever order the arguments arrived in.
+
+`portfolio-verify` re-verifies every bundle from its own spec and writes
+`index.html`: per report the gate result, who signed off, the bundle signature
+and digest, and the ledger entry, followed by the figures more than one report
+states. That table computes nothing. It compares what each report already
+published, and it keeps four outcomes apart:
+
+| Outcome | What it means |
+| --- | --- |
+| Same definition, same value | The reports agree. |
+| Same definition, different values | The reports contradict each other. This is the only one of the four that says so. |
+| Definitions differ | The reports count different things, so their values are not comparable at all and no comparison was made. |
+| Withheld in at least one report | Small-cell suppression withheld the cell. An absence, never a disagreement and never a zero. |
+
+The index is one static, script-free HTML file in EN or ES, held to the same
+WCAG 2.2 AA gate as the trace view.
 
 ### Proving the report answered the requirement set
 

@@ -11,6 +11,32 @@ release-hardening work completed before the first public tag.
 ## [Unreleased]
 
 ### Added
+- **`receipts portfolio` and `receipts portfolio-verify`: a batch of specs, and
+  the single page an auditor enters through.** An organization publishing a
+  grant report, a board report and a funder template holds three output
+  directories and three ledgers, and nothing says which reports exist, which
+  still verify, or whether two of them state the same metric differently.
+  `portfolio` runs each spec through `run` itself -- the same grounding gate,
+  the same coverage refusal, the same sign-off, including a spec's `[approval]`
+  policy -- into one directory and one shared ledger, in spec-path order. The
+  first spec that fails stops the batch, returns its own exit code, and leaves
+  no portfolio record. `portfolio-verify` re-verifies every bundle from its own
+  spec and renders a static, script-free `index.html` in EN or ES, held to the
+  same WCAG 2.2 AA gate as the trace view.
+
+  The index computes no figure. Its shared-figure table compares what each
+  report already published and keeps four outcomes apart: the reports agree;
+  they state the same definition and different values, which is the only one of
+  the four that means they contradict each other; their definitions differ, so
+  the values are not comparable at all; or suppression withheld the cell in at
+  least one report, which is an absence rather than a disagreement and is never
+  rendered as a zero. Run against the four shipped examples it reports a real
+  disagreement: `clients_served` is defined in three different wordings across
+  them.
+
+  Each row also carries the bundle digest the batch recorded, so editing an
+  artifact and re-sealing `bundle.json` -- which makes the bundle internally
+  consistent again -- is still refused.
 - **A spec can require sign-off from named roles, and the requirement travels
   with the report definition rather than with the flag the operator typed.**
   `[approval] required = ["program", "finance"]` makes `run --approve

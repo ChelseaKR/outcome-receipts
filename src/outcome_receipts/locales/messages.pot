@@ -181,3 +181,78 @@ msgstr ""
 msgid "trace_provenance_fail_template"
 msgstr ""
 
+msgid "portfolio_title"
+msgstr ""
+
+msgid "portfolio_intro"
+msgstr ""
+
+msgid "portfolio_summary_template"
+msgstr ""
+
+msgid "portfolio_reports_caption"
+msgstr ""
+
+msgid "portfolio_header_report"
+msgstr ""
+
+msgid "portfolio_header_verification"
+msgstr ""
+
+msgid "portfolio_header_approvers"
+msgstr ""
+
+msgid "portfolio_header_signature"
+msgstr ""
+
+msgid "portfolio_header_bundle_digest"
+msgstr ""
+
+msgid "portfolio_header_ledger"
+msgstr ""
+
+msgid "portfolio_status_verified"
+msgstr ""
+
+msgid "portfolio_status_failed"
+msgstr ""
+
+msgid "portfolio_signature_present"
+msgstr ""
+
+msgid "portfolio_signature_absent"
+msgstr ""
+
+msgid "portfolio_ledger_entry_template"
+msgstr ""
+
+msgid "portfolio_shared_heading"
+msgstr ""
+
+msgid "portfolio_shared_caption"
+msgstr ""
+
+msgid "portfolio_header_agreement"
+msgstr ""
+
+msgid "portfolio_header_stated_by"
+msgstr ""
+
+msgid "portfolio_agreement_agrees"
+msgstr ""
+
+msgid "portfolio_agreement_definition_differs"
+msgstr ""
+
+msgid "portfolio_agreement_value_differs"
+msgstr ""
+
+msgid "portfolio_agreement_not_comparable"
+msgstr ""
+
+msgid "portfolio_definitions_differ_note"
+msgstr ""
+
+msgid "portfolio_no_shared_figures"
+msgstr ""
+

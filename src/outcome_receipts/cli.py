@@ -48,11 +48,15 @@ argparse only; no runtime dependency beyond the standard library.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
+import os
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from outcome_receipts import __version__
 from outcome_receipts.bundle import bundle_manifest
@@ -119,6 +123,17 @@ from outcome_receipts.policy import (
     UnknownPolicyError,
     ad_hoc_policy,
     get_policy,
+)
+from outcome_receipts.portfolio import (
+    PAGE_NAME,
+    PortfolioError,
+    PortfolioIndex,
+    PortfolioReport,
+    ReportVerification,
+    read_index,
+    render_index_html,
+    shared_figures,
+    write_index,
 )
 from outcome_receipts.preview import (
     preview_payload,
@@ -2073,6 +2088,314 @@ def _cmd_verify_workflow(args: argparse.Namespace) -> int:
     return EXIT_OK if result.ok else EXIT_VERIFY_FAIL
 
 
+# --------------------------------------------------------------------------
+# The portfolio: a batch of specs, and the one page an auditor enters through.
+# --------------------------------------------------------------------------
+
+
+def _portfolio_slug(spec: Path) -> str:
+    """The output subdirectory one spec's exports go into.
+
+    A spec is conventionally ``<name>/report.toml``, so the directory name is the
+    identifying half; anything else falls back to the file's own stem.
+    """
+
+    return spec.parent.name if spec.name == "report.toml" else spec.stem
+
+
+def _portfolio_targets(specs: Sequence[str]) -> list[tuple[Path, str]]:
+    """The specs to run, ordered by path, with the slug each writes under.
+
+    Ordering is by resolved path so a batch is deterministic whatever order the
+    arguments arrived in. A repeated spec and two specs that would write into one
+    directory are both refused, naming what collided: silently running a spec
+    twice, or letting the second overwrite the first, would produce an index
+    whose rows do not correspond to the specs the operator asked for.
+    """
+
+    resolved = sorted({Path(spec).resolve() for spec in specs})
+    if len(resolved) != len({Path(spec).resolve() for spec in specs}):  # pragma: no cover
+        raise PortfolioError("duplicate spec")
+    if len(resolved) < len(specs):
+        raise PortfolioError("the same spec was given more than once")
+    targets: list[tuple[Path, str]] = []
+    taken: dict[str, Path] = {}
+    for spec in resolved:
+        slug = _portfolio_slug(spec)
+        if slug in taken:
+            raise PortfolioError(
+                f"{spec} and {taken[slug]} would both export into {slug!r}; "
+                "rename one directory or run them into separate portfolios"
+            )
+        taken[slug] = spec
+        targets.append((spec, slug))
+    return targets
+
+
+def _portfolio_run_argv(
+    args: argparse.Namespace, spec: Path, out_dir: Path, ledger: Path
+) -> list[str]:
+    """The `run` command line one spec in the batch is exported with.
+
+    Built as an argv and parsed by the real parser rather than assembled as a
+    Namespace, so every default comes from `run` itself. A flag added to `run`
+    later cannot silently take a different default inside a batch.
+    """
+
+    argv = [
+        "run",
+        "--config",
+        str(spec),
+        "--out",
+        str(out_dir),
+        "--ledger",
+        str(ledger),
+        "--locale",
+        args.locale,
+    ]
+    if args.reproducible:
+        argv.append("--reproducible")
+    if args.approved_by is not None:
+        argv += ["--approved-by", args.approved_by]
+    for pair in args.approve or []:
+        argv += ["--approve", pair]
+    if args.recipient is not None:
+        argv += ["--recipient", args.recipient]
+    if args.sign_key_file is not None:
+        argv += ["--sign-key-file", args.sign_key_file]
+    return argv
+
+
+def _portfolio_bundles(spec: Spec, out_dir: Path) -> list[tuple[str, Path]]:
+    """The `(title, directory)` pairs one spec's export wrote.
+
+    A multi-template spec writes one bundle per funder format into its own
+    subdirectory, so it contributes several rows to the index rather than one.
+    The index is a list of reports, and each of those is a report.
+    """
+
+    if not spec.report.templates:
+        return [(spec.report.title, out_dir)]
+    return [(template.title, out_dir / template.template_id) for template in spec.report.templates]
+
+
+def _portfolio_report(
+    spec_path: Path,
+    title: str,
+    bundle_dir: Path,
+    root: Path,
+    entry: LedgerEntry,
+) -> PortfolioReport:
+    """One index row, read back from what the export actually wrote."""
+
+    manifest = json.loads((bundle_dir / "receipts.json").read_text(encoding="utf-8"))
+    provenance = manifest.get("provenance", {})
+    approved_by = str(provenance.get("approved_by") or "")
+    bundle = json.loads((bundle_dir / _BUNDLE_NAME).read_text(encoding="utf-8"))
+    return PortfolioReport(
+        spec=str(spec_path),
+        directory=bundle_dir.relative_to(root).as_posix(),
+        title=title,
+        approved_by=approved_by,
+        bundle_digest=str(bundle.get("bundle_digest", "")),
+        signed="signature" in bundle,
+        ledger_index=entry.index,
+        ledger_entry_hash=entry.entry_hash,
+    )
+
+
+def _cmd_portfolio(args: argparse.Namespace) -> int:
+    """Run every spec through the ordinary export path, then record the batch.
+
+    No shortcut: each spec is exported by `run` itself, so the grounding gate,
+    the requirement-coverage refusal, suppression and the human sign-off all
+    apply exactly as they do to a single report. The first spec that does not
+    export stops the batch, names itself, and returns its own exit code, and no
+    portfolio record is written -- an index over a batch that did not finish
+    would say the portfolio is what it is not. The exports that already
+    succeeded stay on disk and stay in the ledger, because they happened.
+    """
+
+    root = Path(args.out)
+    ledger = Path(args.ledger) if args.ledger else root / "export-ledger.jsonl"
+    targets = _portfolio_targets(args.specs)
+    reports: list[PortfolioReport] = []
+    for spec_path, slug in targets:
+        out_dir = root / slug
+        before = len(read_ledger(ledger))
+        argv = _portfolio_run_argv(args, spec_path, out_dir, ledger)
+        run_args = build_parser().parse_args(argv)
+        if args.json:
+            # The batch's own JSON object is the only thing on stdout. Each run's
+            # human output would otherwise interleave with it; stderr is left
+            # alone, so a refusal still says why.
+            buffer = io.StringIO()
+            with contextlib.redirect_stdout(buffer):
+                code = int(run_args.func(run_args))
+        else:
+            print(f"\n=== {spec_path} ===")
+            code = int(run_args.func(run_args))
+        if code != EXIT_OK:
+            print(
+                f"\nportfolio: FAIL -- {spec_path} did not export (exit {code}); "
+                "no portfolio record was written",
+                file=sys.stderr,
+            )
+            return code
+        entries = read_ledger(ledger)[before:]
+        bundles = _portfolio_bundles(load_spec(spec_path), out_dir)
+        if len(entries) != len(bundles):  # pragma: no cover - defensive
+            print(
+                f"portfolio: FAIL -- {spec_path} wrote {len(bundles)} bundle(s) but "
+                f"{len(entries)} ledger entr(ies); no portfolio record was written",
+                file=sys.stderr,
+            )
+            return EXIT_VERIFY_FAIL
+        for (title, bundle_dir), entry in zip(bundles, entries, strict=True):
+            reports.append(_portfolio_report(spec_path, title, bundle_dir, root, entry))
+
+    index = PortfolioIndex(
+        reports=tuple(reports), ledger=os.path.relpath(ledger, root).replace(os.sep, "/")
+    )
+    path = write_index(root, index)
+    if args.json:
+        _emit_json(
+            {
+                "command": "portfolio",
+                "out": str(root),
+                "record": str(path),
+                "ledger": str(ledger),
+                "reports": [report.payload() for report in index.reports],
+            }
+        )
+        return EXIT_OK
+    print(f"\nportfolio: {len(reports)} report(s) exported")
+    print(f"  record: {path}")
+    print(f"  ledger: {ledger}")
+    print(f"  next:   receipts portfolio-verify --dir {root}")
+    return EXIT_OK
+
+
+def _verify_one_report(
+    report: PortfolioReport, root: Path, *, reproducible: bool
+) -> tuple[ReportVerification, dict[str, Any] | None]:
+    """Re-verify one report from its own spec, and hand back its manifest.
+
+    The manifest comes back so the shared-figure table is built from what each
+    report actually published rather than from a second computation. A report
+    that cannot be read at all is a failed row, not an aborted run: one broken
+    bundle must not hide the state of the others.
+    """
+
+    bundle_dir = root / report.directory
+    try:
+        spec, _rows, figures, _comparison, _reconciliation = _compute_all(
+            report.spec, reproducible=reproducible, quiet=True
+        )
+        suppressed, _suppression = suppress_figures(figures)
+        result = verify_bundle(
+            bundle_dir,
+            suppressed,
+            coverage=_requirement_coverage(spec, suppressed),
+            approval_policy=spec.report.approval,
+        )
+        bundle = json.loads((bundle_dir / _BUNDLE_NAME).read_text(encoding="utf-8"))
+        manifest = json.loads((bundle_dir / "receipts.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError, CoverageError, WorkflowError) as exc:
+        return ReportVerification(report, False, f"{type(exc).__name__}: {exc}"), None
+
+    seal = verify_signed_bundle(_bundle_members(bundle_dir), bundle)
+    recorded = str(bundle.get("bundle_digest", ""))
+    problems: list[str] = []
+    if not result.ok:
+        problems.append(_bundle_failure_reason(result))
+    if not seal.ok:
+        problems.append("the sealed bundle manifest does not match the files beside it")
+    if recorded != report.bundle_digest:
+        # Catches a wholesale replacement of bundle.json, which re-seals itself
+        # and would otherwise verify against its own new digest.
+        problems.append(
+            f"bundle digest {recorded or '(absent)'} does not match the "
+            f"{report.bundle_digest} recorded when the batch ran"
+        )
+    if problems:
+        return ReportVerification(report, False, "; ".join(problems)), manifest
+    return ReportVerification(report, True, "every receipt, artifact and seal holds"), manifest
+
+
+def _bundle_failure_reason(result: BundleResult) -> str:
+    """One sentence naming what in a bundle did not hold."""
+
+    reasons: list[str] = []
+    if not result.manifest.ok:
+        reasons.append(_verify_failure_reason(result.manifest))
+    if result.failed_artifacts:
+        reasons.append(
+            "artifact(s) changed after export: "
+            + ", ".join(check.path for check in result.failed_artifacts)
+        )
+    if not result.grounding.ok:
+        reasons.append(f"{len(result.grounding.unbound)} number(s) in report.md no longer bind")
+    if not result.coverage.ok:
+        reasons.append(result.coverage.detail)
+    if not result.approval.ok:
+        reasons.append(result.approval.detail)
+    return "; ".join(reasons) or "the bundle did not verify and no check says why"
+
+
+def _cmd_portfolio_verify(args: argparse.Namespace) -> int:
+    """Re-verify every bundle in a portfolio and render the auditor's index."""
+
+    root = Path(args.dir)
+    index = read_index(root)
+    verifications: list[ReportVerification] = []
+    manifests: list[tuple[str, dict[str, Any]]] = []
+    for report in index.reports:
+        verification, manifest = _verify_one_report(report, root, reproducible=args.reproducible)
+        verifications.append(verification)
+        if manifest is not None:
+            manifests.append((report.title, manifest))
+
+    shared = shared_figures(manifests)
+    page = root / PAGE_NAME
+    page.write_text(render_index_html(verifications, shared, locale=args.locale), encoding="utf-8")
+    ok = all(verification.ok for verification in verifications)
+
+    if args.json:
+        _emit_json(
+            {
+                "command": "portfolio-verify",
+                "ok": ok,
+                "dir": str(root),
+                "index": str(page),
+                "reports": [
+                    {
+                        "title": verification.report.title,
+                        "directory": verification.report.directory,
+                        "ok": verification.ok,
+                        "detail": verification.detail,
+                    }
+                    for verification in verifications
+                ],
+                "shared_figures": [figure.payload() for figure in shared],
+            }
+        )
+        return EXIT_OK if ok else EXIT_VERIFY_FAIL
+
+    for verification in verifications:
+        status = "ok" if verification.ok else "FAILED"
+        print(f"  [{status}] {verification.report.title}: {verification.detail}")
+    print(f"shared figures: {len(shared)}")
+    for figure in shared:
+        print(f"  {figure.metric_id}: {figure.status}")
+    print(f"index: {page}")
+    if ok:
+        print(f"\nportfolio-verify: PASS -- {len(verifications)} report(s) still verify")
+        return EXIT_OK
+    print("\nportfolio-verify: FAIL -- at least one report no longer verifies", file=sys.stderr)
+    return EXIT_VERIFY_FAIL
+
+
 def _cmd_cards(args: argparse.Namespace) -> int:
     current = write_cards(Path(args.out), check=args.check)
     if args.json:
@@ -2428,6 +2751,68 @@ def build_parser() -> argparse.ArgumentParser:
     verify_workflow_parser.add_argument("--artifact", required=True)
     verify_workflow_parser.set_defaults(func=_cmd_verify_workflow)
 
+    portfolio_parser = sub.add_parser(
+        "portfolio",
+        help="run several report specs through the ordinary export path as one batch",
+        parents=[json_parent],
+    )
+    portfolio_parser.add_argument(
+        "--specs",
+        required=True,
+        nargs="+",
+        metavar="TOML",
+        help="the report specs to export, in any order; the batch runs them by path",
+    )
+    portfolio_parser.add_argument(
+        "--out", required=True, help="the portfolio directory every report writes under"
+    )
+    portfolio_parser.add_argument(
+        "--ledger",
+        default=None,
+        help="the shared append-only export ledger (default: <out>/export-ledger.jsonl)",
+    )
+    portfolio_parser.add_argument(
+        "--approved-by",
+        metavar="NAME",
+        help="record NAME as the human approver of every report in the batch",
+    )
+    portfolio_parser.add_argument(
+        "--approve",
+        action="append",
+        metavar="ROLE:NAME",
+        help="record a sign-off for one role a spec's [approval] policy requires; "
+        "repeat once per role",
+    )
+    portfolio_parser.add_argument(
+        "--recipient",
+        default=None,
+        help="who the reports were exported to, recorded in the shared ledger",
+    )
+    portfolio_parser.add_argument(
+        "--locale", default="en", choices=("en", "es"), help="language for report prose"
+    )
+    portfolio_parser.add_argument(
+        "--sign-key-file", help="path to a key file; signs every bundle in the batch"
+    )
+    portfolio_parser.add_argument("--reproducible", action="store_true", help=argparse.SUPPRESS)
+    portfolio_parser.set_defaults(func=_cmd_portfolio)
+
+    portfolio_verify_parser = sub.add_parser(
+        "portfolio-verify",
+        help="re-verify every bundle in a portfolio and render the auditor's index",
+        parents=[json_parent],
+    )
+    portfolio_verify_parser.add_argument(
+        "--dir", required=True, help="the portfolio directory `receipts portfolio` wrote"
+    )
+    portfolio_verify_parser.add_argument(
+        "--locale", default="en", choices=("en", "es"), help="language for the index page"
+    )
+    portfolio_verify_parser.add_argument(
+        "--reproducible", action="store_true", help=argparse.SUPPRESS
+    )
+    portfolio_verify_parser.set_defaults(func=_cmd_portfolio_verify)
+
     cards_parser = sub.add_parser(
         "cards", help="generate or check the model and data cards", parents=[json_parent]
     )
@@ -2456,6 +2841,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         # measurement of a set that was never read.
         print(f"requirement coverage: FAIL — {exc}", file=sys.stderr)
         return EXIT_COVERAGE_FAIL
+    except PortfolioError as exc:
+        # An unreadable or contradictory portfolio is a refusal, not an empty
+        # portfolio: a verifier that read no reports has verified nothing, and a
+        # batch whose specs collide has not been run.
+        print(f"portfolio: FAIL -- {exc}", file=sys.stderr)
+        return EXIT_VERIFY_FAIL
     except ApprovalError as exc:
         # A sign-off that does not satisfy the spec's policy exits on the
         # approval code, because nothing was written and the reason is the same
