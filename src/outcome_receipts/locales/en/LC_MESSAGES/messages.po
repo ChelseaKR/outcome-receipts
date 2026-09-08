@@ -195,3 +195,78 @@ msgstr "No figure was written by a language model. The grounding gate passed: {b
 
 msgid "trace_provenance_fail_template"
 msgstr "No figure was written by a language model. The grounding gate did not pass: {bound} number(s) in the report bound to a receipt, {unbound} did not."
+
+msgid "portfolio_title"
+msgstr "Report portfolio: what exists and what still verifies"
+
+msgid "portfolio_intro"
+msgstr "Every report below was exported through the same gate: each figure was computed by a deterministic query and carries a receipt, no figure was written by a language model, and a named person signed the export off. This page composes what those exports already prove. It computes no figure of its own."
+
+msgid "portfolio_summary_template"
+msgstr "{verified} of {total} report(s) re-verified from their own spec and data."
+
+msgid "portfolio_reports_caption"
+msgstr "Reports in this portfolio"
+
+msgid "portfolio_header_report"
+msgstr "Report"
+
+msgid "portfolio_header_verification"
+msgstr "Verification"
+
+msgid "portfolio_header_approvers"
+msgstr "Signed off by"
+
+msgid "portfolio_header_signature"
+msgstr "Bundle signature"
+
+msgid "portfolio_header_bundle_digest"
+msgstr "Bundle digest"
+
+msgid "portfolio_header_ledger"
+msgstr "Export ledger"
+
+msgid "portfolio_status_verified"
+msgstr "Verified"
+
+msgid "portfolio_status_failed"
+msgstr "Did not verify"
+
+msgid "portfolio_signature_present"
+msgstr "Signed"
+
+msgid "portfolio_signature_absent"
+msgstr "Digests only"
+
+msgid "portfolio_ledger_entry_template"
+msgstr "Entry {index}"
+
+msgid "portfolio_shared_heading"
+msgstr "Figures more than one report states"
+
+msgid "portfolio_shared_caption"
+msgstr "Where these reports meet"
+
+msgid "portfolio_header_agreement"
+msgstr "Agreement"
+
+msgid "portfolio_header_stated_by"
+msgstr "Stated by"
+
+msgid "portfolio_agreement_agrees"
+msgstr "Same definition, same value"
+
+msgid "portfolio_agreement_definition_differs"
+msgstr "Definitions differ, so the values are not comparable"
+
+msgid "portfolio_agreement_value_differs"
+msgstr "Same definition, different values"
+
+msgid "portfolio_agreement_not_comparable"
+msgstr "Withheld in at least one report, so no comparison was made"
+
+msgid "portfolio_definitions_differ_note"
+msgstr "Each report states its own definition; see that report's receipts."
+
+msgid "portfolio_no_shared_figures"
+msgstr "No metric in this portfolio is stated by more than one report, so there is nothing to compare across them."

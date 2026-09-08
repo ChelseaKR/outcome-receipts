@@ -187,6 +187,7 @@ outcome-receipts/
 │   ├── ledger.py                  # hash-chained export history
 │   ├── diff.py                    # manifest comparison
 │   ├── scaffold.py                # fail-loud starter spec generation
+│   ├── portfolio.py               # a batch of specs, and the auditor's index over them
 │   ├── cards.py                   # generated model/data cards
 │   └── copy.py                    # EN/ES reviewer-facing strings
 ├── tests/                         # one module per source module, plus grounded-section tests
