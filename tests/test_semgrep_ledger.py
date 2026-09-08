@@ -21,6 +21,8 @@ from pathlib import Path
 
 from scripts.check_semgrep_waivers import (
     REVIEW_INTERVAL_DAYS,
+    SCAN_DIRS,
+    SCAN_SUFFIXES,
     find_suppressions,
     ledger_failures,
     main,
@@ -302,3 +304,43 @@ def test_the_committed_review_dates_appear_in_the_audits_document() -> None:
             f"{entry.rule_id}: the ledger records a review on "
             f"{entry.fields['last_reviewed']} that {_AUDITS} does not mention"
         )
+
+
+def test_the_documented_scan_scope_matches_the_code() -> None:
+    """The audit document and the CHANGELOG name this scope; the code defines it.
+
+    The first version of this check was described as comparing the ledger
+    "against the tree". It does not: it reads four directories and seven
+    suffixes, so a `nosemgrep` under `eval/`, `docs/`, `examples/` or at the
+    repository root is invisible to it while `make security-semgrep` still
+    scans those files. Both descriptions were narrowed to name the real scope.
+    This pins the two together, so widening or narrowing the code without
+    editing the prose fails here rather than quietly making the prose wrong
+    again.
+    """
+
+    assert SCAN_DIRS == ("src", "tests", "scripts", ".github")
+    assert frozenset({".py", ".mjs", ".js", ".sh", ".yml", ".yaml", ".toml"}) == SCAN_SUFFIXES
+
+    audits = (ROOT / "docs" / "RESPONSIBLE-TECH-AUDITS.md").read_text(encoding="utf-8")
+    for directory in SCAN_DIRS:
+        assert f"`{directory}/`" in audits, (
+            f"docs/RESPONSIBLE-TECH-AUDITS.md no longer names {directory}/ in the scan scope"
+        )
+    for suffix in SCAN_SUFFIXES:
+        assert f"`{suffix}`" in audits, (
+            f"docs/RESPONSIBLE-TECH-AUDITS.md no longer names {suffix} in the scan scope"
+        )
+
+
+def test_a_suppression_outside_the_scan_scope_is_not_claimed_to_be_caught() -> None:
+    """The gap the prose now admits, pinned as behaviour rather than left implicit.
+
+    A suppression under `eval/` passes this check. That is the limitation, and
+    it is a test so that closing the gap later is a deliberate edit here rather
+    than a silent change in what the audit document is allowed to say.
+    """
+
+    outside = ROOT / "eval"
+    assert outside.is_dir()
+    assert outside.name not in SCAN_DIRS
