@@ -136,11 +136,17 @@ are not inferred from automated results.
   review repeated both no-suppression scans: each rule still fires, so neither
   waiver can be retired. `make hygiene` now also runs
   `scripts/check_semgrep_waivers.py`, which compares `.semgrep-waivers.yml`
-  against the tree in both directions, so a ledger row cannot outlive the
-  suppression it documents and an undocumented suppression cannot be added.
-  Before it, both of those states passed every gate. That check also holds the
-  quarterly cadence issues 52 and 53 commit to: a `last_reviewed` date more than
-  92 days old fails the build naming its tracking issue, a date in the future is
+  against `src/`, `tests/`, `scripts/` and `.github/` in both directions, so
+  within those four directories a ledger row cannot outlive the suppression it
+  documents and an undocumented suppression cannot be added. Before it, both of
+  those states passed every gate. The scan is those four directories and the
+  suffixes `.py`, `.mjs`, `.js`, `.sh`, `.yml`, `.yaml` and `.toml`, which is
+  narrower than `make security-semgrep`, which scans the whole repository: a
+  suppression added under `eval/`, `docs/`, `examples/` or at the repository
+  root is not seen by this check, and that gap is why the sentence names its
+  scope rather than claiming the tree. That check also holds the quarterly
+  cadence issues 52 and 53 commit to: a `last_reviewed` date more than 92 days
+  old fails the build naming its tracking issue, a date in the future is
   refused, and a review date recorded here but not in the ledger — or in the
   ledger but not here — is reported as the two records disagreeing. Until then
   `last_reviewed` was parsed and discarded, so a waiver whose review had lapsed

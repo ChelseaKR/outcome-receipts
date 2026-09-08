@@ -10,6 +10,27 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Fixed
+- **The Semgrep waiver cross-check was described as scanning the tree, and scans
+  four directories.** `scripts/check_semgrep_waivers.py` reads `SCAN_DIRS =
+  ("src", "tests", "scripts", ".github")` over seven suffixes; `make
+  security-semgrep` scans the whole repository. So a suppression added under
+  `eval/`, `docs/`, `examples/` or at the repository root is invisible to the
+  cross-check, while `docs/RESPONSIBLE-TECH-AUDITS.md` said the comparison ran
+  "against the tree in both directions" — a stated scope wider than the code's,
+  which is the shape that makes a gate read as covering something it never
+  opened. The audit note now names the four directories and the suffixes, and
+  says which paths are outside them.
+  - Three tests pin it, so the sentence and the constants cannot drift apart
+    again: the documented scope must equal `SCAN_DIRS`/`SCAN_SUFFIXES`, a
+    suppression placed outside the scanned set must not be reported as caught,
+    and the file the scope exception exists for must still exist — an exception
+    for a file that has since been deleted is an exemption that exempts nothing
+    and only obscures the list.
+  - The `[0.2.1]` entry below is left as written. It is the record of what that
+    release claimed; the correction belongs here rather than in a section that
+    has shipped.
+
 ### Added
 - **`receipts portfolio` and `receipts portfolio-verify`: a batch of specs, and
   the single page an auditor enters through.** An organization publishing a
