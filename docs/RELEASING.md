@@ -103,3 +103,22 @@ in a new pull request and create a new version tag. If publication partially
 succeeds, rerun only after confirming the tag object is unchanged; the
 workflow replaces GitHub release assets with the same verified bytes, and
 PyPI rejects an already-published filename outright.
+
+## The check that would have caught `v0.2.0`
+
+Step 5 above — confirm the GitHub release, the attestations, the SBOM and the
+PyPI files all correspond — is a person's step, and on 2026-08-16 it was not
+taken. Nothing in the repository noticed for nine days, because the job that
+would have noticed (`verify-published`) was cancelled by the same stop that
+cancelled the publish it was there to verify.
+
+`.github/workflows/release-reality.yml` asks the same question weekly, from
+outside the release run and from two public documents: the repository's
+releases, and the PEP 691 simple-API listing for the distribution. It needs
+nothing from the run that published, so it cannot share that run's failure
+mode. `scripts/check_release_reality.py` decides, and it has three answers
+rather than two — a document it could not read is **unmeasurable** and exits 2,
+which is neither a pass nor a finding.
+
+It will stay red until a release reaches the index. That is the state it exists
+to report, not a defect in the commit it runs against.

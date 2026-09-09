@@ -58,6 +58,39 @@ release-hardening work completed before the first public tag.
     has shipped.
 
 ### Added
+- **`release reality`: a weekly check that every published release is actually
+  on the index.** `v0.2.0` is a signed GitHub release with its full attested
+  asset set and it is not on PyPI. The run that cut it did not fail: it
+  succeeded four jobs deep, then `pypi-publish` sat at the `pypi` environment's
+  required review for thirteen days and was cancelled -- taking
+  `verify-published`, the job that would have reported the gap, with it. **The
+  check and the thing it checks shared a failure mode**, a `cancelled` run is
+  not a `failure`, and nothing alerted; the gap was found nine days later by a
+  portfolio-wide sweep rather than by anything here (#173).
+  - `scripts/check_release_reality.py` compares two public documents -- the
+    repository's GitHub releases and the PEP 691 simple-API listing for this
+    distribution -- and reports three outcomes, not two. Every published
+    release on the index is `ok`; one that is not is exit 1, naming it; and a
+    document that did not parse, carried no `versions` list, declared a
+    simple-API major this script does not read, or held a release tag it could
+    not read as a version is **unmeasurable**, exit 2. Unmeasurable is never a
+    pass and is never reported as a finding either.
+  - Both documents are fetched by the workflow rather than by the checker, so a
+    failed fetch fails in `curl`'s and `gh`'s own words and with their own
+    status codes, and the checker stays a pure function of two files that
+    `tests/test_release_reality.py` drives over fixtures. The listing is
+    `https://pypi.org/simple/<name>/`, not `https://pypi.org/project/<name>/`,
+    which answers an automated caller with HTTP 200 and a bot-detection page.
+  - It runs on a schedule and on dispatch, and deliberately not on `push` or
+    `pull_request`: it is a statement about what has been published, not about
+    a diff. **It is expected to be red until a release reaches the index**, and
+    that red is the finding rather than a defect in any commit. `v0.2.0` cannot
+    be re-dispatched -- its tagged tree pins a base image with nine HIGH
+    advisories, so its own `verify` job refuses -- so the route to the index is
+    a new tag, and cutting one is the maintainer's.
+  - Measured against the live APIs on 2026-09-09: **1 of 2 published releases
+    are on the index.** The fixtures reproduce that state as literals rather
+    than fetching it, so the test does not go green the day it is fixed.
 - **`receipts portfolio` and `receipts portfolio-verify`: a batch of specs, and
   the single page an auditor enters through.** An organization publishing a
   grant report, a board report and a funder template holds three output

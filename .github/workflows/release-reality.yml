@@ -1,0 +1,78 @@
+name: release reality
+
+# Asks, from outside the release run, whether every release this repository has
+# published is actually on the package index.
+#
+# `v0.2.0` is a signed GitHub release with its full attested asset set and is
+# not on PyPI. The run that cut it did not fail: it succeeded four jobs deep and
+# then `pypi-publish` sat at the `pypi` environment's required review for
+# thirteen days and was cancelled — taking `verify-published`, the job that
+# would have reported the gap, with it. A `cancelled` run is not a `failure`, so
+# nothing alerted, and the gap was found nine days later by a portfolio-wide
+# sweep. Issue #173 records it.
+#
+# This runs on a schedule and on dispatch, and deliberately **not** on push or
+# pull_request: it is a statement about what has been published, not about a
+# commit, and it must never turn a pull request red for a fact that has nothing
+# to do with the diff in it.
+#
+# It is expected to be RED until a release reaches the index. That is the
+# finding, not a defect: `v0.2.0` cannot be re-dispatched (the tagged tree pins
+# a base image with nine HIGH advisories, so its own `verify` job refuses), so
+# the route to the index is a new tag, and cutting one is the maintainer's.
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Same keying as ci.yml, standards.yml and scorecard.yml, for the reason
+  # measured there: a group holds one running and one pending run, so a third
+  # joining it cancels the pending one before a single job dispatches, and that
+  # run ends `cancelled` with no verdict. Nothing else writes to this group
+  # today; keying it on the SHA costs nothing and cannot become the same trap.
+  group: release-reality-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  index:
+    name: the index serves what was released
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          persist-credentials: false
+
+      # Both documents are fetched here rather than inside the checker, so a
+      # failed fetch fails in curl's and gh's own words and with their own
+      # status codes. `curl -f` is what makes an HTTP error an error instead of
+      # an error page written to the file the checker then reads.
+      #
+      # The index document is the PEP 691 simple API, not
+      # `https://pypi.org/project/<name>/`, which answers an automated caller
+      # with HTTP 200 and a bot-detection page.
+      - name: Fetch the published releases and the index listing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          DISTRIBUTION: outcome-receipts
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${REPOSITORY}/releases" > releases.json
+          curl -fsS --retry 3 --retry-connrefused \
+            -H 'Accept: application/vnd.pypi.simple.v1+json' \
+            "https://pypi.org/simple/${DISTRIBUTION}/" > index.json
+          test -s releases.json
+          test -s index.json
+
+      # Exit 1 is "a published release is not on the index"; exit 2 is "this run
+      # could not tell". The second is not a pass, and the workflow fails on
+      # either — but the message says which, so a reader is never left deciding
+      # whether an unreadable document meant the index was fine.
+      - name: Every published release is on the index
+        run: python3 scripts/check_release_reality.py --releases releases.json --index index.json
