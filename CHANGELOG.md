@@ -10,6 +10,32 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Security
+- **`js-yaml` 3.15.1 -> 3.15.2 and 4.3.1 -> 4.3.2 (`GHSA-2883-XCG3-V3HH`,
+  high), which is what `make security-npm` was refusing.** The advisory was
+  published 2026-09-08 at 21:24 UTC; `verify` last passed on `main` at
+  `228a51f` at 02:32 UTC the same day, against this same `package-lock.json`.
+  The gate went red on the advisory database moving, not on a commit, which is
+  why it was found by an unrelated documentation PR (#188) rather than by the
+  change that caused it -- there was none.
+  - **Both copies are development-only and neither reads untrusted input**, and
+    that is worth writing down rather than assuming, because it is the question
+    that decides whether a waiver would have been defensible. `js-yaml@3` is
+    reached through `@lhci/utils` <- `@lhci/cli`, and this repository configures
+    Lighthouse CI with `lighthouserc.cjs` -- JavaScript, not YAML. `js-yaml@4`
+    is reached through `cosmiconfig` <- `puppeteer`, which searches for a
+    `.puppeteerrc` this repository does not have. The advisory is CPU
+    exhaustion on a hostile document; nothing in the `a11y` gate hands either
+    parser a document it did not author.
+  - The fix is six lines of `package-lock.json`, so no waiver was warranted and
+    none was added. `waivers.yml` still holds no `npm-audit` entry.
+  - **Only the two `js-yaml` entries moved.** `npm update js-yaml
+    --package-lock-only` also prunes 24 stale `puppeteer`/`puppeteer-core`
+    proxy-agent nodes, and a plain `npm install --package-lock-only` on
+    unmodified `main` prunes exactly the same 24 -- so that churn is
+    pre-existing lock drift, unrelated to this advisory, and is left for a
+    change that can be reviewed on its own terms.
+
 ### Fixed
 - **The Semgrep waiver cross-check was described as scanning the tree, and scans
   four directories.** `scripts/check_semgrep_waivers.py` reads `SCAN_DIRS =
