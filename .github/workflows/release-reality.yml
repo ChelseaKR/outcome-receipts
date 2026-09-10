@@ -1,7 +1,15 @@
 name: release reality
 
-# Asks, from outside the release run, whether every release this repository has
-# published is actually on the package index.
+# Follows a release from the changelog to the package index, from outside the
+# release run, and says where it stopped.
+#
+# Three links, because a release can stop at any of them: a dated changelog
+# section must have a tag, a stable tag must have a published GitHub release,
+# and a published release's version must be on the index. Measured across this
+# portfolio on 2026-09-09, 43 repositories have release or publish CI, 21 have
+# ever published a release, and 22 have the machinery and have never once
+# produced one — so "the workflow exists" is worth nothing as a signal, and
+# neither is any one link.
 #
 # `v0.2.0` is a signed GitHub release with its full attested asset set and is
 # not on PyPI. The run that cut it did not fail: it succeeded four jobs deep and
@@ -56,7 +64,7 @@ jobs:
       # The index document is the PEP 691 simple API, not
       # `https://pypi.org/project/<name>/`, which answers an automated caller
       # with HTTP 200 and a bot-detection page.
-      - name: Fetch the published releases and the index listing
+      - name: Fetch the releases, the tags and the index listing
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -64,15 +72,29 @@ jobs:
         run: |
           set -euo pipefail
           gh api --paginate "repos/${REPOSITORY}/releases" > releases.json
+          gh api --paginate "repos/${REPOSITORY}/tags" > tags.json
           curl -fsS --retry 3 --retry-connrefused \
             -H 'Accept: application/vnd.pypi.simple.v1+json' \
             "https://pypi.org/simple/${DISTRIBUTION}/" > index.json
           test -s releases.json
+          test -s tags.json
           test -s index.json
 
-      # Exit 1 is "a published release is not on the index"; exit 2 is "this run
-      # could not tell". The second is not a pass, and the workflow fails on
-      # either — but the message says which, so a reader is never left deciding
-      # whether an unreadable document meant the index was fine.
-      - name: Every published release is on the index
-        run: python3 scripts/check_release_reality.py --releases releases.json --index index.json
+      # Exit 1 is "a release stopped at a link"; exit 2 is "this run could not
+      # tell". The second is not a pass, and the workflow fails on either — but
+      # the message says which, so a reader is never left deciding whether an
+      # unreadable document meant the chain was intact. Each link prints both
+      # of its numbers, so a link that examined nothing cannot read like a link
+      # that held.
+      #
+      # The changelog is read out of the checkout above. No asset is read from
+      # anything: a release with zero assets is not a failed release — two
+      # repositories in this portfolio publish source-only releases on purpose
+      # — and what is followed here is the version, not the artifact.
+      - name: Every release reached the index
+        run: |
+          python3 scripts/check_release_reality.py \
+            --releases releases.json \
+            --tags tags.json \
+            --index index.json \
+            --changelog CHANGELOG.md

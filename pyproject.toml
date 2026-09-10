@@ -83,6 +83,21 @@ python_version = "3.12"
 strict = true
 files = ["src", "tests"]
 
+# `scripts/` is checked by its own invocation -- `mypy --strict scripts`, the
+# second line of the `type` target -- because a single run over both roots
+# fails with "Source file found twice under different module names". The
+# scripts import each other by their top-level names, the way the workflows run
+# them (`from check_conformance import ...`, `from check_release_version import
+# ...`), and this run has no root under which those names resolve. It reaches
+# them only by following a test's `from scripts.<name> import ...`.
+#
+# So the bare name is unresolvable *here* and fully checked *there*. Silencing
+# it in this run is the same trade the two invocations already make; narrowing
+# the override to the one module keeps every other missing import loud.
+[[tool.mypy.overrides]]
+module = "check_release_version"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
