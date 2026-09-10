@@ -103,3 +103,37 @@ in a new pull request and create a new version tag. If publication partially
 succeeds, rerun only after confirming the tag object is unchanged; the
 workflow replaces GitHub release assets with the same verified bytes, and
 PyPI rejects an already-published filename outright.
+
+## The check that would have caught `v0.2.0`
+
+Step 5 above — confirm the GitHub release, the attestations, the SBOM and the
+PyPI files all correspond — is a person's step, and on 2026-08-16 it was not
+taken. Nothing in the repository noticed for nine days, because the job that
+would have noticed (`verify-published`) was cancelled by the same stop that
+cancelled the publish it was there to verify.
+
+`.github/workflows/release-reality.yml` asks weekly, from outside the release
+run, and follows a release through **three links** rather than one:
+
+| link | what it reads | how a release stops here |
+|---|---|---|
+| a dated changelog section has a tag | `CHANGELOG.md`, `GET /repos/…/tags` | the section was promoted and the tag was never cut, so a pin written against the version resolves to nothing |
+| a stable tag has a published release | `GET /repos/…/tags`, `GET /repos/…/releases` | the tag was pushed and the dispatch in step 4 never ran — pushing a tag alone starts nothing |
+| a published release is on the index | `GET /repos/…/releases`, `https://pypi.org/simple/outcome-receipts/` | the dispatch ran and `pypi-publish` was never approved: **this is `v0.2.0`** |
+
+It needs nothing from the run that published, so it cannot share that run's
+failure mode. `scripts/check_release_reality.py` decides, prints both numbers
+for every link, and has three answers rather than two — a document it could
+not read is **unmeasurable** and exits 2, which is neither a pass nor a
+finding.
+
+Two things it deliberately does not do. It does not read a release's
+**assets**: a release with none is not a failed release, two repositories in
+this portfolio publish source-only releases on purpose, and what is being
+followed is the version. And it does not read
+`https://pypi.org/project/<name>/`, which answers an automated caller with
+HTTP 200 and a bot-detection page; the simple API returns 404 for a
+distribution that is absent, which is an answer.
+
+It will stay red until every link holds. That is the state it exists to
+report, not a defect in the commit it runs against.
