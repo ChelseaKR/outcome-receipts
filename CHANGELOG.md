@@ -10,33 +10,6 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
-### Added
-- **`receipts run --format docx` writes `report.docx` beside `report.md`, and the
-  grounding gate runs over the document's own bytes (#159).** Funder portals take
-  Word files, and pasting `report.md` into Word was the one step after the gate
-  where a number could change. The document is rendered from the finished report
-  text, read back out of its bytes, and held to four checks before anything is
-  written: it says what `report.md` renders to, block for block; it carries the
-  same digits, and the same number of `[SUPPRESSED]` markers, as `report.md`'s raw
-  text; and its own narrative grounds. A refusal exits 2 and writes nothing, to
-  disk or to the ledger. `verify --bundle` runs the same check on the file a
-  bundle holds, and fails a `report.docx` the manifest does not attest. See
-  [ADR 0014](docs/decisions/0014-the-word-export-is-gated-on-its-own-bytes.md).
-  - **Compatible.** `receipts.json`'s `artifacts` map gains a `report.docx` key
-    only when the flag is given. The map was already open, so receipts manifest
-    `2.0` is unchanged, and without the flag every artifact is byte-identical to
-    before. A verifier older than this change checks the document's digest and
-    does not read it.
-  - Charts are not embedded: each becomes a sentence naming its SVG in the
-    export, followed by the data table `report.md` already carries. The Spanish
-    form of that sentence is a new catalog entry no native speaker has read.
-  - `export --from out/` is not built. Adding a document to a sealed bundle means
-    rewriting the manifest the export ledger recorded; ADR 0014 says why that is
-    left open.
-  - The document can refuse a narrative the Markdown gate passes: a template
-    reading `**{metric}**%` binds `12` in `report.md` and says `12%` in the
-    document. Issue #191 records the Markdown half.
-
 ### Security
 - **`js-yaml` 3.15.1 -> 3.15.2 and 4.3.1 -> 4.3.2 (`GHSA-2883-XCG3-V3HH`,
   high), which is what `make security-npm` was refusing.** The advisory was
@@ -85,6 +58,31 @@ release-hardening work completed before the first public tag.
     has shipped.
 
 ### Added
+- **`receipts run --format docx` writes `report.docx` beside `report.md`, and the
+  grounding gate runs over the document's own bytes (#159).** Funder portals take
+  Word files, and pasting `report.md` into Word was the one step after the gate
+  where a number could change. The document is rendered from the finished report
+  text, read back out of its bytes, and held to four checks before anything is
+  written: it says what `report.md` renders to, block for block; it carries the
+  same digits, and the same number of `[SUPPRESSED]` markers, as `report.md`'s raw
+  text; and its own narrative grounds. A refusal exits 2 and writes nothing, to
+  disk or to the ledger. `verify --bundle` runs the same check on the file a
+  bundle holds, and fails a `report.docx` the manifest does not attest. See
+  [ADR 0014](docs/decisions/0014-the-word-export-is-gated-on-its-own-bytes.md).
+  - **Compatible.** `receipts.json`'s `artifacts` map gains a `report.docx` key
+    only when the flag is given. The map was already open, so receipts manifest
+    `2.0` is unchanged, and without the flag every artifact is byte-identical to
+    before. A verifier older than this change checks the document's digest and
+    does not read it.
+  - Charts are not embedded: each becomes a sentence naming its SVG in the
+    export, followed by the data table `report.md` already carries. The Spanish
+    form of that sentence is a new catalog entry no native speaker has read.
+  - `export --from out/` is not built. Adding a document to a sealed bundle means
+    rewriting the manifest the export ledger recorded; ADR 0014 says why that is
+    left open.
+  - The document can refuse a narrative the Markdown gate passes: a template
+    reading `**{metric}**%` binds `12` in `report.md` and says `12%` in the
+    document. Issue #191 records the Markdown half.
 - **`receipts portfolio` and `receipts portfolio-verify`: a batch of specs, and
   the single page an auditor enters through.** An organization publishing a
   grant report, a board report and a funder template holds three output
