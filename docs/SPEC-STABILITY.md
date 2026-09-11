@@ -238,3 +238,17 @@ satisfiable by a different invocation. `migrate-check` and `rollup` are not
 covered. `migrate-check` reads two specs and there is no settled answer to which
 one's policy governs a comparison between them; `rollup` reads a plan rather
 than a spec and has no policy to read. Both still take `--approved-by`.
+
+## Receipts manifest 2.0: `artifacts` may name `report.docx`
+
+`run --format docx` records `report.docx` in `artifacts` beside `report.md`,
+`trace.html` and each chart. This is **compatible** and needs no version change:
+`artifacts` was already a map from any bundle-relative path to a digest, so a
+consumer validating against the published `2.0` schema accepts it, and a run
+without the flag writes the map exactly as before.
+
+What an older verifier does with it is worth stating, because it is less than
+the current one. A verifier from before this change checks the document's
+sha256 like any other artifact and stops there: it does not read the document,
+compare it with `report.md`, or ground its narrative. The current verifier does
+all three, and it also fails a `report.docx` the manifest does not attest.

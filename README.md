@@ -177,6 +177,14 @@ It writes `out/report.md` (the narrative, provenance, and receipts appendix),
 export). Runs also append to `export-ledger.jsonl` by default. Specs with charts
 add accessible SVG files under `out/charts/`.
 
+Funder portals that want Word get it from the same run: `--format docx` also
+writes `out/report.docx`, rendered from `report.md` and gated again on the
+document's own bytes. It has to say what `report.md` says and its narrative has
+to ground, or the run writes nothing and exits 2; `receipts verify --bundle`
+holds it to the same check later. Charts appear as their data tables, with a
+sentence naming the SVG in the export. See
+[ADR 0014](docs/decisions/0014-the-word-export-is-gated-on-its-own-bytes.md).
+
 A spec may also bind the funder's requirement document. Then the export must
 account for every requirement in it — answered by a metric, withheld because
 small-cell suppression hid the cell, or declared unanswerable with a blocker

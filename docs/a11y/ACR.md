@@ -25,6 +25,15 @@ Supports, Partially Supports, Does Not Support, and Not Applicable.
 | 3.3.7 Redundant Entry | Not Applicable | No data entry. |
 | 3.3.8 Accessible Authentication | Not Applicable | No authentication. |
 
+## Word export
+
+`run --format docx` writes a Word document this report does not evaluate. It is
+built for assistive technology -- heading styles carrying outline levels, a
+header row marked to repeat on every page of a table, bulleted lists as real
+list paragraphs, the document language and title set, and every chart given as
+its data table rather than an image -- but no screen reader, Word accessibility
+checker, or person has been through it. Treat it as unevaluated.
+
 ## Known gap
 
 Manual VoiceOver and NVDA task walkthroughs are tracked in

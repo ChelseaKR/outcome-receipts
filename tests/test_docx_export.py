@@ -540,6 +540,32 @@ def test_a_spanish_export_is_a_spanish_document(tmp_path: Path) -> None:
     assert "Gráfico no incrustado en este documento" in read.text
 
 
+def test_the_document_gates_the_number_a_reader_sees_where_markup_changed_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``**12**%`` is ``12`` to a scan of raw Markdown and ``12%`` to anyone reading it.
+
+    The document is what the funder reads, so its reading is the one gated, and a
+    count published as a percent binds to no receipt. Issue 191 records that the
+    Markdown gate reads the raw ``12`` instead.
+    """
+
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+    (spec_dir / "services.csv").write_bytes((HOUSING.parent / "services.csv").read_bytes())
+    spec = HOUSING.read_text(encoding="utf-8")
+    old = "served {clients_served} clients"
+    assert spec.count(old) == 1
+    marked_up = spec.replace(old, "served **{clients_served}**% of its clients")
+    (spec_dir / "report.toml").write_text(marked_up, encoding="utf-8")
+
+    capsys.readouterr()
+    out = tmp_path / "out"
+    assert _run(spec_dir / "report.toml", out, "--format", "docx", "--json") == EXIT_GATE_FAIL
+    document = json.loads(capsys.readouterr().out)["document"]
+    assert [span["text"] for span in document["grounding"]["unbound"]] == ["12%"]
+
+
 # --- the checks that do not trust the renderer -----------------------------------------------
 
 
