@@ -35,6 +35,7 @@ from outcome_receipts.docx import (
     DocxError,
     Table,
     document_blocks,
+    narrative_text,
     read_docx,
     render_docx,
 )
@@ -95,15 +96,18 @@ def _repack(
     edit: Callable[[str, bytes], bytes] = lambda _name, content: content,
     *,
     extra: tuple[tuple[str, bytes], ...] = (),
+    omit: tuple[str, ...] = (),
     compression: int = zipfile.ZIP_STORED,
 ) -> bytes:
-    """The same document with one part edited, a part added, or its entries recompressed."""
+    """The same document with a part edited, added or left out, or its entries recompressed."""
 
     buffer = io.BytesIO()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # zipfile warns about a duplicate name, on purpose here
         with zipfile.ZipFile(buffer, "w") as archive:
             for info, content in _parts(data):
+                if info.filename in omit:
+                    continue
                 info.compress_type = compression
                 archive.writestr(info, edit(info.filename, content))
             for name, content in extra:
@@ -448,6 +452,10 @@ REFUSALS: dict[str, tuple[Callable[[bytes], bytes], str]] = {
         lambda data: _repack(data, extra=(("word/footer1.xml", b"<w:ftr/>"),)),
         "carries a part this tool never writes: word/footer1.xml",
     ),
+    "a part missing": (
+        lambda data: _repack(data, omit=("word/numbering.xml",)),
+        "lacks a part this tool always writes: word/numbering.xml",
+    ),
     "a part named twice": (
         lambda data: _repack(data, extra=(("word/document.xml", b"<x/>"),)),
         "names a part more than once: word/document.xml",
@@ -499,6 +507,30 @@ def test_the_reader_refuses_what_this_tool_never_writes(demo_document: bytes, ca
     assert tampered != demo_document
     with pytest.raises(DocxError, match=re.escape(words)):
         read_docx(tampered)
+
+
+def test_a_document_the_reader_refuses_fails_verify_by_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Through ``verify --bundle``, not only through the reader: unreadable is a named failure."""
+
+    out = _export(tmp_path)
+    data = (out / DOCX_NAME).read_bytes()
+    (out / DOCX_NAME).write_bytes(_repack(data, extra=(("word/footer1.xml", b"<w:ftr/>"),)))
+    _reattest(out)
+    code, payload = _verify(HOUSING, out, capsys)
+    document = _document(payload)
+    assert code == EXIT_VERIFY_FAIL
+    assert document["grounding"] is None
+    assert "is not a document this tool wrote" in document["detail"]
+    assert "word/footer1.xml" in document["detail"]
+
+
+def test_the_narrative_runs_to_the_end_of_a_document_with_no_section_heading() -> None:
+    """Every report has sections, but a region reader must not need one to stop."""
+
+    blocks = document_blocks("# Title\n\nServed 12.\n\n- a list item 3", locale="en")
+    assert narrative_text(blocks) == "Served 12.\na list item 3"
 
 
 def test_the_reader_decodes_a_number_written_as_character_references(
