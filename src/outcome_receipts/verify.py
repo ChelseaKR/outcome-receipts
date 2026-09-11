@@ -17,18 +17,29 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 from outcome_receipts.coverage import RequirementCoverage
+from outcome_receipts.docx import (
+    DOCX_NAME,
+    Block,
+    DocxError,
+    DocxText,
+    document_blocks,
+    document_title,
+    read_docx,
+)
 from outcome_receipts.grounding import ground
 from outcome_receipts.models import (
     EMPTY_SLICE_HASH,
     HASH_ALGORITHM,
     HASH_CANONICALIZATION,
     HASH_DIGEST_SIZE,
+    REDACTED_DISPLAY,
     SCHEMA_VERSION,
     SUPPORTED_SCHEMA_VERSIONS,
     ApprovalPolicy,
@@ -321,6 +332,23 @@ class ApprovalCheck:
 
 
 @dataclass(frozen=True)
+class DocumentCheck:
+    """Whether ``report.docx`` says what ``report.md`` says, and its narrative grounds.
+
+    ``checked`` is false only when the bundle holds no document export and the
+    manifest attests none: nothing was compared, which is a different fact from
+    "the comparison passed". ``grounding`` is the gate's result over the
+    narrative read back out of the document's own bytes, and ``None`` when the
+    document could not be read at all.
+    """
+
+    checked: bool
+    ok: bool
+    detail: str
+    grounding: GroundingResult | None = None
+
+
+@dataclass(frozen=True)
 class BundleResult:
     """The whole-bundle verification: receipts, artifact digests, and grounding.
 
@@ -330,9 +358,11 @@ class BundleResult:
     re-derives the requirement coverage record and compares it, including the
     digest of the requirement document, so an edit to that document after export
     is caught. ``approval`` re-reads the spec's sign-off policy and checks the
-    recorded approvals against it. The bundle is ``ok`` only when all five hold,
-    so any drift, swap, ungrounded number, moved requirement, or sign-off that no
-    longer satisfies the policy fails closed.
+    recorded approvals against it. ``document`` reads ``report.docx`` back out of
+    its bytes, when the export wrote one, and holds it to ``report.md`` and to the
+    gate. The bundle is ``ok`` only when all six hold, so any drift, swap,
+    ungrounded number, moved requirement, sign-off that no longer satisfies the
+    policy, or document that no longer says what its report says fails closed.
     """
 
     manifest: VerifyResult
@@ -340,6 +370,7 @@ class BundleResult:
     grounding: GroundingResult
     coverage: CoverageCheck = CoverageCheck(False, True, "no requirement binding to check")
     approval: ApprovalCheck = ApprovalCheck(False, True, "no approval policy to check")
+    document: DocumentCheck = DocumentCheck(False, True, "no document export to check")
 
     @property
     def ok(self) -> bool:
@@ -349,6 +380,7 @@ class BundleResult:
             and self.grounding.ok
             and self.coverage.ok
             and self.approval.ok
+            and self.document.ok
         )
 
     @property
@@ -515,6 +547,127 @@ def _check_approval(manifest: Mapping[str, Any], policy: ApprovalPolicy | None) 
     )
 
 
+def _excerpt(text: str, start: int) -> str:
+    begin = max(0, start - 20)
+    end = start + 40
+    return ("…" if begin else "") + repr(text[begin:end]) + ("…" if end < len(text) else "")
+
+
+def _first_difference(expected: Sequence[Block], found: Sequence[Block]) -> str | None:
+    """Where a document first stops saying what ``report.md`` says, or ``None``."""
+
+    for index, (want, got) in enumerate(zip(expected, found, strict=False), start=1):
+        if want == got:
+            continue
+        if want.text == got.text:
+            return f"block {index} has report.md's text in a different form"
+        start = next(
+            (i for i, (a, b) in enumerate(zip(want.text, got.text, strict=False)) if a != b),
+            min(len(want.text), len(got.text)),
+        )
+        return (
+            f"block {index} reads {_excerpt(got.text, start)} where report.md has "
+            f"{_excerpt(want.text, start)}"
+        )
+    if len(expected) != len(found):
+        return f"it has {len(found)} block(s) where report.md renders {len(expected)}"
+    return None
+
+
+def _digits(text: str) -> Counter[str]:
+    return Counter(character for character in text if character.isdecimal())
+
+
+def _document_problems(read: DocxText, report_text: str) -> list[str]:
+    """Every way a document stops saying what ``report.md`` says.
+
+    Three comparisons, and the last two do not trust the first. The blocks are
+    compared with the ones ``report.md`` renders to, character for character.
+    The digits are compared with ``report.md``'s raw text, so a renderer that
+    lost a number could not also hide it by leaving it out of the blocks it
+    expects. The redaction marker is counted against the raw text the same way,
+    so a withheld cell cannot drop out of the document unnoticed.
+    """
+
+    expected = document_blocks(report_text, locale=read.language)
+    problems: list[str] = []
+    difference = _first_difference(expected, read.blocks)
+    if difference is not None:
+        problems.append(f"it does not say what report.md says: {difference}")
+    title = document_title(expected)
+    if read.title != title:
+        problems.append(f"its title {read.title!r} is not report.md's {title!r}")
+    if _digits(read.text) != _digits(report_text):
+        problems.append("it does not carry the same digits as report.md")
+    shown, marked = read.text.count(REDACTED_DISPLAY), report_text.count(REDACTED_DISPLAY)
+    if shown != marked:
+        problems.append(
+            f"it shows {REDACTED_DISPLAY} {shown} time(s) where report.md shows it {marked}"
+        )
+    return problems
+
+
+def check_document(document: bytes, report_text: str, figures: Sequence[Figure]) -> DocumentCheck:
+    """Hold a Word export to the report it was rendered from, and to the gate.
+
+    The document is read back out of its bytes -- never taken from the object
+    that rendered it, which could not disagree with itself -- and compared with
+    what ``report_text`` renders to. Its own narrative is then grounded against
+    ``figures``: the numbers a funder reads in the document, not the ones in the
+    Markdown beside it. ``run --format docx`` calls this before it writes
+    anything, and ``verify --bundle`` calls it again on the file the bundle holds.
+    """
+
+    try:
+        read = read_docx(document)
+    except DocxError as exc:
+        return DocumentCheck(True, False, f"{DOCX_NAME} is not a document this tool wrote: {exc}")
+    problems = _document_problems(read, report_text)
+    grounding = ground(read.narrative, figures)
+    if not grounding.ok:
+        unbound = ", ".join(repr(span.text) for span in grounding.unbound)
+        problems.append(
+            f"{len(grounding.unbound)} number(s) in its narrative bind to no receipt: {unbound}"
+        )
+    if problems:
+        return DocumentCheck(True, False, f"{DOCX_NAME}: " + "; ".join(problems), grounding)
+    return DocumentCheck(
+        True,
+        True,
+        f"{DOCX_NAME} says what report.md says; its narrative grounds "
+        f"{len(grounding.bound)} of {grounding.total} number(s)",
+        grounding,
+    )
+
+
+def _check_bundle_document(
+    bundle_dir: Path,
+    manifest: Mapping[str, Any],
+    report_text: str,
+    figures: Sequence[Figure],
+) -> DocumentCheck:
+    """The document check for a bundle, in both directions.
+
+    A ``report.docx`` the manifest does not attest is a failure rather than an
+    unchecked extra: nothing in the export says this run wrote it, so a reader
+    holding it has no receipt for it. An attested one that is missing is a
+    failure too, and the artifact check names it as well.
+    """
+
+    artifacts = manifest.get("artifacts")
+    attested = isinstance(artifacts, Mapping) and DOCX_NAME in artifacts
+    path = bundle_dir / DOCX_NAME
+    if not attested and not path.is_file():
+        return DocumentCheck(False, True, "no document export to check")
+    if not attested:
+        return DocumentCheck(
+            True, False, f"{DOCX_NAME} is in the bundle but the manifest does not attest it"
+        )
+    if not path.is_file():
+        return DocumentCheck(True, False, f"the manifest attests {DOCX_NAME} but it is missing")
+    return check_document(path.read_bytes(), report_text, figures)
+
+
 def verify_bundle(
     bundle_dir: Path,
     figures: Sequence[Figure],
@@ -529,7 +682,9 @@ def verify_bundle(
     ``trace.html``, or chart SVG is caught; and it re-runs the grounding gate over
     the exported narrative, so a number that no longer binds to a receipt is
     caught. It fails closed: a manifest with no ``artifacts`` key is an error, and
-    a missing artifact file is a failure.
+    a missing artifact file is a failure. When the manifest attests
+    ``report.docx``, the document is read back out of its bytes and held to
+    ``report.md`` and to the gate; a ``report.docx`` it does not attest fails.
     """
 
     bundle_dir = Path(bundle_dir)
@@ -546,4 +701,5 @@ def verify_bundle(
         grounding,
         _check_coverage(manifest, coverage),
         _check_approval(manifest, approval_policy),
+        _check_bundle_document(bundle_dir, manifest, report_text, figures),
     )

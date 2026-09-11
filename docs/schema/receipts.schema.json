@@ -213,7 +213,7 @@
       "additionalProperties": true
     },
     "artifacts": {
-      "description": "Optional map of bundle-relative artifact path (report.md, trace.html, chart SVGs) to the sha256 hex digest of its bytes, recorded at export so `verify --bundle` can check that sibling files were not swapped. See docs/decisions/0006-whole-bundle-verification.md.",
+      "description": "Optional map of bundle-relative artifact path (report.md, trace.html, chart SVGs, and report.docx when `run --format docx` wrote one) to the sha256 hex digest of its bytes, recorded at export so `verify --bundle` can check that sibling files were not swapped. See docs/decisions/0006-whole-bundle-verification.md.",
       "type": "object",
       "additionalProperties": {
         "type": "string",

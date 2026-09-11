@@ -270,3 +270,6 @@ msgstr "Cada informe declara su propia definición; consulte los recibos de ese 
 
 msgid "portfolio_no_shared_figures"
 msgstr "Ningún dato de esta cartera lo declara más de un informe, así que no hay nada que comparar entre ellos."
+
+msgid "docx_chart_note_template"
+msgstr "Gráfico no incrustado en este documento: {alt}. La imagen es el archivo {path} que se entrega con este informe."

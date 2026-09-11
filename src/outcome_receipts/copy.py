@@ -104,6 +104,7 @@ class ReportCopy:
     portfolio_agreement_not_comparable: str
     portfolio_definitions_differ_note: str
     portfolio_no_shared_figures: str
+    docx_chart_note_template: str
 
 
 def _translation(locale: Locale) -> gettext.GNUTranslations:
@@ -206,6 +207,7 @@ def _build_copy(locale: Locale) -> ReportCopy:
         portfolio_agreement_not_comparable=_("portfolio_agreement_not_comparable"),
         portfolio_definitions_differ_note=_("portfolio_definitions_differ_note"),
         portfolio_no_shared_figures=_("portfolio_no_shared_figures"),
+        docx_chart_note_template=_("docx_chart_note_template"),
     )
 
 
