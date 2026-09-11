@@ -55,6 +55,7 @@ import json
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +87,7 @@ from outcome_receipts.coverage import (
     build_requirement_coverage,
 )
 from outcome_receipts.diff import diff_manifests
+from outcome_receipts.docx import DOCX_NAME, DocxError, render_docx
 from outcome_receipts.draft import draft, draft_template
 from outcome_receipts.engine import compute_figures, read_csv_meta
 from outcome_receipts.evaluate import EvalReport, evaluate
@@ -165,7 +167,9 @@ from outcome_receipts.trace import render_trace_html
 from outcome_receipts.verify import (
     BundleResult,
     Check,
+    DocumentCheck,
     VerifyResult,
+    check_document,
     verify_bundle,
     verify_manifest,
 )
@@ -609,7 +613,49 @@ def _run_payload(
     }
 
 
-def _export_outputs(
+class _DocumentRefused(Exception):
+    """``run --format docx`` built a document that does not hold; nothing was written."""
+
+    def __init__(self, template_id: str, check: DocumentCheck) -> None:
+        super().__init__(check.detail)
+        self.template_id = template_id
+        self.check = check
+
+
+@dataclass(frozen=True)
+class _ExportBuild:
+    """One template's export, built in memory so every one can be checked before any is written."""
+
+    title: str
+    report_text: str
+    trace_text: str
+    manifest_text: str
+    document: bytes | None
+
+
+def _build_document(
+    report_text: str, figures: Sequence[Figure], *, locale: str, template_id: str
+) -> bytes:
+    """Render ``report.docx`` from the report text and gate it on its own bytes.
+
+    The check reads the written bytes back, never the blocks that produced them,
+    and grounds the narrative it finds against the publishable figures. A report
+    carrying a character a Word document cannot hold is refused here too, rather
+    than exported with the character silently gone.
+    """
+
+    try:
+        document = render_docx(report_text, locale=locale)
+    except DocxError as exc:
+        refused = DocumentCheck(True, False, f"{DOCX_NAME} cannot be written: {exc}")
+        raise _DocumentRefused(template_id, refused) from exc
+    check = check_document(document, report_text, figures)
+    if not check.ok:
+        raise _DocumentRefused(template_id, check)
+    return document
+
+
+def _build_export(
     args: argparse.Namespace,
     spec: Spec,
     figures: Sequence[Figure],
@@ -619,18 +665,18 @@ def _export_outputs(
     reconciliation: ReconciliationResult | None,
     provenance: Provenance,
     *,
-    out_dir: Path | None = None,
     title: str | None = None,
-    ledger_path: Path | None = None,
     coverage: RequirementCoverage | None = None,
-) -> tuple[dict[str, str | None], LedgerEntry, Path]:
-    """Write the report, trace, charts, and manifest, then append the export ledger.
+    template_id: str = "",
+) -> _ExportBuild:
+    """Build the report, trace, optional document, and manifest, all in memory.
 
-    Every artifact string is built in memory first so the manifest, written last,
-    can hash its siblings. The manifest never hashes itself; the report embeds
-    the receipts section but not the artifact digests, so the hash relation is
-    one-directional (no circularity). See ADR 0006. Write order: charts, then
-    report, then trace, then the manifest, then the ledger entry.
+    Every artifact is built before the manifest so the manifest can hash its
+    siblings. The manifest never hashes itself; the report embeds the receipts
+    section but not the artifact digests, so the hash relation is one-directional
+    (no circularity). See ADR 0006. ``report.docx`` is rendered from the finished
+    report text, gated, and hashed like any other artifact; without
+    ``--format docx`` nothing about the build changes.
     """
 
     export_title = title or spec.report.title
@@ -660,11 +706,32 @@ def _export_outputs(
     }
     for chart in charts:
         digests[f"{_CHART_DIR}/{chart.chart_id}.svg"] = _sha256(chart.svg)
+    document: bytes | None = None
+    if getattr(args, "document_format", "md") == "docx":
+        document = _build_document(
+            report_text, figures, locale=args.locale, template_id=template_id
+        )
+        digests[DOCX_NAME] = hashlib.sha256(document).hexdigest()
     manifest_text = receipts_manifest(
         figures, provenance=provenance, artifacts=digests, coverage=coverage
     )
+    return _ExportBuild(export_title, report_text, trace_text, manifest_text, document)
 
-    out_dir = out_dir or Path(args.out)
+
+def _write_export(
+    args: argparse.Namespace,
+    build: _ExportBuild,
+    charts: Sequence[Chart],
+    *,
+    out_dir: Path,
+    ledger_path: Path,
+) -> tuple[dict[str, str | None], LedgerEntry]:
+    """Write one built export, then append the export ledger.
+
+    Write order: charts, then the report and its document, then the trace, then
+    the manifest, then the ledger entry.
+    """
+
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "report.md"
     manifest_path = out_dir / "receipts.json"
@@ -681,21 +748,22 @@ def _export_outputs(
         for chart in charts:
             (chart_dir / f"{chart.chart_id}.svg").write_text(chart.svg, encoding="utf-8")
         outputs["charts"] = str(chart_dir)
-    report_path.write_text(report_text, encoding="utf-8")
-    trace_path.write_text(trace_text, encoding="utf-8")
-    manifest_path.write_text(manifest_text, encoding="utf-8")
+    report_path.write_text(build.report_text, encoding="utf-8")
+    if build.document is not None:
+        document_path = out_dir / DOCX_NAME
+        document_path.write_bytes(build.document)
+        outputs["document"] = str(document_path)
+    trace_path.write_text(build.trace_text, encoding="utf-8")
+    manifest_path.write_text(build.manifest_text, encoding="utf-8")
 
-    ledger_path = ledger_path or (
-        Path(args.ledger) if args.ledger else out_dir.parent / "export-ledger.jsonl"
-    )
     entry = append_export(
         ledger_path,
-        report_title=export_title,
-        manifest_json_or_hash=manifest_text,
+        report_title=build.title,
+        manifest_json_or_hash=build.manifest_text,
         recipient=args.recipient,
         clock=_clock(reproducible=args.reproducible),
     )
-    return outputs, entry, ledger_path
+    return outputs, entry
 
 
 def _draft_templates(
@@ -815,6 +883,7 @@ def _write_template_exports(
     fan_out = bool(spec.report.templates)
     ledger_path = Path(args.ledger) if args.ledger else base_out.parent / "export-ledger.jsonl"
     written: list[tuple[TemplateSpec, dict[str, str | None], LedgerEntry]] = []
+    builds: list[tuple[TemplateSpec, Path, _ExportBuild]] = []
     for template, narrative, result in drafts:
         provenance = Provenance(
             numbers_bound=len(result.bound) + len(claims_result.bound),
@@ -827,7 +896,7 @@ def _write_template_exports(
             approvals=tuple(approvals),
         )
         out_dir = base_out / template.template_id if fan_out else base_out
-        outputs, entry, _ = _export_outputs(
+        build = _build_export(
             args,
             spec,
             figures,
@@ -836,10 +905,17 @@ def _write_template_exports(
             comparison,
             reconciliation,
             provenance,
-            out_dir=out_dir,
             title=template.title,
-            ledger_path=ledger_path,
             coverage=coverage,
+            template_id=template.template_id,
+        )
+        builds.append((template, out_dir, build))
+    # Every template is built, and its document gated, before any is written, so a
+    # refusal for the second template cannot leave the first on disk and in the
+    # ledger as an export nobody finished.
+    for template, out_dir, build in builds:
+        outputs, entry = _write_export(
+            args, build, charts, out_dir=out_dir, ledger_path=ledger_path
         )
         bundle_path = out_dir / _BUNDLE_NAME
         bundle_path.write_text(bundle_manifest(_bundle_members(out_dir), key=key), encoding="utf-8")
@@ -1020,6 +1096,90 @@ def _refuse_for_coverage(
     return EXIT_COVERAGE_FAIL
 
 
+def _print_written(
+    written: Sequence[tuple[TemplateSpec, dict[str, str | None], LedgerEntry]],
+    *,
+    fan_out: bool,
+    n_charts: int,
+    key: bytes | None,
+    ledger_path: Path,
+) -> None:
+    """One block of paths per exported template, in the order they were written."""
+
+    for template, outputs, entry in written:
+        prefix = f"{template.template_id}: " if fan_out else ""
+        print(f"  {prefix}report:   {outputs['report']}")
+        print(f"  {prefix}receipts: {outputs['receipts']}")
+        print(f"  {prefix}trace:    {outputs['trace']}")
+        if outputs.get("document") is not None:
+            print(f"  {prefix}document: {outputs['document']}")
+        if outputs["charts"] is not None:
+            print(f"  {prefix}charts:   {outputs['charts']} ({n_charts} SVG)")
+        print(f"  {prefix}bundle:   {outputs['bundle']} ({'signed' if key else 'digests-only'})")
+        print(f"  {prefix}ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
+
+
+def _document_payload(check: DocumentCheck) -> dict[str, object]:
+    """A document check as JSON: its verdict, and the narrative grounding it read."""
+
+    return {
+        "checked": check.checked,
+        "ok": check.ok,
+        "detail": check.detail,
+        "grounding": None
+        if check.grounding is None
+        else {
+            "total": check.grounding.total,
+            "bound": len(check.grounding.bound),
+            "unbound": [_span_payload(span) for span in check.grounding.unbound],
+        },
+    }
+
+
+def _refuse_for_document(
+    args: argparse.Namespace,
+    refusal: _DocumentRefused,
+    *,
+    figures: Sequence[Figure],
+    narrative_result: GroundingResult,
+    claims_result: GroundingResult,
+    outputs: object,
+    template_payload: Mapping[str, object],
+    claim_payload: object,
+) -> int:
+    """Refuse the export because ``report.docx`` did not hold, having written nothing.
+
+    This is reached only after the grounding gate, coverage, and sign-off have all
+    passed, so what failed is the document: a character it cannot carry, or a
+    rendering that does not say what ``report.md`` says. Nothing is on disk and
+    nothing is in the ledger, because every template is built and checked before
+    any is written. The exit code is the grounding gate's, because this is that
+    gate applied to the file a funder opens.
+    """
+
+    if args.json:
+        payload = _run_payload(
+            gate_pass=False,
+            figures=figures,
+            narrative_result=narrative_result,
+            claims_result=claims_result,
+            outputs=outputs,
+            ledger=None,
+            approval=None,
+        )
+        payload["templates"] = dict(template_payload)
+        payload["comparative_claims"] = claim_payload
+        payload["document"] = {
+            **_document_payload(refusal.check),
+            "template": refusal.template_id,
+        }
+        _emit_json(payload)
+        return EXIT_GATE_FAIL
+    print(f"\ndocument gate: FAIL — refusing to export {refusal.template_id!r}", file=sys.stderr)
+    print(f"  {refusal.check.detail}", file=sys.stderr)
+    return EXIT_GATE_FAIL
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     spec, _rows, figures, comparison, reconciliation = _compute_all(
         args.config, reproducible=args.reproducible, quiet=args.json
@@ -1146,23 +1306,35 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return EXIT_APPROVAL_FAIL
 
     key = _load_key(getattr(args, "sign_key_file", None))
-    written, ledger_path, fan_out = _write_template_exports(
-        args,
-        spec,
-        publishable,
-        comparison,
-        reconciliation,
-        charts,
-        claims_result,
-        drafts,
-        approver,
-        approved_at,
-        key,
-        suppression_applied=True,
-        narrative_drafter="bedrock" if narrative_drafter is not None else "deterministic",
-        coverage=coverage,
-        approvals=approvals,
-    )
+    try:
+        written, ledger_path, fan_out = _write_template_exports(
+            args,
+            spec,
+            publishable,
+            comparison,
+            reconciliation,
+            charts,
+            claims_result,
+            drafts,
+            approver,
+            approved_at,
+            key,
+            suppression_applied=True,
+            narrative_drafter="bedrock" if narrative_drafter is not None else "deterministic",
+            coverage=coverage,
+            approvals=approvals,
+        )
+    except _DocumentRefused as document_refusal:
+        return _refuse_for_document(
+            args,
+            document_refusal,
+            figures=publishable,
+            narrative_result=combined_result,
+            claims_result=claims_result,
+            outputs=failed_outputs,
+            template_payload=template_payload,
+            claim_payload=claim_payload,
+        )
     if args.json:
         flat_outputs: object = (
             written[0][1]
@@ -1190,15 +1362,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print("\ngrounding gate: PASS")
     _print_coverage_pass(coverage)
     _print_approval(approver, approvals)
-    for template, outputs, entry in written:
-        prefix = f"{template.template_id}: " if fan_out else ""
-        print(f"  {prefix}report:   {outputs['report']}")
-        print(f"  {prefix}receipts: {outputs['receipts']}")
-        print(f"  {prefix}trace:    {outputs['trace']}")
-        if outputs["charts"] is not None:
-            print(f"  {prefix}charts:   {outputs['charts']} ({len(charts)} SVG)")
-        print(f"  {prefix}bundle:   {outputs['bundle']} ({'signed' if key else 'digests-only'})")
-        print(f"  {prefix}ledger:   {ledger_path} (entry {entry.index}, hash {entry.entry_hash})")
+    _print_written(written, fan_out=fan_out, n_charts=len(charts), key=key, ledger_path=ledger_path)
     return EXIT_OK
 
 
@@ -1544,6 +1708,7 @@ def _bundle_payload(result: BundleResult) -> dict[str, object]:
             "ok": result.approval.ok,
             "detail": result.approval.detail,
         },
+        "document": _document_payload(result.document),
     }
 
 
@@ -1730,6 +1895,11 @@ def _verify_bundle(args: argparse.Namespace, spec: Spec, figures: Sequence[Figur
         + ("not checked" if not result.approval.checked else "checked")
         + f" — {result.approval.detail}"
     )
+    print(
+        "document export: "
+        + ("not checked" if not result.document.checked else "checked")
+        + f" — {result.document.detail}"
+    )
 
     if result.ok:
         print("\nverify: PASS — the whole bundle is coherent")
@@ -1753,6 +1923,8 @@ def _print_bundle_failure(result: BundleResult) -> None:
         print(f"  requirement coverage: {result.coverage.detail}", file=sys.stderr)
     if not result.approval.ok:
         print(f"  approval policy: {result.approval.detail}", file=sys.stderr)
+    if not result.document.ok:
+        print(f"  document export: {result.document.detail}", file=sys.stderr)
 
 
 def _eval_payload(report: EvalReport, *, out: str | None) -> dict[str, object]:
@@ -2340,6 +2512,8 @@ def _bundle_failure_reason(result: BundleResult) -> str:
         reasons.append(result.coverage.detail)
     if not result.approval.ok:
         reasons.append(result.approval.detail)
+    if not result.document.ok:
+        reasons.append(result.document.detail)
     return "; ".join(reasons) or "the bundle did not verify and no check says why"
 
 
@@ -2457,6 +2631,14 @@ def build_parser() -> argparse.ArgumentParser:
         default="en",
         choices=("en", "es"),
         help="language for the report's prose and labels (figures are unchanged)",
+    )
+    run_parser.add_argument(
+        "--format",
+        dest="document_format",
+        default="md",
+        choices=("md", "docx"),
+        help="md (the default) writes report.md; docx also writes report.docx beside it, "
+        "rendered from report.md and gated again on the document's own bytes",
     )
     run_parser.add_argument(
         "--sign-key-file",
