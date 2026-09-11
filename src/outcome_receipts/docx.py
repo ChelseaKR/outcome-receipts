@@ -670,7 +670,7 @@ class _CoreReader:
         field_name = _CORE_FIELDS.get(name, "") if self._depth == 1 else ""
         known = name == _CORE_ROOT if self._depth == 0 else bool(field_name)
         if not known or attributes or field_name in self._values:
-            raise DocxError(f"docProps/core.xml contains {name!r}, which this tool never writes")
+            raise DocxError(f"contains {name!r}, which this tool never writes")
         if field_name:
             self._values[field_name] = []
             self._current = field_name
@@ -682,7 +682,7 @@ class _CoreReader:
 
     def _chars(self, data: str) -> None:
         if not self._current:
-            raise DocxError("docProps/core.xml contains text outside a property")
+            raise DocxError("contains text outside a property")
         self._values[self._current].append(data)
 
 

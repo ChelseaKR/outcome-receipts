@@ -111,15 +111,22 @@ def _repack(
     return buffer.getvalue()
 
 
-def _edit_document(data: bytes, old: bytes, new: bytes, *, first_of_many: bool = False) -> bytes:
-    """Replace a fragment of ``word/document.xml``, asserting the edit lands.
+def _edit_document(
+    data: bytes,
+    old: bytes,
+    new: bytes,
+    *,
+    first_of_many: bool = False,
+    part: str = "word/document.xml",
+) -> bytes:
+    """Replace a fragment of one part, ``word/document.xml`` by default, asserting it lands.
 
     Exactly one occurrence is required unless ``first_of_many``, which replaces
     only the first of several -- and still requires there to be one.
     """
 
     def edit(name: str, content: bytes) -> bytes:
-        if name != "word/document.xml":
+        if name != part:
             return content
         found = content.count(old)
         assert found >= 1 if first_of_many else found == 1, (old, found)
@@ -531,6 +538,230 @@ def test_a_spanish_export_is_a_spanish_document(tmp_path: Path) -> None:
     read = read_docx((out / DOCX_NAME).read_bytes())
     assert read.language == "es"
     assert "Gráfico no incrustado en este documento" in read.text
+
+
+# --- the checks that do not trust the renderer -----------------------------------------------
+
+
+def _lossy(monkeypatch: pytest.MonkeyPatch, old: str, new: str) -> None:
+    """Make the renderer lose something, on the writing side and the checking side alike.
+
+    Both sides then agree -- the document says exactly what the renderer expects it
+    to -- so the block comparison passes, and only a check that reads ``report.md``'s
+    raw text can see what went missing.
+    """
+
+    real = document_blocks
+
+    def lossy(report_text: str, *, locale: str) -> tuple[object, ...]:
+        assert old in report_text
+        return real(report_text.replace(old, new, 1), locale=locale)
+
+    monkeypatch.setattr("outcome_receipts.docx.document_blocks", lossy)
+    monkeypatch.setattr("outcome_receipts.verify.document_blocks", lossy)
+
+
+def _refused_detail(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> str:
+    capsys.readouterr()
+    assert _run(HOUSING, tmp_path / "out", "--format", "docx", "--json") == EXIT_GATE_FAIL
+    return str(json.loads(capsys.readouterr().out)["document"]["detail"])
+
+
+def test_a_renderer_that_loses_a_number_is_caught_by_the_raw_digit_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _lossy(monkeypatch, "served 12 clients", "served clients")
+    detail = _refused_detail(tmp_path, capsys)
+    assert "does not carry the same digits as report.md" in detail
+    assert "does not say what report.md says" not in detail
+
+
+def test_a_renderer_that_loses_a_redaction_marker_is_caught_by_the_raw_marker_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _lossy(monkeypatch, REDACTED_DISPLAY, "")
+    detail = _refused_detail(tmp_path, capsys)
+    assert f"shows {REDACTED_DISPLAY} 11 time(s) where report.md shows it 12" in detail
+    assert "does not say what report.md says" not in detail
+
+
+DRIFTS: dict[str, tuple[Callable[[bytes], bytes], str]] = {
+    "retitled": (
+        lambda data: _edit_document(
+            data,
+            b"<dc:title>Housing Program Outcome Report</dc:title>",
+            b"<dc:title>Housing Program Outcome Report 2019</dc:title>",
+            part="docProps/core.xml",
+        ),
+        "its title 'Housing Program Outcome Report 2019' is not report.md's",
+    ),
+    "a run's format changed": (
+        lambda data: _edit_document(data, b"<w:rPr><w:b/></w:rPr>", b"", first_of_many=True),
+        "has report.md's text in a different form",
+    ),
+    "a paragraph added": (
+        lambda data: _edit_document(
+            data,
+            b"<w:sectPr>",
+            b'<w:p><w:r><w:t xml:space="preserve">Added later.</w:t></w:r></w:p><w:sectPr>',
+        ),
+        "it has 40 block(s) where report.md renders 39",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(DRIFTS))
+def test_a_document_that_drifted_from_its_report_fails_verify(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], case: str
+) -> None:
+    tamper, words = DRIFTS[case]
+    out = _export(tmp_path)
+    (out / DOCX_NAME).write_bytes(tamper((out / DOCX_NAME).read_bytes()))
+    _reattest(out)
+    code, payload = _verify(HOUSING, out, capsys)
+    assert code == EXIT_VERIFY_FAIL
+    assert words in str(_document(payload)["detail"])
+
+
+# --- more of what the reader refuses ---------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def grant_document(tmp_path_factory: pytest.TempPathFactory) -> bytes:
+    out = tmp_path_factory.mktemp("grant") / "out"
+    assert _run(GRANT, out, "--format", "docx") == EXIT_OK
+    return (out / DOCX_NAME).read_bytes()
+
+
+def _flagged_encrypted(data: bytes) -> bytes:
+    """The central directory marks ``word/settings.xml`` encrypted; no other byte changes.
+
+    Written by hand because ``zipfile`` resets an entry's flags when it writes one,
+    so a flag set on the ``ZipInfo`` never reaches the archive.
+    """
+
+    patched = bytearray(data)
+    start = 0
+    while True:
+        at = patched.find(b"PK\x01\x02", start)
+        assert at != -1, "no central directory entry names word/settings.xml"
+        length = int.from_bytes(patched[at + 28 : at + 30], "little")
+        if patched[at + 46 : at + 46 + length] == b"word/settings.xml":
+            flags = int.from_bytes(patched[at + 8 : at + 10], "little") | 0x1
+            patched[at + 8 : at + 10] = flags.to_bytes(2, "little")
+            return bytes(patched)
+        start = at + 4
+
+
+def _corrupted(data: bytes) -> bytes:
+    """One byte of a stored part changed in place, so its CRC no longer matches."""
+
+    assert data.count(NARRATIVE_ANCHOR) == 1
+    return data.replace(NARRATIVE_ANCHOR, b"served 17 clients.")
+
+
+CORE = "docProps/core.xml"
+MORE_REFUSALS: dict[str, tuple[Callable[[bytes], bytes], str]] = {
+    "a core property it never writes": (
+        lambda data: _edit_document(
+            data,
+            b"</cp:coreProperties>",
+            b"<dc:creator>x</dc:creator></cp:coreProperties>",
+            part=CORE,
+        ),
+        "docProps/core.xml contains",
+    ),
+    "a language it never writes": (
+        lambda data: _edit_document(
+            data, b"<dc:language>en</dc:language>", b"<dc:language>fr</dc:language>", part=CORE
+        ),
+        "names a language this tool never writes: 'fr'",
+    ),
+    "a core property missing": (
+        lambda data: _edit_document(data, b"<dc:language>en</dc:language>", b"", part=CORE),
+        "does not carry one title and one language",
+    ),
+    "text between core properties": (
+        lambda data: _edit_document(data, b"<dc:title>", b"2019<dc:title>", part=CORE),
+        "docProps/core.xml contains text outside a property",
+    ),
+    "a paragraph style with no name": (
+        lambda data: _edit_document(data, b'<w:pStyle w:val="Heading1"/>', b"<w:pStyle/>"),
+        "a paragraph style with no name",
+    ),
+    "a run in two formats": (
+        lambda data: _edit_document(
+            data, b"<w:rPr><w:b/></w:rPr>", b"<w:rPr><w:b/><w:b/></w:rPr>", first_of_many=True
+        ),
+        "a run in two formats",
+    ),
+    "a run with no text": (
+        lambda data: _edit_document(data, b"<w:sectPr>", b"<w:p><w:r></w:r></w:p><w:sectPr>"),
+        "a run with no text",
+    ),
+    "an element outside the namespace": (
+        lambda data: _edit_document(
+            data, b"<w:sectPr>", b'<x:p xmlns:x="urn:elsewhere"/><w:sectPr>'
+        ),
+        "an element outside WordprocessingML",
+    ),
+    "a document that is not well-formed": (
+        lambda data: _edit_document(data, b"</w:body>", b"</w:bdy>"),
+        "is not well-formed XML",
+    ),
+    "an entry flagged as encrypted": (_flagged_encrypted, "word/settings.xml is encrypted"),
+    "a part whose bytes no longer match its CRC": (_corrupted, "a part cannot be read"),
+}
+
+
+@pytest.mark.parametrize("case", sorted(MORE_REFUSALS))
+def test_the_reader_refuses_more_than_one_way(demo_document: bytes, case: str) -> None:
+    tamper, words = MORE_REFUSALS[case]
+    tampered = tamper(demo_document)
+    assert tampered != demo_document
+    with pytest.raises(DocxError, match=re.escape(words)):
+        read_docx(tampered)
+
+
+TABLE_REFUSALS: dict[str, tuple[bytes, bytes, str]] = {
+    "a cell of two paragraphs": (
+        b"</w:p></w:tc>",
+        b"</w:p><w:p></w:p></w:tc>",
+        "a table cell other than one unstyled paragraph",
+    ),
+    "a row wider than the rest": (
+        b"</w:tr>",
+        b"<w:tc><w:p></w:p></w:tc></w:tr>",
+        "a table whose rows are not all one width",
+    ),
+    "a header below the first row": (
+        b"</w:tr><w:tr>",
+        b"</w:tr><w:tr><w:trPr><w:tblHeader/></w:trPr>",
+        "marks a row other than the first as the table's header",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(TABLE_REFUSALS))
+def test_the_reader_refuses_a_table_this_tool_never_writes(
+    grant_document: bytes, case: str
+) -> None:
+    old, new, words = TABLE_REFUSALS[case]
+    tampered = _edit_document(grant_document, old, new, first_of_many=True)
+    with pytest.raises(DocxError, match=re.escape(words)):
+        read_docx(tampered)
+
+
+def test_the_reader_refuses_by_declared_size_before_reading(
+    demo_document: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("outcome_receipts.docx._MAX_DOCUMENT_BYTES", len(demo_document) - 1)
+    with pytest.raises(DocxError, match="larger than this tool reads"):
+        read_docx(demo_document)
+    monkeypatch.undo()
+    monkeypatch.setattr("outcome_receipts.docx._MAX_PART_BYTES", 10)
+    with pytest.raises(DocxError, match=r"declares [0-9]+ bytes"):
+        read_docx(demo_document)
 
 
 # --- the renderer never drops what it does not recognise -------------------------------------
