@@ -270,3 +270,6 @@ msgstr "Each report states its own definition; see that report's receipts."
 
 msgid "portfolio_no_shared_figures"
 msgstr "No metric in this portfolio is stated by more than one report, so there is nothing to compare across them."
+
+msgid "docx_chart_note_template"
+msgstr "Chart not embedded in this document: {alt}. The image is the file {path} delivered with this report."
