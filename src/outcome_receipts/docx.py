@@ -436,17 +436,33 @@ _SECTION = (
     'w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>'
 )
 
-# Every character XML 1.0 can carry. Anything else is refused, never dropped: a
-# document that silently lost a character would no longer say what report.md says.
-_NOT_XML = re.compile("[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]")
+# The XML 1.0 `Char` production, as code points rather than as a character class:
+# tab, newline, carriage return, then three ranges. Written this way because a
+# regex class saying the same thing has to spell the surrogate and astral bounds,
+# which reads as a suspicious range to a static analyser and is harder for a
+# person to check against the specification.
+_XML_RANGES = ((0x20, 0xD7FF), (0xE000, 0xFFFD), (0x10000, 0x10FFFF))
+_XML_SINGLES = frozenset({0x9, 0xA, 0xD})
+
+
+def _unrepresentable(text: str) -> str | None:
+    """The first character XML cannot carry, or ``None``."""
+
+    for character in text:
+        point = ord(character)
+        if point in _XML_SINGLES:
+            continue
+        if any(low <= point <= high for low, high in _XML_RANGES):
+            continue
+        return character
+    return None
 
 
 def _escape(text: str) -> str:
-    bad = _NOT_XML.search(text)
+    bad = _unrepresentable(text)
     if bad is not None:
         raise DocxError(
-            f"the report contains U+{ord(bad.group()):04X}, a character a Word document "
-            "cannot carry"
+            f"the report contains U+{ord(bad):04X}, a character a Word document cannot carry"
         )
     return (
         text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\r", "&#13;")

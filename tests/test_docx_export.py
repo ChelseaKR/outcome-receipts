@@ -552,6 +552,45 @@ def test_the_reader_decodes_a_number_written_as_character_references(
     assert "4242" in _unbound(_document(payload))
 
 
+@pytest.mark.parametrize(
+    ("point", "carried"),
+    [
+        (0x00, False),
+        (0x08, False),
+        (0x09, True),
+        (0x0A, True),
+        (0x0B, False),
+        (0x0C, False),
+        (0x0D, True),
+        (0x1F, False),
+        (0x20, True),
+        (0x7F, True),
+        (0xD7FF, True),
+        (0xD800, False),
+        (0xDFFF, False),
+        (0xE000, True),
+        (0xFFFD, True),
+        (0xFFFE, False),
+        (0xFFFF, False),
+        (0x10000, True),
+        (0x10FFFF, True),
+    ],
+)
+def test_a_document_carries_exactly_the_characters_xml_allows(point: int, carried: bool) -> None:
+    """The XML 1.0 ``Char`` production at both edges of all three ranges.
+
+    A character outside it is refused rather than dropped: a document quietly
+    missing a character would no longer say what ``report.md`` says.
+    """
+
+    text = f"# T\n\nx{chr(point)}y"
+    if carried:
+        assert chr(point) in read_docx(render_docx(text, locale="en")).text
+        return
+    with pytest.raises(DocxError, match=f"U[+]{point:04X}"):
+        render_docx(text, locale="en")
+
+
 # --- the document's own copy ----------------------------------------------------------------
 
 
