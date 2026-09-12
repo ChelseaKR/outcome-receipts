@@ -188,3 +188,53 @@ sha256 rather than reading either back from the manifest, so editing the
 requirement document after export fails naming the digest, and editing the
 coverage record itself fails as a mismatch against what the spec and data
 actually produce.
+
+## Report spec 1.0: `[approval]` is an additive, optional sign-off policy
+
+`[approval] required = ["program", "finance"]` names the roles an export must
+record before it may be written. It is optional at spec `1.0`, in exactly the
+way `[requirements]` and `[[data_checks]]` are: a spec that omits the section
+loads, computes, grounds, approves and exports precisely what it did before, and
+the version does not move.
+
+One shape is refused rather than accepted as a policy. An `[approval]` table
+that names no role would be a declared sign-off gate that demands nobody, and it
+would read in the manifest exactly like a satisfied one. The loader rejects it
+naming the key. Absent means "no policy"; present means "these roles".
+
+The receipts manifest stays at `2.0` and its `provenance` block gains one
+optional member, `approvals`, present only for a spec that declares a policy.
+Each entry carries `role`, `approved_by` and `approved_at`. Three consequences:
+
+- **A manifest from a spec with no policy is byte-identical to what it was.**
+  The key is absent, not an empty list. Such a spec has not satisfied zero
+  roles, it has declared none, and `verify --bundle` reports `not checked`
+  rather than `ok` for the same reason it does for an unbound requirement set.
+- **`approved_by` keeps naming a person and is not replaced.** For a role-based
+  export it carries every approver, in the policy's order, as
+  `A. Lee (program), B. Cruz (finance)`. Everything that already reads it —
+  `verify-workflow`, the rollup composition's "bundle has no named human
+  approval" refusal, the provenance paragraph in the report body — keeps working
+  without learning a new field, and reads a complete answer rather than one of
+  two names.
+- **A consumer validating against a pinned older copy of the `2.0` schema still
+  accepts a manifest carrying approvals.** `provenance` is declared with
+  `additionalProperties: true`, so this addition costs nothing that the
+  `requirements` member cost. That is the difference between adding a member
+  inside an open object and adding one beside a closed one.
+
+`verify --bundle` reads the policy from the spec, never from the manifest. Both
+directions fail. A manifest recording no approvals against a spec that requires
+them was exported before the policy existed, so its report proves nothing about
+the policy now in force. A manifest recording approvals against a spec that
+declares none records a gate nothing now defines. A manifest whose `approvals`
+member is present but unreadable fails the comparison rather than taking the
+"nothing to compare" path, because that path reports `not checked` and passes.
+
+The policy governs the evidence-workflow commands that run from one spec —
+`restate`, `contract-check` and `equity-review` — for the reason the section
+exists: a requirement that travels with the report definition must not be
+satisfiable by a different invocation. `migrate-check` and `rollup` are not
+covered. `migrate-check` reads two specs and there is no settled answer to which
+one's policy governs a comparison between them; `rollup` reads a plan rather
+than a spec and has no policy to read. Both still take `--approved-by`.

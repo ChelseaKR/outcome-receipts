@@ -195,3 +195,78 @@ msgstr "Ningún dato fue redactado por un modelo de lenguaje. La verificación d
 
 msgid "trace_provenance_fail_template"
 msgstr "Ningún dato fue redactado por un modelo de lenguaje. La verificación de fundamentación no se aprobó: {bound} número(s) del informe se vincularon con un recibo y {unbound} no se vincularon."
+
+msgid "portfolio_title"
+msgstr "Cartera de informes: cuáles existen y cuáles siguen verificándose"
+
+msgid "portfolio_intro"
+msgstr "Todos los informes siguientes se exportaron con la misma verificación: cada dato se calculó mediante una consulta determinista y lleva un recibo, ningún dato fue escrito por un modelo de lenguaje, y una persona con nombre aprobó la exportación. Esta página reúne lo que esas exportaciones ya demuestran. No calcula ningún dato propio."
+
+msgid "portfolio_summary_template"
+msgstr "{verified} de {total} informe(s) se volvieron a verificar a partir de su propia especificación y sus propios datos."
+
+msgid "portfolio_reports_caption"
+msgstr "Informes de esta cartera"
+
+msgid "portfolio_header_report"
+msgstr "Informe"
+
+msgid "portfolio_header_verification"
+msgstr "Verificación"
+
+msgid "portfolio_header_approvers"
+msgstr "Aprobado por"
+
+msgid "portfolio_header_signature"
+msgstr "Firma del paquete"
+
+msgid "portfolio_header_bundle_digest"
+msgstr "Hash del paquete"
+
+msgid "portfolio_header_ledger"
+msgstr "Registro de exportaciones"
+
+msgid "portfolio_status_verified"
+msgstr "Verificado"
+
+msgid "portfolio_status_failed"
+msgstr "No se verificó"
+
+msgid "portfolio_signature_present"
+msgstr "Firmado"
+
+msgid "portfolio_signature_absent"
+msgstr "Solo hashes"
+
+msgid "portfolio_ledger_entry_template"
+msgstr "Entrada {index}"
+
+msgid "portfolio_shared_heading"
+msgstr "Datos que declara más de un informe"
+
+msgid "portfolio_shared_caption"
+msgstr "Dónde coinciden estos informes"
+
+msgid "portfolio_header_agreement"
+msgstr "Concordancia"
+
+msgid "portfolio_header_stated_by"
+msgstr "Declarado por"
+
+msgid "portfolio_agreement_agrees"
+msgstr "Misma definición, mismo valor"
+
+msgid "portfolio_agreement_definition_differs"
+msgstr "Las definiciones difieren, por lo que los valores no son comparables"
+
+msgid "portfolio_agreement_value_differs"
+msgstr "Misma definición, valores distintos"
+
+msgid "portfolio_agreement_not_comparable"
+msgstr "Retenido en al menos un informe, por lo que no se hizo ninguna comparación"
+
+msgid "portfolio_definitions_differ_note"
+msgstr "Cada informe declara su propia definición; consulte los recibos de ese informe."
+
+msgid "portfolio_no_shared_figures"
+msgstr "Ningún dato de esta cartera lo declara más de un informe, así que no hay nada que comparar entre ellos."

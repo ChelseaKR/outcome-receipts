@@ -54,3 +54,34 @@ immutable identifiers.
   (`protect-release-tags` over `refs/tags/v*`, REL §3.1) is not yet configured
   on the repository; creating it is a hosted-settings change outside this
   repository's files and is recorded here rather than claimed.
+
+## Note, 2026-09-08: where the reusable workflow is read from
+
+The Decision above names
+`ChelseaKR/portfolio-standards/.github/workflows/release-authorize.yml`. That
+repository is **private**, and a public repository cannot call a reusable
+workflow that lives in a private one — GitHub refuses at parse time and words
+the refusal `workflow was not found`, which reads as a deleted file rather than
+as a visibility rule. `release.yml` has called the public mirror
+`ChelseaKR/.github/.github/workflows/release-authorize.yml` since 2026-08-08;
+the Decision line was not updated with it, and `docs/RELEASING.md` was.
+
+The decision itself is unchanged: authorization is still delegated to one
+reviewed, centrally-owned workflow pinned by a full 40-character commit SHA.
+Only the repository the bytes are read from moved, and the two copies are
+byte-identical as of the pin below.
+
+The pin is now `7be4c3e44e2acf20e8a98eeea4351c1e5d2789bc`, which is what the
+signed tag `v1.0.0` of `ChelseaKR/.github` dereferences to. It replaces
+`315a513ff3b4e7c5c0628428909052d947f4f1ab`, the commit that first hosted the
+file publicly. Measured rather than assumed: the two blobs differ by exactly
+one line, `timeout-minutes: 30` on the `authorize` job (3,014 bytes against
+3,038). That job is the trust boundary — it resolves the release tag and
+verifies its SSH signature — and without the line it inherits the six-hour
+default, so this is a tightening. The earlier pin was also not a tag, which
+pin-identity checks elsewhere in the portfolio reject.
+
+This changes nothing about whether the workflow parses: the old pin was already
+public, so this repository's release path was never blocked by the visibility
+rule that blocked others. It bounds a job that was unbounded, and moves the pin
+onto a tagged commit.

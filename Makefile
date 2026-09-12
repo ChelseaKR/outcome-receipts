@@ -140,10 +140,15 @@ i18n:
 	.venv/bin/python scripts/check_i18n.py
 
 build-html:
-	rm -rf out/a11y
+	rm -rf out/a11y out/a11y-portfolio
 	.venv/bin/receipts run --config examples/housing-demo/report.toml \
 		--out out/a11y --ledger out/a11y/export-ledger.jsonl \
 		--approved-by "Automated accessibility gate" --reproducible
+	.venv/bin/receipts portfolio \
+		--specs examples/grant-report/report.toml examples/board-report/report.toml \
+		--out out/a11y-portfolio \
+		--approved-by "Automated accessibility gate" --reproducible
+	.venv/bin/receipts portfolio-verify --dir out/a11y-portfolio --reproducible
 
 a11y: build-html
 	npm run a11y

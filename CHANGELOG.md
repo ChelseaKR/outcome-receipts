@@ -10,7 +10,103 @@ release-hardening work completed before the first public tag.
 
 ## [Unreleased]
 
+### Security
+- **`js-yaml` 3.15.1 -> 3.15.2 and 4.3.1 -> 4.3.2 (`GHSA-2883-XCG3-V3HH`,
+  high), which is what `make security-npm` was refusing.** The advisory was
+  published 2026-09-08 at 21:24 UTC; `verify` last passed on `main` at
+  `228a51f` at 02:32 UTC the same day, against this same `package-lock.json`.
+  The gate went red on the advisory database moving, not on a commit, which is
+  why it was found by an unrelated documentation PR (#188) rather than by the
+  change that caused it -- there was none.
+  - **Both copies are development-only and neither reads untrusted input**, and
+    that is worth writing down rather than assuming, because it is the question
+    that decides whether a waiver would have been defensible. `js-yaml@3` is
+    reached through `@lhci/utils` <- `@lhci/cli`, and this repository configures
+    Lighthouse CI with `lighthouserc.cjs` -- JavaScript, not YAML. `js-yaml@4`
+    is reached through `cosmiconfig` <- `puppeteer`, which searches for a
+    `.puppeteerrc` this repository does not have. The advisory is CPU
+    exhaustion on a hostile document; nothing in the `a11y` gate hands either
+    parser a document it did not author.
+  - The fix is six lines of `package-lock.json`, so no waiver was warranted and
+    none was added. `waivers.yml` still holds no `npm-audit` entry.
+  - **Only the two `js-yaml` entries moved.** `npm update js-yaml
+    --package-lock-only` also prunes 24 stale `puppeteer`/`puppeteer-core`
+    proxy-agent nodes, and a plain `npm install --package-lock-only` on
+    unmodified `main` prunes exactly the same 24 -- so that churn is
+    pre-existing lock drift, unrelated to this advisory, and is left for a
+    change that can be reviewed on its own terms.
+
+### Fixed
+- **The Semgrep waiver cross-check was described as scanning the tree, and scans
+  four directories.** `scripts/check_semgrep_waivers.py` reads `SCAN_DIRS =
+  ("src", "tests", "scripts", ".github")` over seven suffixes; `make
+  security-semgrep` scans the whole repository. So a suppression added under
+  `eval/`, `docs/`, `examples/` or at the repository root is invisible to the
+  cross-check, while `docs/RESPONSIBLE-TECH-AUDITS.md` said the comparison ran
+  "against the tree in both directions" — a stated scope wider than the code's,
+  which is the shape that makes a gate read as covering something it never
+  opened. The audit note now names the four directories and the suffixes, and
+  says which paths are outside them.
+  - Three tests pin it, so the sentence and the constants cannot drift apart
+    again: the documented scope must equal `SCAN_DIRS`/`SCAN_SUFFIXES`, a
+    suppression placed outside the scanned set must not be reported as caught,
+    and the file the scope exception exists for must still exist — an exception
+    for a file that has since been deleted is an exemption that exempts nothing
+    and only obscures the list.
+  - The `[0.2.1]` entry below is left as written. It is the record of what that
+    release claimed; the correction belongs here rather than in a section that
+    has shipped.
+
 ### Added
+- **`receipts portfolio` and `receipts portfolio-verify`: a batch of specs, and
+  the single page an auditor enters through.** An organization publishing a
+  grant report, a board report and a funder template holds three output
+  directories and three ledgers, and nothing says which reports exist, which
+  still verify, or whether two of them state the same metric differently.
+  `portfolio` runs each spec through `run` itself -- the same grounding gate,
+  the same coverage refusal, the same sign-off, including a spec's `[approval]`
+  policy -- into one directory and one shared ledger, in spec-path order. The
+  first spec that fails stops the batch, returns its own exit code, and leaves
+  no portfolio record. `portfolio-verify` re-verifies every bundle from its own
+  spec and renders a static, script-free `index.html` in EN or ES, held to the
+  same WCAG 2.2 AA gate as the trace view.
+
+  The index computes no figure. Its shared-figure table compares what each
+  report already published and keeps four outcomes apart: the reports agree;
+  they state the same definition and different values, which is the only one of
+  the four that means they contradict each other; their definitions differ, so
+  the values are not comparable at all; or suppression withheld the cell in at
+  least one report, which is an absence rather than a disagreement and is never
+  rendered as a zero. Run against the four shipped examples it reports a real
+  disagreement: `clients_served` is defined in three different wordings across
+  them.
+
+  Each row also carries the bundle digest the batch recorded, so editing an
+  artifact and re-sealing `bundle.json` -- which makes the bundle internally
+  consistent again -- is still refused.
+- **A spec can require sign-off from named roles, and the requirement travels
+  with the report definition rather than with the flag the operator typed.**
+  `[approval] required = ["program", "finance"]` makes `run --approve
+  program:"A. Lee" --approve finance:"B. Cruz"` the only way to export: a run
+  missing a required role writes nothing and exits 3 naming the role, one person
+  cannot fill two roles (compared with case and internal whitespace folded, the
+  rule `constituent-reconciler` settled on for its own two-person gate), and
+  `--approved-by` is refused against a role policy. `restate`, `contract-check`
+  and `equity-review` resolve their approver through the same check, so a
+  two-role spec cannot be packaged as contract evidence with one signature.
+
+  The manifest gains `provenance.approvals`, one object per role with the
+  approver and the timestamp, and `approved_by` stays populated with every
+  approver so nothing that already requires a named human approval has to learn
+  a new field. `verify --bundle` re-reads the policy from the spec, never from
+  the manifest, so a bundle stops verifying when the policy gains a role, when
+  an approval is edited out, or when the manifest records approvals a spec no
+  longer asks for. A spec with no `[approval]` section behaves in every byte as
+  it did before and its manifest carries no `approvals` key at all: such a spec
+  has not satisfied zero roles, it has declared none.
+
+  Compatible: the report spec stays at `1.0` and the receipts manifest at `2.0`.
+  See `docs/SPEC-STABILITY.md`.
 - **The release path's new tag-versus-manifest check is now pinned by
   `tests/test_release_workflow.py`, which is the only thing that reads
   `release.yml` at all.** That workflow runs on `workflow_dispatch` only, so no

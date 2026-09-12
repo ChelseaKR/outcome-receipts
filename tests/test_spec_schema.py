@@ -38,6 +38,7 @@ def test_report_spec_schema_declares_every_loader_section() -> None:
         "comparison",
         "reconciliation",
         "requirements",
+        "approval",
     }
 
 
@@ -56,6 +57,19 @@ def _assert_requirements_shape(
         assert set(declaration) <= unanswerable_properties, path
 
 
+def _assert_approval_shape(approval: Any, approval_properties: set[str], path: Path) -> None:
+    """The optional ``[approval]`` sign-off policy.
+
+    No shipped example declares one today, so this is a guard for the next one
+    rather than a live assertion. The pinned property set above is what actually
+    fixes the section into the published schema.
+    """
+
+    if not approval:
+        return
+    assert set(approval) <= approval_properties, path
+
+
 def test_maintained_examples_declare_the_current_schema() -> None:
     schema = _schema()
     root_properties = set(schema["properties"])
@@ -68,6 +82,7 @@ def test_maintained_examples_declare_the_current_schema() -> None:
     row_properties = set(schema["$defs"]["reconciliation_metric_pair"]["properties"])
     requirements_properties = set(schema["$defs"]["requirements"]["properties"])
     unanswerable_properties = set(schema["$defs"]["unanswerable_requirement"]["properties"])
+    approval_properties = set(schema["$defs"]["approval"]["properties"])
 
     specs = sorted((ROOT / "examples").glob("*/report.toml"))
     assert specs
@@ -93,6 +108,7 @@ def test_maintained_examples_declare_the_current_schema() -> None:
             unanswerable_properties,
             path,
         )
+        _assert_approval_shape(parsed.get("approval"), approval_properties, path)
         if reconciliation := parsed.get("reconciliation"):
             assert set(reconciliation) <= reconciliation_properties, path
             for period in reconciliation["periods"]:

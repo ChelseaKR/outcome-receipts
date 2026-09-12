@@ -66,13 +66,42 @@ def test_type_checking_covers_scripts_as_well_as_src_and_tests() -> None:
         )
 
 
+# The one tracked Python file outside the covered directories. It self-documents
+# as a one-time, human-run data-preparation script that is deliberately not part
+# of `make verify`, and it cannot join the covered set as it stands: `ruff check`
+# reports an error on it and `mypy --strict` wants pandas stubs. It is named here
+# rather than skipped silently, so the exception is a decision on the record and
+# any *other* stray file fails.
+KNOWN_UNCOVERED = {"eval/hud/extract.py"}
+COVERED_DIRS = ("src", "tests", "scripts")
+VENDORED = (".venv", "node_modules", ".git", ".ruff_cache", ".mypy_cache", ".pytest_cache")
+
+
 def test_every_gate_script_is_inside_the_directory_the_gates_now_cover() -> None:
     # The scope above is expressed as a directory, so this is what makes it a
     # guarantee about files rather than about a path string: nothing that
     # implements a gate may sit outside scripts/ and escape both tools again.
+    #
+    # This walks the tree. It used to be `ROOT.glob("*.py")`, which reads the
+    # repository root only and non-recursively; there are no `.py` files at the
+    # root, so the assertion was true no matter what was added under any
+    # subdirectory, and `eval/hud/extract.py` was already sitting outside every
+    # covered directory while this test reported green.
     stray = sorted(
         path.relative_to(ROOT).as_posix()
-        for path in ROOT.glob("*.py")
-        if path.name not in {"conftest.py"}
+        for path in ROOT.rglob("*.py")
+        if not any(part in VENDORED for part in path.parts)
+        and path.relative_to(ROOT).parts[0] not in COVERED_DIRS
+        and path.name != "conftest.py"
+        and path.relative_to(ROOT).as_posix() not in KNOWN_UNCOVERED
     )
     assert stray == [], f"gate code outside src/, tests/ and scripts/: {stray}"
+
+
+def test_the_known_uncovered_file_still_exists_so_the_exception_stays_honest() -> None:
+    # An allowlist entry for a file that has been deleted or moved is an
+    # exception nobody is reviewing. If this fails, remove the entry.
+    for relative in KNOWN_UNCOVERED:
+        assert (ROOT / relative).exists(), (
+            f"{relative} is in KNOWN_UNCOVERED but no longer exists; remove the entry"
+        )

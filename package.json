@@ -2,7 +2,7 @@
   "name": "outcome-receipts-quality-gates",
   "private": true,
   "scripts": {
-    "a11y": "node scripts/a11y.mjs && pa11y --config .pa11yci.json file://$PWD/out/a11y/trace.html && lhci autorun --config=lighthouserc.cjs"
+    "a11y": "node scripts/a11y.mjs && pa11y --config .pa11yci.json file://$PWD/out/a11y/trace.html && pa11y --config .pa11yci.json file://$PWD/out/a11y-portfolio/index.html && lhci autorun --config=lighthouserc.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",

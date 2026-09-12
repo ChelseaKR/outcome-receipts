@@ -3,11 +3,18 @@ import { chromium } from "playwright";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 
-const browser = await chromium.launch({ headless: true });
-try {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await context.newPage();
-  await page.goto(pathToFileURL(path.resolve("out/a11y/trace.html")).href);
+// Every HTML surface this project publishes, checked with the same four gates.
+// The list is here rather than inside the loop because a page that is rendered
+// but not listed is a page with no accessibility verdict at all, and an absent
+// verdict reads exactly like a passing one in CI.
+const PAGES = [
+  { label: "trace view", file: "out/a11y/trace.html" },
+  { label: "portfolio index", file: "out/a11y-portfolio/index.html" },
+];
+
+async function check(page, { label, file }) {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(pathToFileURL(path.resolve(file)).href);
   const result = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
     .analyze();
@@ -15,7 +22,7 @@ try {
     ["critical", "serious", "moderate"].includes(violation.impact ?? ""),
   );
   if (blocking.length) {
-    throw new Error(`axe violations:\n${JSON.stringify(blocking, null, 2)}`);
+    throw new Error(`${label}: axe violations:\n${JSON.stringify(blocking, null, 2)}`);
   }
 
   await page.setViewportSize({ width: 320, height: 256 });
@@ -23,7 +30,7 @@ try {
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   if (overflow) {
-    throw new Error("trace view overflows horizontally at 320 CSS pixels");
+    throw new Error(`${label} overflows horizontally at 320 CSS pixels`);
   }
 
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -34,7 +41,7 @@ try {
     }),
   );
   if (moving) {
-    throw new Error("trace view retains animation or transition under reduced motion");
+    throw new Error(`${label} retains animation or transition under reduced motion`);
   }
   // The zero-JavaScript budget, checked on the markup rather than on the wire.
   //
@@ -50,13 +57,21 @@ try {
   const scripts = await page.locator("script").count();
   if (scripts) {
     throw new Error(
-      `trace view ships ${scripts} <script> element(s); the published trace budget is zero ` +
+      `${label} ships ${scripts} <script> element(s); the published budget is zero ` +
         "JavaScript, inline or external",
     );
   }
+}
 
+const browser = await chromium.launch({ headless: true });
+try {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  for (const target of PAGES) {
+    await check(page, target);
+  }
   console.log(
-    "axe WCAG 2.2 AA, 320px reflow, reduced-motion, and zero-JavaScript checks: pass",
+    `axe WCAG 2.2 AA, 320px reflow, reduced-motion, and zero-JavaScript checks: pass (${PAGES.length} page(s))`,
   );
 } finally {
   await browser.close();

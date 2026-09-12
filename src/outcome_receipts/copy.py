@@ -79,6 +79,31 @@ class ReportCopy:
     trace_compared_periods_template: str
     trace_provenance_pass_template: str
     trace_provenance_fail_template: str
+    portfolio_title: str
+    portfolio_intro: str
+    portfolio_summary_template: str
+    portfolio_reports_caption: str
+    portfolio_header_report: str
+    portfolio_header_verification: str
+    portfolio_header_approvers: str
+    portfolio_header_signature: str
+    portfolio_header_bundle_digest: str
+    portfolio_header_ledger: str
+    portfolio_status_verified: str
+    portfolio_status_failed: str
+    portfolio_signature_present: str
+    portfolio_signature_absent: str
+    portfolio_ledger_entry_template: str
+    portfolio_shared_heading: str
+    portfolio_shared_caption: str
+    portfolio_header_agreement: str
+    portfolio_header_stated_by: str
+    portfolio_agreement_agrees: str
+    portfolio_agreement_definition_differs: str
+    portfolio_agreement_value_differs: str
+    portfolio_agreement_not_comparable: str
+    portfolio_definitions_differ_note: str
+    portfolio_no_shared_figures: str
 
 
 def _translation(locale: Locale) -> gettext.GNUTranslations:
@@ -156,6 +181,31 @@ def _build_copy(locale: Locale) -> ReportCopy:
         trace_compared_periods_template=_("trace_compared_periods_template"),
         trace_provenance_pass_template=_("trace_provenance_pass_template"),
         trace_provenance_fail_template=_("trace_provenance_fail_template"),
+        portfolio_title=_("portfolio_title"),
+        portfolio_intro=_("portfolio_intro"),
+        portfolio_summary_template=_("portfolio_summary_template"),
+        portfolio_reports_caption=_("portfolio_reports_caption"),
+        portfolio_header_report=_("portfolio_header_report"),
+        portfolio_header_verification=_("portfolio_header_verification"),
+        portfolio_header_approvers=_("portfolio_header_approvers"),
+        portfolio_header_signature=_("portfolio_header_signature"),
+        portfolio_header_bundle_digest=_("portfolio_header_bundle_digest"),
+        portfolio_header_ledger=_("portfolio_header_ledger"),
+        portfolio_status_verified=_("portfolio_status_verified"),
+        portfolio_status_failed=_("portfolio_status_failed"),
+        portfolio_signature_present=_("portfolio_signature_present"),
+        portfolio_signature_absent=_("portfolio_signature_absent"),
+        portfolio_ledger_entry_template=_("portfolio_ledger_entry_template"),
+        portfolio_shared_heading=_("portfolio_shared_heading"),
+        portfolio_shared_caption=_("portfolio_shared_caption"),
+        portfolio_header_agreement=_("portfolio_header_agreement"),
+        portfolio_header_stated_by=_("portfolio_header_stated_by"),
+        portfolio_agreement_agrees=_("portfolio_agreement_agrees"),
+        portfolio_agreement_definition_differs=_("portfolio_agreement_definition_differs"),
+        portfolio_agreement_value_differs=_("portfolio_agreement_value_differs"),
+        portfolio_agreement_not_comparable=_("portfolio_agreement_not_comparable"),
+        portfolio_definitions_differ_note=_("portfolio_definitions_differ_note"),
+        portfolio_no_shared_figures=_("portfolio_no_shared_figures"),
     )
 
 
