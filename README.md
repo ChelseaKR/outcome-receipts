@@ -42,6 +42,15 @@ scope working as specified and not a gate failure.
 > See [CHANGELOG.md](CHANGELOG.md) and
 > [SECURITY.md](SECURITY.md#supported-versions).
 >
+> **And what PyPI serves is `0.1.0`, which is not a supported version.** The
+> index carries only `0.1.0` (uploaded 2026-07-12), so `pip install
+> outcome-receipts` today installs neither release named above, silently, while
+> [SECURITY.md](SECURITY.md#supported-versions) says `0.1.x` stopped receiving
+> security fixes when `0.2.0` shipped. Until a supported version reaches the
+> index, the GitHub release and the clone below are the only ways to get one.
+> Why the index is behind, and what does and does not fix it, is recorded in
+> [docs/RELEASING.md](docs/RELEASING.md#why-the-index-is-behind-the-repository).
+>
 > *Last verified: 2026-09-07 · Recheck cadence: quarterly*
 
 **Start here:** [run the five-minute synthetic demo](docs/TRY_THE_DEMO.md),
