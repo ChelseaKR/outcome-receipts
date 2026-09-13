@@ -1,5 +1,5 @@
 .PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
-	release-version dist-metadata \
+	release-version dist-metadata example-manifests \
 	security-pip security-npm security-osv security-secrets security-semgrep security-workflows \
 	a11y perf build-html cards benchmark eval eval-check mutation run container-build \
 	container-smoke container-scan container-verify container-demo clean
@@ -13,8 +13,8 @@
 # exits non-zero if any of them failed. Nothing is muted; nothing is skipped.
 SECURITY_GATES := security-pip security-npm security-osv security-secrets \
 	security-semgrep security-workflows
-VERIFY_GATES := lint type test hygiene release-version dist-metadata i18n security a11y perf cards \
-	eval-check compat container-verify
+VERIFY_GATES := lint type test hygiene example-manifests release-version dist-metadata i18n security \
+	a11y perf cards eval-check compat container-verify
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
 # `uv lock --check` first, because `uv sync --frozen` cannot fail on drift. The
@@ -83,6 +83,18 @@ hygiene:
 	.venv/bin/python scripts/check_source_hygiene.py
 	.venv/bin/python scripts/check_conformance.py
 	.venv/bin/python scripts/check_semgrep_waivers.py
+
+# Every committed example manifest, validated against the published receipts
+# schema by a real Draft 2020-12 validator. `receipts verify` re-derives figures
+# and never reads the schema, so the manifest dogfood-action verifies stayed at
+# schema 1.0 after 2.0 shipped and published three withheld figures as zeros
+# under green runs (#198). ADR 0005 keeps jsonschema out of the project
+# environment, so it runs isolated at a pinned version, as Semgrep and zizmor
+# do, and uv.lock is untouched. Its own gate rather than a line of `hygiene`,
+# for the reason `release-version` below gives.
+example-manifests:
+	uv run --isolated --no-project --python 3.12 --with jsonschema==4.26.0 \
+		python scripts/check_example_manifests.py
 
 # Its own gate rather than a fourth line of `hygiene`, for the reason the
 # comment above SECURITY_GATES gives: make stops a recipe at its first failing

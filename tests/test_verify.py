@@ -19,7 +19,7 @@ from outcome_receipts.cli import main
 from outcome_receipts.clock import FixedClock
 from outcome_receipts.config import load_spec
 from outcome_receipts.engine import compute_figures, read_csv
-from outcome_receipts.models import Figure
+from outcome_receipts.models import REDACTED_DISPLAY, SCHEMA_VERSION, Figure
 from outcome_receipts.report import receipts_manifest
 from outcome_receipts.verify import verify_bundle, verify_manifest
 
@@ -359,3 +359,35 @@ def test_verify_json_separates_receipts_from_manifest_descriptors(
     assert kinds["schema_version"] == "manifest"
     assert kinds["hash"] == "manifest"
     assert all(kinds[receipt["metric_id"]] == "receipt" for receipt in stored)
+
+
+def test_the_dogfood_example_is_current_and_verifies_without_a_warning(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The manifest ci.yml's dogfood-action verifies the reusable action against.
+
+    It sat at schema 1.0 after 2.0 shipped and published three withheld figures
+    as zeros under green runs (#198). It must declare the current schema, carry
+    each withheld figure as suppressed with null numerics, and verify with no
+    warning, which also pins that a 2.0 manifest does not trip the 1.0 warning.
+    """
+
+    manifest_path = EXAMPLES / "housing-demo" / "receipts.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    records = manifest["receipts"]
+    withheld = [record for record in records if record["display"] == REDACTED_DISPLAY]
+
+    assert manifest["schema_version"] == SCHEMA_VERSION
+    assert withheld, "the example no longer exercises a withheld figure"
+    for record in withheld:
+        assert record["suppressed"] is True
+        assert record["value"] is None
+        assert record["row_count"] is None
+        assert record["slice_hash"] is None
+
+    arguments = ["verify", "--config", str(HOUSING), "--receipts", str(manifest_path), "--json"]
+    assert main(arguments) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["receipts_drift"] == 0
+    assert payload["warnings"] == []

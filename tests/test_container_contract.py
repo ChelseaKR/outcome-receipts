@@ -58,6 +58,10 @@ def test_make_verify_uses_the_digest_pinned_container_scan() -> None:
         "type",
         "test",
         "hygiene",
+        # Static like `hygiene`, and its own entry for the reason given below.
+        # It validates every committed example manifest against the published
+        # schema, which nothing did while the dogfood example sat at 1.0.
+        "example-manifests",
         # Its own entry rather than a fourth line of `hygiene`'s recipe: make
         # stops a recipe at its first failing line, so a source-hygiene failure
         # would take the release-version check down with it.
