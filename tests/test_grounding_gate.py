@@ -185,3 +185,26 @@ def test_a_receipted_decimal_written_as_the_receipt_writes_it_still_binds() -> N
     result = ground("The rate was 0.75 per household.", [figure])
     assert result.ok
     assert [span.text for span in result.bound] == ["0.75"]
+
+
+def test_markdown_emphasis_does_not_split_a_percent_off_its_digits() -> None:
+    # ``**12**%`` is one number to a Markdown reader ("12%") and another to a
+    # raw scan ("12", because * is a pattern boundary). A count receipt of 12
+    # must not bind; the reader-visible 12% is unbound until a percent figure
+    # exists. Backticks wrap the same way.
+    figure = _count_figure("clients_served", "SELECT 12")
+    assert figure.display == "12"
+
+    emphasized = ground("served **12**% of its clients", [figure])
+    assert not emphasized.ok
+    assert [span.text for span in emphasized.unbound] == ["12%"]
+    assert emphasized.bound == ()
+
+    coded = ground("served `12`% of its clients", [figure])
+    assert not coded.ok
+    assert [span.text for span in coded.unbound] == ["12%"]
+
+    # Positive control: the same markup around a bare count still binds.
+    plain = ground("served **12** clients", [figure])
+    assert plain.ok
+    assert [span.text for span in plain.bound] == ["12"]
