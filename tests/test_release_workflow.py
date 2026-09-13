@@ -498,3 +498,49 @@ def test_each_published_loop_refuses_to_pass_on_an_empty_directory() -> None:
     job = _jobs(_text())["verify-published"]
     assert "nothing compared" in job
     assert "nothing verified" in job
+
+
+def _checks_artifact_metadata_before_spending_it(job: str) -> bool:
+    """The metadata check runs on dist/ after the build and before anything irreversible.
+
+    "Irreversible" is precise here: attestation signs these exact bytes, and a
+    PyPI filename cannot be re-used once uploaded. A check placed after either
+    one reports on a release that is already public.
+    """
+
+    check = job.find("scripts/check_dist_metadata.py dist")
+    build = job.find("run: uv build")
+    attest = job.find("attest-build-provenance")
+    return 0 <= build < check < attest
+
+
+def test_the_release_reads_the_metadata_it_is_about_to_publish() -> None:
+    assert _checks_artifact_metadata_before_spending_it(_jobs(_text())["build"])
+
+
+def test_dropping_the_artifact_metadata_check_is_caught() -> None:
+    job = _jobs(_text())["build"]
+    mutated = job.replace("run: python3 scripts/check_dist_metadata.py dist", "run: true")
+    _assert_mutated(job, mutated)
+
+    assert not _checks_artifact_metadata_before_spending_it(mutated)
+
+
+def test_moving_the_metadata_check_after_attestation_is_caught() -> None:
+    """Ordering is the property, not presence.
+
+    `outcome-receipts` 0.2.2 published a `License:` field holding the entire
+    Apache 2.0 text while every gate was green, because every gate read
+    `pyproject.toml` and PyPI reads the artifact. A metadata check that ran
+    after the upload would have reported the same defect just as truthfully,
+    and just as uselessly.
+    """
+
+    job = _jobs(_text())["build"]
+    step = "      - name: The metadata this wheel would publish is the metadata intended\n"
+    step += "        run: python3 scripts/check_dist_metadata.py dist\n"
+    assert step in job
+    mutated = job.replace(step, "") + step
+    _assert_mutated(job, mutated)
+
+    assert not _checks_artifact_metadata_before_spending_it(mutated)
