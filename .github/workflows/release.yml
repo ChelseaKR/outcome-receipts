@@ -120,6 +120,13 @@ jobs:
           enable-cache: false # signing/publish path: no cache poisoning surface
       - name: Build wheel + sdist
         run: uv build
+      # The `verify` job proved the tree is right. This proves the artifact is,
+      # which is a different claim: `gauntlet-evals` 0.2.0 shipped with no
+      # Project-URL lines at all while its default branch declared four, because
+      # the release built from a tag cut before that change merged. Runs before
+      # anything is attested, uploaded or spent.
+      - name: The metadata this wheel would publish is the metadata intended
+        run: python3 scripts/check_dist_metadata.py dist
       - name: Attest build provenance (signed via Sigstore)
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
