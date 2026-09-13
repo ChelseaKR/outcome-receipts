@@ -16,10 +16,10 @@ It uses a real Draft 2020-12 validator, `jsonschema`, rather than the structural
 subset `tests/test_manifest_schema.py` carries. That subset implements the
 keywords an emitted manifest exercises and ignores `pattern`, `enum` and
 `minimum`, so it would pass a slice hash that is not hex or a `kind` the schema
-does not name. ADR 0005 keeps `jsonschema` out of the project environment, so
-the Makefile runs this file in an isolated `uv run --with` environment at a
-pinned version, the way it runs Semgrep and zizmor, and nothing is added to
-`uv.lock`.
+does not name. `docs/decisions/0005` keeps `jsonschema` out of the project
+environment, so the Makefile runs this file in an isolated `uv run --with`
+environment at a pinned version, the way it runs Semgrep and zizmor, and
+nothing is added to `uv.lock`.
 
 It finds the manifests rather than being handed a list. Every JSON file under
 `examples/` that is named `receipts.json` or carries a top-level `receipts` key
@@ -71,8 +71,8 @@ def jsonschema_errors(schema: dict[str, Any], document: Any) -> list[SchemaError
     """Every Draft 2020-12 error in ``document``, sorted by location.
 
     `jsonschema` is imported here rather than at module level because it is
-    deliberately absent from the project environment (ADR 0005). The test suite
-    imports the rest of this module and injects its own validator.
+    deliberately absent from the project environment (`docs/decisions/0005`).
+    The test suite imports the rest of this module and injects its own validator.
     """
 
     jsonschema = importlib.import_module("jsonschema")

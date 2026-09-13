@@ -88,7 +88,7 @@ hygiene:
 # schema by a real Draft 2020-12 validator. `receipts verify` re-derives figures
 # and never reads the schema, so the manifest dogfood-action verifies stayed at
 # schema 1.0 after 2.0 shipped and published three withheld figures as zeros
-# under green runs (#198). ADR 0005 keeps jsonschema out of the project
+# under green runs (#198). docs/decisions/0005 keeps jsonschema out of the project
 # environment, so it runs isolated at a pinned version, as Semgrep and zizmor
 # do, and uv.lock is untouched. Its own gate rather than a line of `hygiene`,
 # for the reason `release-version` below gives.

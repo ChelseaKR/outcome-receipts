@@ -3,7 +3,7 @@
 `scripts/check_example_manifests.py` exists because the manifest `dogfood-action`
 verifies sat at schema 1.0 for every green run after 2.0 shipped (#198). These
 tests inject a validator, because `jsonschema` is deliberately not in the
-project environment (ADR 0005); the real Draft 2020-12 validator runs in
+project environment (`docs/decisions/0005`); the real Draft 2020-12 validator runs in
 `make example-manifests`. What they pin is everything around it: that the
 committed example is in scope, that finding nothing is a failure, that a file
 which does not parse or has a malformed `receipts` key cannot drop out of

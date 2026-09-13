@@ -32,7 +32,8 @@ than in an earlier one.
 - **`make example-manifests` validates every committed example manifest
   against the published schema.** It is part of `make verify` and runs a
   pinned Draft 2020-12 validator (`jsonschema` 4.26.0) in an isolated
-  environment, since ADR 0005 keeps that package out of the project's own. It
+  environment, since `docs/decisions/0005` keeps that package out of the
+  project's own. `docs/adr/0007` (Proposed) records the gate and the warning. It
   finds the manifests under `examples/` itself, prints two numbers, validated
   and committed, and fails when they differ or when it found none.
 - **`receipts verify` warns on a schema 1.0 withheld figure that carries
