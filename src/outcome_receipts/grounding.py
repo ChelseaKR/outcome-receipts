@@ -125,6 +125,19 @@ _GROUP_SPACES = ("\u00a0", "\u202f", " ")
 # A trailing unit word on a figure display, e.g. the "days" in "30 days".
 _UNIT_SUFFIX = re.compile(r"\s*[A-Za-z]+$")
 
+# Matched Markdown emphasis/code wraps. `*` is a number-pattern boundary, so
+# ``**12**%`` was scanned as ``12`` while every Markdown viewer shows ``12%``.
+# Strip the markers of matched pairs (not leftover unmatched asterisks) before
+# finding numbers, so the gate reads the text a reader sees.
+_MD_STRONG = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+_MD_CODE = re.compile(r"`([^`]+)`")
+
+
+def _reader_visible(text: str) -> str:
+    """Markdown as a reader sees it: drop matched ``**…**`` pairs and backtick wraps."""
+
+    return _MD_CODE.sub(r"\1", _MD_STRONG.sub(r"\1", text))
+
 
 def _single_separator_is_thousands(body: str, sep: str) -> bool:
     """Decide whether a lone '.'/',' groups thousands rather than marks a decimal.
@@ -287,12 +300,18 @@ def _span_key(text: str) -> str:
 
 
 def find_numbers(text: str) -> list[NumericSpan]:
-    """Return every numeric span in the text, in order."""
+    """Return every numeric span in the text, in order.
 
+    The scan runs on reader-visible Markdown (matched ``**…**`` and backtick
+    spans unwrapped). Offsets refer to that visible form, which is what the
+    gate binds; a raw ``**12**%`` is the span ``12%``, not ``12``.
+    """
+
+    visible = _reader_visible(text)
     spans = [
         NumericSpan(text=match.group(0), start=match.start(), end=match.end())
         for pattern in (_NUMBER, _NUMBER_WORD)
-        for match in pattern.finditer(text)
+        for match in pattern.finditer(visible)
     ]
     return sorted(spans, key=lambda span: span.start)
 
