@@ -19,8 +19,8 @@ make verify         # the local mirror of the CI gate
 
 `make verify` runs format/lint, strict typing, tests and coverage, source and
 documentation hygiene, gettext parity, dependency/SAST/secret/workflow scans,
-generated-HTML accessibility checks, generated-card drift, and the committed
-eval/benchmark drift check. CI invokes the same targets. The active main ruleset
+generated-HTML accessibility checks, generated-card drift, schema validation of
+the committed example manifests, and the committed eval/benchmark drift check. CI invokes the same targets. The active main ruleset
 blocks force-push/deletion, requires pull requests and strict status checks, and
 requires signed linear history. Keep branch coverage at or above 90%, with 95%
 on the declared integrity-critical modules.

@@ -19,7 +19,12 @@ from outcome_receipts.cli import EXIT_VERIFY_FAIL, main
 from outcome_receipts.clock import FixedClock
 from outcome_receipts.config import SPEC_SCHEMA_VERSION, load_spec
 from outcome_receipts.engine import compute_figures, read_csv
-from outcome_receipts.models import SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS, Figure
+from outcome_receipts.models import (
+    REDACTED_DISPLAY,
+    SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
+    Figure,
+)
 from outcome_receipts.suppression import suppress_figures
 from outcome_receipts.verify import verify_manifest
 
@@ -266,3 +271,46 @@ def test_an_edited_frozen_receipt_is_reported_as_drift_not_quietly_accepted() ->
     drifted = [check for check in result.checks if not check.ok]
     assert [check.metric_id for check in drifted] == ["clients_served"]
     assert "value" in drifted[0].detail
+
+
+@pytest.mark.parametrize("baseline", [BASELINE, BASELINE_V020], ids=["v0.1.0", "v0.2.0"])
+def test_a_released_1_0_manifest_warns_on_its_withheld_zeros_without_failing(
+    baseline: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """#198: "re-derived, matches" is true of 1.0's placeholders and silent about them.
+
+    Every receipt a 1.0 manifest renders as [SUPPRESSED] carries value 0.0 and
+    row_count 0. Verify has to say so and name each one, and it has to leave the
+    result and the exit code exactly where they were: these released manifests
+    verified before the warning existed, and a warning that failed them would
+    break every downstream run still verifying a 1.0 manifest.
+    """
+
+    manifest = json.loads((baseline / "receipts.json").read_text(encoding="utf-8"))
+    records = manifest["receipts"]
+    withheld = sorted(r["metric_id"] for r in records if r["display"] == REDACTED_DISPLAY)
+    published = [r["metric_id"] for r in records if r["display"] != REDACTED_DISPLAY]
+    assert withheld, "the baseline no longer carries a 1.0 withheld figure to warn on"
+    assert published, "nor a published figure to show the warning is not blanket"
+
+    result = verify_manifest(_rederive(baseline), manifest)
+
+    assert result.ok
+    assert sorted(warning.metric_id for warning in result.warnings) == withheld
+    for warning in result.warnings:
+        assert "value=0.0" in warning.detail
+        assert "row_count=0" in warning.detail
+
+    config = str(baseline / "report.toml")
+    receipts = str(baseline / "receipts.json")
+    assert main(["verify", "--config", config, "--receipts", receipts]) == 0
+    text = capsys.readouterr().out
+    assert f"warnings: {len(withheld)} (reported, not failed on)" in text
+    for metric_id in withheld:
+        assert f"  [warn] {metric_id}: schema 1.0 receipt displays {REDACTED_DISPLAY}" in text
+    assert "verify: PASS" in text
+
+    assert main(["verify", "--config", config, "--receipts", receipts, "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert sorted(entry["metric_id"] for entry in payload["warnings"]) == withheld

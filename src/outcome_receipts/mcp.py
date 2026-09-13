@@ -189,6 +189,10 @@ def _verify_payload(result: VerifyResult) -> dict[str, Any]:
         "receipts_drift": len(result.failed_receipts),
         "manifest_checks": len(result.manifest_checks),
         "manifest_checks_failed": len(result.failed_manifest_checks),
+        "warnings": [
+            {"metric_id": warning.metric_id, "detail": warning.detail}
+            for warning in result.warnings
+        ],
     }
 
 

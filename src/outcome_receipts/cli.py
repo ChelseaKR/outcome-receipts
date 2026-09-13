@@ -1498,6 +1498,19 @@ def _receipt_counts(result: VerifyResult) -> dict[str, object]:
     }
 
 
+def _warnings_payload(result: VerifyResult) -> list[dict[str, str]]:
+    """What verify reported without failing on, one entry per receipt.
+
+    Always present, as an empty list when there is nothing to report, so a script
+    can tell "no warnings" apart from an older CLI that had no such key. It never
+    enters ``ok`` and never changes the exit code.
+    """
+
+    return [
+        {"metric_id": warning.metric_id, "detail": warning.detail} for warning in result.warnings
+    ]
+
+
 def _verify_payload(result: VerifyResult) -> dict[str, object]:
     """The machine-readable record of a manifest ``verify`` invocation."""
 
@@ -1507,6 +1520,7 @@ def _verify_payload(result: VerifyResult) -> dict[str, object]:
         "ok": result.ok,
         "checks": [_check_payload(check) for check in result.checks],
         **_receipt_counts(result),
+        "warnings": _warnings_payload(result),
     }
 
 
@@ -1525,6 +1539,7 @@ def _bundle_payload(result: BundleResult) -> dict[str, object]:
         "ok": result.ok,
         "checks": [_check_payload(check) for check in manifest.checks],
         **_receipt_counts(manifest),
+        "warnings": _warnings_payload(manifest),
         "artifacts": [
             {"path": artifact.path, "ok": artifact.ok, "detail": artifact.detail}
             for artifact in result.artifacts
@@ -1569,6 +1584,10 @@ def _print_manifest_checks(result: VerifyResult) -> None:
     for check in result.checks:
         status = "ok" if check.ok else "DRIFT"
         print(f"  [{status}] {check.metric_id}: {check.detail}")
+    if result.warnings:
+        print(f"warnings: {len(result.warnings)} (reported, not failed on)")
+        for warning in result.warnings:
+            print(f"  [warn] {warning.metric_id}: {warning.detail}")
 
 
 def _verify_failure_reason(result: VerifyResult) -> str:

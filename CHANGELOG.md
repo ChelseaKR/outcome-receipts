@@ -28,7 +28,36 @@ than in an earlier one.
 
 ## [Unreleased]
 
+### Added
+- **`make example-manifests` validates every committed example manifest
+  against the published schema.** It is part of `make verify` and runs a
+  pinned Draft 2020-12 validator (`jsonschema` 4.26.0) in an isolated
+  environment, since `docs/decisions/0005` keeps that package out of the
+  project's own. `docs/adr/0007` (Proposed) records the gate and the warning. It
+  finds the manifests under `examples/` itself, prints two numbers, validated
+  and committed, and fails when they differ or when it found none.
+- **`receipts verify` warns on a schema 1.0 withheld figure that carries
+  numbers.** A 1.0 receipt displaying `[SUPPRESSED]` beside `value: 0.0` and
+  `row_count: 0` was reported only as `[ok] re-derived, matches`, which is true
+  of the placeholders and says nothing about a reader being unable to tell them
+  from a true zero. Each such receipt now also gets a `[warn]` line naming it,
+  and `--json` output (manifest mode, bundle mode, and the MCP `verify` tool)
+  carries a `warnings` array that is empty when there is nothing to report. A
+  warning never changes `ok` or the exit code, so every manifest that verified
+  before still verifies.
+
 ### Fixed
+- **The example the reusable action is verified against published three
+  withheld figures as zeros (#198).** `examples/housing-demo/receipts.json` was
+  last written under manifest schema 1.0, before 2.0 made a withheld figure
+  `suppressed: true` with null numerics, and it failed
+  `docs/schema/receipts.schema.json` with five errors while `dogfood-action`
+  stayed green. It is regenerated at 2.0 with `receipts run --reproducible
+  --approved-by CI`. Its figures are unchanged. The `report.md` and
+  `trace.html` digests it records moved, because those files are rebuilt by
+  each run, are not committed beside it, and have changed since July. The copy
+  inside the published `0.2.2` sdist is still the 1.0 file; only a new release
+  replaces it.
 - **The PyPI `License` field was the whole Apache 2.0 text.** `license` was
   declared as `{ file = "LICENSE" }`, which hatchling resolves by inlining the
   file, so the published `0.2.2` metadata carries a 201-line, 12,914-character

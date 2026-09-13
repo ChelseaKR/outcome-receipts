@@ -52,6 +52,12 @@ reconstructs that manifest's rendering from the current figures before
 comparing, so the schema change is not reported as data drift and the frozen
 `v0.1.0` baseline still re-derives. Nothing writes `1.0` any more.
 
+`receipts verify` also reports a warning, never a failure, for each `1.0`
+receipt that displays `[SUPPRESSED]` while carrying a number in `value`,
+`row_count`, or `slice_hash`. Re-deriving those placeholders proves they still
+hold, not that a reader can tell them from a true zero. The warning leaves `ok`
+and the exit code as they were, and `--json` lists it under `warnings`.
+
 The workflow artifact version is unchanged at `1.0`. Its envelope did not
 change; what changed is inside the receipts it embeds, and those are governed by
 the receipts-manifest contract. `receipts verify-workflow` gained a check that
