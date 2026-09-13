@@ -12,14 +12,46 @@ Two versions below were never published, and they failed in different places.
 `0.2.0` is a signed GitHub release whose PyPI upload was never approved.
 `0.2.1` never got a release run past its gates at all: the tag names a commit
 where `pyproject.toml` still read `0.2.0` and this file carried no `[0.2.1]`
-section, and no commit exists at which `0.2.1` is coherent, so the tag is
-wrong and is left in place rather than moved onto a tree it does not describe.
-The newest version installable from PyPI is therefore `0.1.0`. Both sections
-are left exactly as they were written: they record what those releases
-claimed, and a correction belongs in a later section rather than in an earlier
-one.
+section. Its four attempted runs died in three different places, and only one
+of them on a version check -- two failed in `authorize`, where the tag named a
+commit unreachable from `main`, and one on a container-security gate over CVEs
+published after the tag was cut.
+
+Coherent trees for `0.2.1` do exist: `3c7b90e` and `627cf24` both satisfy
+`scripts/check_release_version.py`. They are simply not the tree the tag names,
+and by the time they existed a fresh `[Unreleased]` section had already opened
+above them. The only repair would be moving a published ref onto a tree it was
+not cut from, so `0.2.1` is left exactly where it is and `0.2.2` cuts forward
+instead. Both sections below are left as they were written: they record what
+those releases claimed, and a correction belongs in a later section rather
+than in an earlier one.
 
 ## [Unreleased]
+
+### Fixed
+- **`verify-published` now verifies the package PyPI serves, rather than the
+  one this repository built.** The job is the last line of the release and its
+  name makes one claim -- that the published artifact is the attested one --
+  which it could not support: it ran `gh attestation verify` over the `build`
+  job's own uploaded artifact, so a green run meant "the wheel we attested is
+  attested". A wheel substituted on PyPI's side would have passed. It now
+  downloads what PyPI actually serves and checks *those* bytes three ways:
+  every published digest against the Sigstore-attested `SHA256SUMS` manifest,
+  every published file against its GitHub attestation, and then the smoke test.
+  Both loops refuse to pass over an empty directory, because a loop with no
+  iterations exits 0 having verified nothing.
+- **The release smoke test no longer races PyPI's index.** PyPI's index is a
+  CDN and does not serve a new version the instant the upload returns 200;
+  `uvx --refresh` clears uv's cache, not PyPI's. On `v0.2.2` the smoke test ran
+  13 seconds after two successful uploads and failed with "there is no version
+  of outcome-receipts==0.2.2" while the release was published and correct. The
+  job now waits for the index, bounded at five minutes so a genuine
+  non-appearance still fails.
+- **The digest comparison tolerates both manifest path markers.** This
+  repository's `SHA256SUMS` writes `./name` while `sha256sum --binary` writes
+  `*name`; an exact match on the filename field would have reported the real,
+  correct `0.2.2` wheel as a file the manifest never named -- a false
+  substitution alarm on a good release.
 
 ## [0.2.2] - 2026-09-13
 
