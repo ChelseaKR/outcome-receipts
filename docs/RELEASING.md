@@ -41,7 +41,7 @@ rationale and history.
 ## Prepare a release
 
 1. Update **every place that carries the version**, in one pull request. This
-   list is exhaustive as of `0.2.1`, and it is written out because a shorter
+   list is exhaustive as of `0.2.2`, and it is written out because a shorter
    version of this step is what produced the `0.2.1` drift: the promotion to
    `0.2.1` moved `CHANGELOG.md` alone, and `pyproject.toml` sat at `0.2.0`
    through a green `make verify`, a green `ci`, and a `release.yml` whose only
@@ -50,17 +50,23 @@ rationale and history.
    | File | What moves |
    |---|---|
    | `CHANGELOG.md` | `## [Unreleased]` becomes `## [X.Y.Z] - <date>`, and a fresh empty `## [Unreleased]` opens above it |
+   | `CHANGELOG.md` link definitions | the last lines of the file: `[Unreleased]` re-points at `vX.Y.Z...HEAD`, and a new `[X.Y.Z]` compare line is added. Nothing checks these, and `0.2.1`'s promotion had to come back for them |
    | `pyproject.toml` | `project.version` — this is what `uv build` stamps on the wheel |
    | `uv.lock` | the `outcome-receipts` editable-root entry's `version`; `make install` runs `uv lock --check`, which fails closed on the drift a bump creates |
    | `CITATION.cff` | `version` **and** `date-released` |
    | `README.md` | the status note, and its `Last verified:` stamp |
    | `docs/cards/` | regenerate: `uv run receipts cards --out docs/cards` |
 
-   Three of those six are now checked against each other by
+   Three of those seven are now checked against each other by
    `make release-version` (`CHANGELOG.md`, `pyproject.toml`, `CITATION.cff`),
    and `uv.lock` is caught by the `uv lock --check` that `make install` runs.
-   The README prose and the cards are not machine-checked and are still read by
-   a person.
+   The README prose, the CHANGELOG's link definitions and the cards are not
+   machine-checked and are still read by a person. The date matters and no gate
+   can see it: `make release-version` requires `CITATION.cff`'s `date-released`
+   to equal the CHANGELOG section's date, but both are checked for shape, not
+   for truth, so a release prepared on one day and tagged on another passes
+   green while claiming the wrong date. If the tag is not cut the day the
+   promotion is written, move both.
 
    **After** the release is published, `action.yml`'s `version` input default
    and the places `docs/ci-action.md` restates it move to the new tag —

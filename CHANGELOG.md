@@ -8,54 +8,20 @@ Version `0.1.0` is the first beta release. It includes the deterministic core
 and the privacy, verification, mapping, localization, optional drafting, and
 release-hardening work completed before the first public tag.
 
+Two versions below were never published, and they failed in different places.
+`0.2.0` is a signed GitHub release whose PyPI upload was never approved.
+`0.2.1` never got a release run past its gates at all: the tag names a commit
+where `pyproject.toml` still read `0.2.0` and this file carried no `[0.2.1]`
+section, and no commit exists at which `0.2.1` is coherent, so the tag is
+wrong and is left in place rather than moved onto a tree it does not describe.
+The newest version installable from PyPI is therefore `0.1.0`. Both sections
+are left exactly as they were written: they record what those releases
+claimed, and a correction belongs in a later section rather than in an earlier
+one.
+
 ## [Unreleased]
 
-### Security
-- **`js-yaml` 3.15.1 -> 3.15.2 and 4.3.1 -> 4.3.2 (`GHSA-2883-XCG3-V3HH`,
-  high), which is what `make security-npm` was refusing.** The advisory was
-  published 2026-09-08 at 21:24 UTC; `verify` last passed on `main` at
-  `228a51f` at 02:32 UTC the same day, against this same `package-lock.json`.
-  The gate went red on the advisory database moving, not on a commit, which is
-  why it was found by an unrelated documentation PR (#188) rather than by the
-  change that caused it -- there was none.
-  - **Both copies are development-only and neither reads untrusted input**, and
-    that is worth writing down rather than assuming, because it is the question
-    that decides whether a waiver would have been defensible. `js-yaml@3` is
-    reached through `@lhci/utils` <- `@lhci/cli`, and this repository configures
-    Lighthouse CI with `lighthouserc.cjs` -- JavaScript, not YAML. `js-yaml@4`
-    is reached through `cosmiconfig` <- `puppeteer`, which searches for a
-    `.puppeteerrc` this repository does not have. The advisory is CPU
-    exhaustion on a hostile document; nothing in the `a11y` gate hands either
-    parser a document it did not author.
-  - The fix is six lines of `package-lock.json`, so no waiver was warranted and
-    none was added. `waivers.yml` still holds no `npm-audit` entry.
-  - **Only the two `js-yaml` entries moved.** `npm update js-yaml
-    --package-lock-only` also prunes 24 stale `puppeteer`/`puppeteer-core`
-    proxy-agent nodes, and a plain `npm install --package-lock-only` on
-    unmodified `main` prunes exactly the same 24 -- so that churn is
-    pre-existing lock drift, unrelated to this advisory, and is left for a
-    change that can be reviewed on its own terms.
-
-### Fixed
-- **The Semgrep waiver cross-check was described as scanning the tree, and scans
-  four directories.** `scripts/check_semgrep_waivers.py` reads `SCAN_DIRS =
-  ("src", "tests", "scripts", ".github")` over seven suffixes; `make
-  security-semgrep` scans the whole repository. So a suppression added under
-  `eval/`, `docs/`, `examples/` or at the repository root is invisible to the
-  cross-check, while `docs/RESPONSIBLE-TECH-AUDITS.md` said the comparison ran
-  "against the tree in both directions" — a stated scope wider than the code's,
-  which is the shape that makes a gate read as covering something it never
-  opened. The audit note now names the four directories and the suffixes, and
-  says which paths are outside them.
-  - Three tests pin it, so the sentence and the constants cannot drift apart
-    again: the documented scope must equal `SCAN_DIRS`/`SCAN_SUFFIXES`, a
-    suppression placed outside the scanned set must not be reported as caught,
-    and the file the scope exception exists for must still exist — an exception
-    for a file that has since been deleted is an exemption that exempts nothing
-    and only obscures the list.
-  - The `[0.2.1]` entry below is left as written. It is the record of what that
-    release claimed; the correction belongs here rather than in a section that
-    has shipped.
+## [0.2.2] - 2026-09-13
 
 ### Added
 - **`receipts portfolio` and `receipts portfolio-verify`: a batch of specs, and
@@ -127,6 +93,58 @@ release-hardening work completed before the first public tag.
   one.
 
 ### Fixed
+- **`0.2.1` was tagged onto a tree in which `0.2.1` does not exist, and the
+  trees where it does exist are not the ones the tag names.** The bump and the
+  promotion landed one commit apart and in the wrong order: `f7f8b9f` promoted
+  `[Unreleased]` to `## [0.2.1] - 2026-09-07` while `pyproject.toml` still read
+  `0.2.0`, and `3c7b90e` moved `pyproject.toml`, `CITATION.cff` and `uv.lock`
+  afterwards — by which point a fresh `[Unreleased]` had already opened above
+  the `[0.2.1]` section and was accumulating entries. The tag itself points at
+  `dae3e8e`, earlier than both, where `pyproject.toml` reads `0.2.0`, there is
+  no `[0.2.1]` section at all, and `scripts/check_release_version.py` — the
+  guard written to catch exactly this — does not yet exist, because a tag is a
+  frozen tree and a guard added after it cannot run at it.
+
+  Running that guard over each of those trees says it plainly: it fails at
+  `dae3e8e` and at `f7f8b9f`, and passes at `3c7b90e` and on current `main`.
+  So the problem is not that no coherent tree exists; it is that the coherent
+  trees are not the tagged one, the `[0.2.1]` section does not describe them,
+  and the only repair for that shape is moving a published ref. `v0.2.1` is
+  left exactly where it is. It is wrong, and a visibly bad tag is better than a
+  moved one. `0.2.2` is cut from `main` instead, which needs no tag to move,
+  and the CHANGELOG preamble now states that neither `0.2.0` nor `0.2.1` is
+  installable rather than leaving the sequence to be inferred.
+- **The release checklist's exhaustive file list was missing the lines that
+  `0.2.1`'s promotion had already had to come back for, and the one field in it
+  that no gate can check was not flagged as such.** `docs/RELEASING.md` named
+  six files; the CHANGELOG's link definitions at the foot of the file are a
+  seventh, unchecked by anything, and `f7f8b9f` re-pointed two of them in the
+  same commit that the table does not mention. The checklist now names them.
+  It also now says what `make release-version` does and does not prove about
+  the release date: it requires `CITATION.cff`'s `date-released` to equal the
+  CHANGELOG section's date, but it compares two declarations to each other and
+  neither to a calendar, so a release prepared one day and tagged the next
+  passes green while stating a date that never happened.
+- **The Semgrep waiver cross-check was described as scanning the tree, and scans
+  four directories.** `scripts/check_semgrep_waivers.py` reads `SCAN_DIRS =
+  ("src", "tests", "scripts", ".github")` over seven suffixes; `make
+  security-semgrep` scans the whole repository. So a suppression added under
+  `eval/`, `docs/`, `examples/` or at the repository root is invisible to the
+  cross-check, while `docs/RESPONSIBLE-TECH-AUDITS.md` said the comparison ran
+  "against the tree in both directions" — a stated scope wider than the code's,
+  which is the shape that makes a gate read as covering something it never
+  opened. The audit note now names the four directories and the suffixes, and
+  says which paths are outside them.
+  - Three tests pin it, so the sentence and the constants cannot drift apart
+    again: the documented scope must equal `SCAN_DIRS`/`SCAN_SUFFIXES`, a
+    suppression placed outside the scanned set must not be reported as caught,
+    and the file the scope exception exists for must still exist — an exception
+    for a file that has since been deleted is an exemption that exempts nothing
+    and only obscures the list.
+  - The `[0.2.1]` entry below is left as written. It is the record of what that
+    release claimed; the correction belongs here rather than in a section that
+    has shipped.
+
 - **The release checklist named three of the six files that carry the version,
   and the three it omitted are the ones that drifted.** `docs/RELEASING.md`
   step 1 read *"Update `pyproject.toml`, `CHANGELOG.md`, and generated
@@ -199,6 +217,32 @@ release-hardening work completed before the first public tag.
   passed. It now fails closed."*). This is the same defect in the second
   checker. No document in the tree is currently in either state; every stamp is
   a well-formed past date, so this changes no current verdict.
+
+### Security
+- **`js-yaml` 3.15.1 -> 3.15.2 and 4.3.1 -> 4.3.2 (`GHSA-2883-XCG3-V3HH`,
+  high), which is what `make security-npm` was refusing.** The advisory was
+  published 2026-09-08 at 21:24 UTC; `verify` last passed on `main` at
+  `228a51f` at 02:32 UTC the same day, against this same `package-lock.json`.
+  The gate went red on the advisory database moving, not on a commit, which is
+  why it was found by an unrelated documentation PR (#188) rather than by the
+  change that caused it -- there was none.
+  - **Both copies are development-only and neither reads untrusted input**, and
+    that is worth writing down rather than assuming, because it is the question
+    that decides whether a waiver would have been defensible. `js-yaml@3` is
+    reached through `@lhci/utils` <- `@lhci/cli`, and this repository configures
+    Lighthouse CI with `lighthouserc.cjs` -- JavaScript, not YAML. `js-yaml@4`
+    is reached through `cosmiconfig` <- `puppeteer`, which searches for a
+    `.puppeteerrc` this repository does not have. The advisory is CPU
+    exhaustion on a hostile document; nothing in the `a11y` gate hands either
+    parser a document it did not author.
+  - The fix is six lines of `package-lock.json`, so no waiver was warranted and
+    none was added. `waivers.yml` still holds no `npm-audit` entry.
+  - **Only the two `js-yaml` entries moved.** `npm update js-yaml
+    --package-lock-only` also prunes 24 stale `puppeteer`/`puppeteer-core`
+    proxy-agent nodes, and a plain `npm install --package-lock-only` on
+    unmodified `main` prunes exactly the same 24 -- so that churn is
+    pre-existing lock drift, unrelated to this advisory, and is left for a
+    change that can be reviewed on its own terms.
 
 ## [0.2.1] - 2026-09-07
 
@@ -1400,7 +1444,8 @@ contract change is described in full under **Changed** below.
   suppressed, every percent figure is suppressed with it, documented as such in
   the module docstring.
 
-[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ChelseaKR/outcome-receipts/releases/tag/v0.1.0
