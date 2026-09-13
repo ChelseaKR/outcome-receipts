@@ -29,6 +29,21 @@ than in an earlier one.
 ## [Unreleased]
 
 ### Fixed
+- **The PyPI `License` field was the whole Apache 2.0 text.** `license` was
+  declared as `{ file = "LICENSE" }`, which hatchling resolves by inlining the
+  file, so the published `0.2.2` metadata carries a 201-line, 12,914-character
+  `License:` field and PyPI renders every line of it on the project page. It is
+  now the PEP 639 expression `Apache-2.0` with `license-files`, and the
+  superseded `License :: OSI Approved :: Apache Software License` classifier is
+  gone. `Repository`, `Issues` and `Changelog` were added alongside the two
+  `Project-URL` labels the artifact already carried.
+- **Nothing read the metadata the release actually publishes.** `0.2.2` shipped
+  on 2026-09-13 with that licence field and every gate green, because every
+  gate reads `pyproject.toml` and PyPI reads the artifact. `make dist-metadata`
+  and a step in `release.yml`'s `build` job now build the wheel and the sdist
+  and check thirteen fields in the metadata itself, before anything is
+  attested or uploaded. Published metadata is immutable, so `0.2.2` keeps its
+  8/13 for as long as it exists on the index; the next release carries 13/13.
 - **`verify-published` now verifies the package PyPI serves, rather than the
   one this repository built.** The job is the last line of the release and its
   name makes one claim -- that the published artifact is the attested one --

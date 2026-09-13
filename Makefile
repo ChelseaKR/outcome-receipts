@@ -1,5 +1,5 @@
 .PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
-	release-version \
+	release-version dist-metadata \
 	security-pip security-npm security-osv security-secrets security-semgrep security-workflows \
 	a11y perf build-html cards benchmark eval eval-check mutation run container-build \
 	container-smoke container-scan container-verify container-demo clean
@@ -13,7 +13,7 @@
 # exits non-zero if any of them failed. Nothing is muted; nothing is skipped.
 SECURITY_GATES := security-pip security-npm security-osv security-secrets \
 	security-semgrep security-workflows
-VERIFY_GATES := lint type test hygiene release-version i18n security a11y perf cards \
+VERIFY_GATES := lint type test hygiene release-version dist-metadata i18n security a11y perf cards \
 	eval-check compat container-verify
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
@@ -92,6 +92,16 @@ hygiene:
 # release can make.
 release-version:
 	.venv/bin/python scripts/check_release_version.py
+
+# The artifact-level counterpart to `release-version`. That one compares numbers
+# inside the tree; this one builds the wheel and the sdist and reads the metadata
+# PyPI would actually be handed. `python3` rather than `.venv/bin/python` on
+# purpose: release.yml's build job runs this identical command against the exact
+# artifacts it is about to upload, and that job has no project environment.
+dist-metadata:
+	@rm -rf dist
+	uv build
+	python3 scripts/check_dist_metadata.py dist
 
 # Keep ephemeral Python tools on the same interpreter as the locked project. In
 # particular, Semgrep's macOS source distribution does not carry semgrep-core.
