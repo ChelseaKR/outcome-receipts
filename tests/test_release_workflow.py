@@ -382,3 +382,165 @@ def test_allowed_signers_holds_a_public_key_only() -> None:
     content = ALLOWED_SIGNERS.read_text(encoding="utf-8")
     for private_marker in ("PRIVATE KEY", "BEGIN OPENSSH PRIVATE"):
         assert private_marker not in content
+
+
+def _verify_published_reads_pypis_copy(job_text: str) -> bool:
+    """Does `verify-published` verify the bytes PyPI serves, rather than ours?
+
+    The job's name makes exactly one claim -- that the *published* package is
+    the attested one -- and for its first several releases it could not support
+    that claim. It ran `gh attestation verify dist/*.whl` over the artifact the
+    `build` job uploaded, which is a tautology: the artifact we attested is
+    attested. A wheel substituted on PyPI's side would have passed, because
+    nothing in the job ever fetched PyPI's copy.
+
+    So this checks the property that repairs it: the attestation and digest
+    steps read a directory populated *from PyPI*, and the build job's artifact
+    lands somewhere else (`dist-built`) where it serves as the expectation
+    rather than as the evidence.
+    """
+
+    downloads_from_pypi = "dist-published" in job_text and "pypi.org/pypi/" in job_text
+    attests_the_published_copy = "attestation verify" in job_text and (
+        'gh attestation verify "$published"' in job_text
+    )
+    built_artifact_is_not_the_evidence = "path: dist-built" in job_text
+    return downloads_from_pypi and attests_the_published_copy and built_artifact_is_not_the_evidence
+
+
+def _verify_published_waits_for_the_index(job_text: str) -> bool:
+    """Does the job tolerate PyPI's index lagging its own upload?
+
+    PyPI's index is a CDN and does not serve a new version the moment the
+    upload returns 200. On v0.2.2 the smoke test ran 13 seconds after two
+    successful uploads and failed with "there is no version of
+    outcome-receipts==0.2.2" -- while the release was published and correct.
+    A retry bounded by a real failure is the difference between a flaky check
+    and one that still reports a genuine non-appearance.
+    """
+
+    return "Wait for the PyPI index to serve this version" in job_text and (
+        "index never served" in job_text
+    )
+
+
+def test_verify_published_checks_the_copy_pypi_serves_not_the_one_we_built() -> None:
+    """Re-verifying our own artifact cannot establish anything about PyPI's."""
+
+    assert _verify_published_reads_pypis_copy(_jobs(_text())["verify-published"])
+
+
+def test_reverting_to_verifying_our_own_artifact_is_caught() -> None:
+    job = _jobs(_text())["verify-published"]
+    mutated = job.replace("path: dist-built", "path: dist")
+    _assert_mutated(job, mutated)
+
+    assert not _verify_published_reads_pypis_copy(mutated)
+
+
+def test_the_published_digests_are_compared_with_the_attested_manifest() -> None:
+    """Agreeing with SHA256SUMS is agreeing with what Sigstore signed.
+
+    The manifest traveled with the attested artifact, so a digest comparison
+    against it is a comparison against the signed bytes -- and it is what
+    catches a file PyPI serves that this repository never built.
+    """
+
+    job = _jobs(_text())["verify-published"]
+    assert "SHA256SUMS" in job
+    assert "unattested file on PyPI" in job
+    assert "published bytes differ" in job
+
+
+def test_removing_the_digest_comparison_is_caught() -> None:
+    job = _jobs(_text())["verify-published"]
+    mutated = job.replace("published bytes differ", "published bytes agree")
+    _assert_mutated(job, mutated)
+
+    assert "published bytes differ" not in mutated
+
+
+def test_the_digest_comparison_tolerates_both_manifest_path_markers() -> None:
+    """`./name` and `*name` must both match, or a correct release fails.
+
+    `sha256sum` writes `*name` in binary mode; this repository's manifest
+    writes `./name`. An exact match on the second field would have reported the
+    real, correct v0.2.2 wheel as a file the manifest never named -- a false
+    substitution alarm on a green release.
+    """
+
+    job = _jobs(_text())["verify-published"]
+    assert 'sub(/^\\*/, "", f)' in job
+    assert 'sub(/^\\.\\//, "", f)' in job
+
+
+def test_verify_published_waits_for_the_index_before_smoke_testing() -> None:
+    assert _verify_published_waits_for_the_index(_jobs(_text())["verify-published"])
+
+
+def test_removing_the_index_wait_is_caught() -> None:
+    job = _jobs(_text())["verify-published"]
+    mutated = job.replace("Wait for the PyPI index to serve this version", "Skip")
+    _assert_mutated(job, mutated)
+
+    assert not _verify_published_waits_for_the_index(mutated)
+
+
+def test_each_published_loop_refuses_to_pass_on_an_empty_directory() -> None:
+    """A loop over no files exits 0 and proves nothing.
+
+    Both the digest comparison and the attestation check iterate over whatever
+    `dist-published` holds. If the download step ever produced an empty
+    directory, each loop would complete without executing its body and the job
+    would go green having verified nothing -- absence rendered as a pass.
+    """
+
+    job = _jobs(_text())["verify-published"]
+    assert "nothing compared" in job
+    assert "nothing verified" in job
+
+
+def _checks_artifact_metadata_before_spending_it(job: str) -> bool:
+    """The metadata check runs on dist/ after the build and before anything irreversible.
+
+    "Irreversible" is precise here: attestation signs these exact bytes, and a
+    PyPI filename cannot be re-used once uploaded. A check placed after either
+    one reports on a release that is already public.
+    """
+
+    check = job.find("scripts/check_dist_metadata.py dist")
+    build = job.find("run: uv build")
+    attest = job.find("attest-build-provenance")
+    return 0 <= build < check < attest
+
+
+def test_the_release_reads_the_metadata_it_is_about_to_publish() -> None:
+    assert _checks_artifact_metadata_before_spending_it(_jobs(_text())["build"])
+
+
+def test_dropping_the_artifact_metadata_check_is_caught() -> None:
+    job = _jobs(_text())["build"]
+    mutated = job.replace("run: python3 scripts/check_dist_metadata.py dist", "run: true")
+    _assert_mutated(job, mutated)
+
+    assert not _checks_artifact_metadata_before_spending_it(mutated)
+
+
+def test_moving_the_metadata_check_after_attestation_is_caught() -> None:
+    """Ordering is the property, not presence.
+
+    `outcome-receipts` 0.2.2 published a `License:` field holding the entire
+    Apache 2.0 text while every gate was green, because every gate read
+    `pyproject.toml` and PyPI reads the artifact. A metadata check that ran
+    after the upload would have reported the same defect just as truthfully,
+    and just as uselessly.
+    """
+
+    job = _jobs(_text())["build"]
+    step = "      - name: The metadata this wheel would publish is the metadata intended\n"
+    step += "        run: python3 scripts/check_dist_metadata.py dist\n"
+    assert step in job
+    mutated = job.replace(step, "") + step
+    _assert_mutated(job, mutated)
+
+    assert not _checks_artifact_metadata_before_spending_it(mutated)

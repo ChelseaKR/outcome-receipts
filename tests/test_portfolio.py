@@ -168,7 +168,7 @@ def test_two_specs_that_would_export_into_one_directory_are_refused(
     assert "would both export into 'shared'" in capsys.readouterr().err
 
 
-def test_the_batch_honours_a_spec_approval_policy(tmp_path: Path) -> None:
+def test_the_batch_honors_a_spec_approval_policy(tmp_path: Path) -> None:
     # The batch runs `run` itself, so a spec's [approval] policy applies to it
     # exactly as it does to a single export.
     spec = _spec(tmp_path / "dual", title="Dual", definition="Clients, counted once.")

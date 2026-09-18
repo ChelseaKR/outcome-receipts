@@ -14,7 +14,7 @@ name: release reality
 # `v0.2.0` is a signed GitHub release with its full attested asset set and is
 # not on PyPI. The run that cut it did not fail: it succeeded four jobs deep and
 # then `pypi-publish` sat at the `pypi` environment's required review for
-# thirteen days and was cancelled — taking `verify-published`, the job that
+# thirteen days and was canceled — taking `verify-published`, the job that
 # would have reported the gap, with it. A `cancelled` run is not a `failure`, so
 # nothing alerted, and the gap was found nine days later by a portfolio-wide
 # sweep. Issue #173 records it.

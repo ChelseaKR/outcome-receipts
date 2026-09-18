@@ -75,7 +75,7 @@ _UNRELEASED_HEADING = re.compile(r"^## \[Unreleased\]\s*$", re.IGNORECASE)
 
 #: Any level-2 heading, so a release heading that is *almost* right -- the date
 #: dropped, or an en dash where the separator should be a hyphen -- is reported
-#: as malformed rather than silently skipped in favour of an older section that
+#: as malformed rather than silently skipped in favor of an older section that
 #: does parse. Skipping it would let a botched promotion pass by comparing
 #: against the previous release.
 _ANY_HEADING = re.compile(r"^## \[.*")

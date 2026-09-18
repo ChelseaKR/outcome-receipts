@@ -204,7 +204,7 @@ becomes an AUTO or REVIEW gate or is retired, and the decision is recorded here.
 
 The unreviewed-merge value is the one that matters most here. It is a risk signal
 for a solo-maintained, agent-assisted repository, and it is what the required
-pull-request acknowledgement and the complete automated gate set exist to answer.
+pull-request acknowledgment and the complete automated gate set exist to answer.
 Its graduation decision is not a mechanical one: ADR 0002 holds the ruleset's
 required approving reviews at zero for as long as there is one maintainer, so
 gating on this metric and that ADR cannot both stand. Whichever way it goes on

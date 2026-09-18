@@ -89,7 +89,7 @@ def test_trace_escapes_data() -> None:
     assert "x < y & z" not in html
 
 
-def test_missing_definition_is_labelled_not_blank() -> None:
+def test_missing_definition_is_labeled_not_blank() -> None:
     html = render_trace_html("Report", [_figure("a", "5")])
     assert "(no definition recorded)" in html
 

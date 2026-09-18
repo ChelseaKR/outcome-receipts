@@ -6,7 +6,7 @@ attested asset set, and it is not on PyPI. The run that cut it did not fail:
 `authorize`, `verify`, `build` and `github-release` all succeeded, then
 `pypi-publish` — which declares `environment: pypi`, the one environment in
 this portfolio with a real `required_reviewers` rule — sat at *Waiting for
-review* for thirteen days and was cancelled. `verify-published` was cancelled
+review* for thirteen days and was canceled. `verify-published` was canceled
 with it.
 
 That is the shape this script exists for, and issue #173 states it in one
@@ -413,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
         "\nThis is the state issue #173 records; it is not a defect in this commit. A "
         "release run that published the GitHub release and then stopped at the `pypi` "
         "environment's required review leaves exactly this, and the job that would have "
-        "reported it was cancelled by the same stop. Tagging and publishing are the "
+        "reported it was canceled by the same stop. Tagging and publishing are the "
         "maintainer's; this check only refuses to let a stall be silent.",
         file=sys.stderr,
     )

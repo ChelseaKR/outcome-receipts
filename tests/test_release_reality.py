@@ -2,7 +2,7 @@
 
 The defect this covers is issue #173, and its shape is worth restating because
 the tests below are written against it rather than against the code: the job
-that verifies publication was cancelled by the same stop that cancelled the
+that verifies publication was canceled by the same stop that canceled the
 publish, so the check and the thing it checks shared a failure mode, and a
 `cancelled` run is not a `failure`.
 
