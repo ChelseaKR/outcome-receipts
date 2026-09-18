@@ -133,10 +133,46 @@ _MD_STRONG = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
 _MD_CODE = re.compile(r"`([^`]+)`")
 
 
+def _unwrap_markers(
+    text: str, pattern: re.Pattern[str], src_map: list[int]
+) -> tuple[str, list[int]]:
+    """Keep group 1 of each match; drop the wrapping markers. Preserve raw indices."""
+
+    out: list[str] = []
+    out_map: list[int] = []
+    last = 0
+    for match in pattern.finditer(text):
+        for i in range(last, match.start()):
+            out.append(text[i])
+            out_map.append(src_map[i])
+        inner_start, inner_end = match.start(1), match.end(1)
+        for i in range(inner_start, inner_end):
+            out.append(text[i])
+            out_map.append(src_map[i])
+        last = match.end()
+    for i in range(last, len(text)):
+        out.append(text[i])
+        out_map.append(src_map[i])
+    return "".join(out), out_map
+
+
+def _reader_visible_mapped(text: str) -> tuple[str, list[int]]:
+    """Reader-visible Markdown plus a visible-index → raw-index map.
+
+    Matched ``**…**`` pairs are unwrapped first, then backtick spans, matching
+    ``_reader_visible``. ``vis_to_raw[i]`` is the raw offset of ``visible[i]``.
+    """
+
+    identity = list(range(len(text)))
+    visible, vis_map = _unwrap_markers(text, _MD_STRONG, identity)
+    return _unwrap_markers(visible, _MD_CODE, vis_map)
+
+
 def _reader_visible(text: str) -> str:
     """Markdown as a reader sees it: drop matched ``**…**`` pairs and backtick wraps."""
 
-    return _MD_CODE.sub(r"\1", _MD_STRONG.sub(r"\1", text))
+    visible, _ = _reader_visible_mapped(text)
+    return visible
 
 
 def _single_separator_is_thousands(body: str, sep: str) -> bool:
@@ -303,16 +339,19 @@ def find_numbers(text: str) -> list[NumericSpan]:
     """Return every numeric span in the text, in order.
 
     The scan runs on reader-visible Markdown (matched ``**…**`` and backtick
-    spans unwrapped). Offsets refer to that visible form, which is what the
-    gate binds; a raw ``**12**%`` is the span ``12%``, not ``12``.
+    spans unwrapped). ``NumericSpan.text`` is that visible form (so a raw
+    ``**12**%`` is the span ``12%``, not ``12``). ``start``/``end`` are raw-text
+    coordinates so callers such as ``redact_unbound`` slice the original string.
     """
 
-    visible = _reader_visible(text)
-    spans = [
-        NumericSpan(text=match.group(0), start=match.start(), end=match.end())
-        for pattern in (_NUMBER, _NUMBER_WORD)
-        for match in pattern.finditer(visible)
-    ]
+    visible, vis_to_raw = _reader_visible_mapped(text)
+    spans: list[NumericSpan] = []
+    for pattern in (_NUMBER, _NUMBER_WORD):
+        for match in pattern.finditer(visible):
+            vs, ve = match.start(), match.end()
+            raw_start = vis_to_raw[vs]
+            raw_end = vis_to_raw[ve - 1] + 1
+            spans.append(NumericSpan(text=match.group(0), start=raw_start, end=raw_end))
     return sorted(spans, key=lambda span: span.start)
 
 
