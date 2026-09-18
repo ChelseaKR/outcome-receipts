@@ -81,9 +81,28 @@ def test_every_workflow_with_a_concurrency_group_keys_pushes_on_the_commit() -> 
             "with zero jobs and no verdict"
         )
 
-    # Not a vacuous pass: the four non-exempt workflows all declare a group, and
-    # a parser that stopped finding them would report zero rather than success.
-    assert checked == 4, f"expected 4 checked workflows, found {checked}"
+    # Not a vacuous pass, and not a hand-maintained number either. This read
+    # `assert checked == 4` until 2026-09-09, when adding a sixth workflow --
+    # one that keys on the commit correctly -- turned it red for having done
+    # the right thing. A count somebody has to remember to bump is the shape
+    # this repository has already been caught by elsewhere; the anti-vacuity
+    # property it was reaching for is structural instead.
+    #
+    # Every workflow is either exempt or checked, so the parser losing a file
+    # fails here, and a *new* workflow with no concurrency block at all fails
+    # here too -- which the old count could not see, because a group of None is
+    # skipped above.
+    unaccounted = sorted(
+        path.name
+        for path in _workflow_files()
+        if path.name not in EXEMPT and _concurrency_group(path.read_text(encoding="utf-8")) is None
+    )
+    assert not unaccounted, (
+        f"{', '.join(unaccounted)} declare(s) no workflow-level concurrency group, so this "
+        "rule says nothing about it. Add a group, or add it to EXEMPT with its reason"
+    )
+    assert checked + len(EXEMPT) == len(_workflow_files())
+    assert checked, "no workflow was checked; the parser found no concurrency group at all"
 
 
 def test_every_exemption_names_a_workflow_that_exists_and_gives_a_reason() -> None:
