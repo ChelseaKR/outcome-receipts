@@ -55,7 +55,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # A `License:` field is legal core metadata and, under PEP 639, superseded by
 # `License-Expression`. What makes it a defect rather than a style point is how
 # long it can be: PyPI renders whatever is in it, so a pointer at a file becomes
-# the whole licence on the project page. Anything past this is not a licence
+# the whole license on the project page. Anything past this is not a license
 # name by any reading.
 MAX_SANE_LICENSE_FIELD = 64
 
@@ -149,7 +149,7 @@ def check_license(msg: Message) -> list[Result]:
     license_classifiers = [c for c in classifiers if c.startswith("License ::")]
     return [
         Result(
-            "the licence is a PEP 639 SPDX expression",
+            "the license is a PEP 639 SPDX expression",
             expression == LICENSE_EXPRESSION,
             f"License-Expression: {expression!r} (expected {LICENSE_EXPRESSION!r})",
         ),
@@ -161,20 +161,20 @@ def check_license(msg: Message) -> list[Result]:
             else f"License: present -- {lines} line(s), {len(text)} characters",
         ),
         Result(
-            "the License field is not a licence document",
+            "the License field is not a license document",
             legacy is None or (lines <= 1 and len(text) <= MAX_SANE_LICENSE_FIELD),
             "no License field to measure"
             if legacy is None
             else f"License: {lines} line(s), {len(text)} characters -- PyPI renders every one of "
-            f"them on the project page (a licence name is under {MAX_SANE_LICENSE_FIELD})",
+            f"them on the project page (a license name is under {MAX_SANE_LICENSE_FIELD})",
         ),
         # Not conditioned on the expression being present: a check written as
         # "no classifier *when* there is an expression" passes on exactly the
         # artifact that has no expression, which is the artifact in question.
         Result(
-            "no superseded licence classifier",
+            "no superseded license classifier",
             not license_classifiers,
-            f"licence classifiers: {license_classifiers or 'none'}",
+            f"license classifiers: {license_classifiers or 'none'}",
         ),
     ]
 

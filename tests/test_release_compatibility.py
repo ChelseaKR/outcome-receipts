@@ -138,8 +138,8 @@ def test_v020_baseline_names_immutable_source_commit() -> None:
     assert "byte-for-byte copies" in source
 
 
-def _relabelled_baseline_spec(tmp_path: Path, schema_version: str) -> Path:
-    """The frozen v0.2.0 spec, relabelled to a schema major, with unreadable data.
+def _relabeled_baseline_spec(tmp_path: Path, schema_version: str) -> Path:
+    """The frozen v0.2.0 spec, relabeled to a schema major, with unreadable data.
 
     The data path is deliberately pointed at a CSV that does not exist. If the
     loader refuses the declared version *before* computation, that missing file is
@@ -149,15 +149,15 @@ def _relabelled_baseline_spec(tmp_path: Path, schema_version: str) -> Path:
     """
 
     source = (BASELINE_V020 / "report.toml").read_text(encoding="utf-8")
-    relabelled = source.replace(
+    relabeled = source.replace(
         f'schema_version = "{SPEC_SCHEMA_VERSION}"', f'schema_version = "{schema_version}"'
     )
-    assert f'schema_version = "{schema_version}"' in relabelled, "the version line did not move"
-    relabelled = relabelled.replace('path = "services.csv"', 'path = "no-such-data.csv"')
-    assert 'path = "no-such-data.csv"' in relabelled, "the data path did not move"
+    assert f'schema_version = "{schema_version}"' in relabeled, "the version line did not move"
+    relabeled = relabeled.replace('path = "services.csv"', 'path = "no-such-data.csv"')
+    assert 'path = "no-such-data.csv"' in relabeled, "the data path did not move"
 
     spec_path = tmp_path / "report.toml"
-    spec_path.write_text(relabelled, encoding="utf-8")
+    spec_path.write_text(relabeled, encoding="utf-8")
     assert not (tmp_path / "no-such-data.csv").exists()
     return spec_path
 
@@ -178,7 +178,7 @@ def test_a_future_major_spec_is_refused_before_computation_and_writes_nothing(
     """
 
     out = tmp_path / "out"
-    spec_path = _relabelled_baseline_spec(tmp_path, "2.0")
+    spec_path = _relabeled_baseline_spec(tmp_path, "2.0")
 
     with pytest.raises(ValueError) as raised:
         main(
@@ -205,7 +205,7 @@ def test_a_future_major_spec_is_refused_before_computation_and_writes_nothing(
     assert not out.exists() or not list(out.iterdir())
 
 
-def test_the_current_verifier_refuses_a_frozen_manifest_relabelled_to_a_future_major(
+def test_the_current_verifier_refuses_a_frozen_manifest_relabeled_to_a_future_major(
     tmp_path: Path,
 ) -> None:
     """Issue 65: the intentionally incompatible half of the old-artifact exercise.
@@ -238,11 +238,9 @@ def test_the_current_verifier_refuses_a_frozen_manifest_relabelled_to_a_future_m
     assert all(check.ok for check in receipts)
 
     # And it fails closed at the CLI boundary, not only in the library.
-    relabelled = tmp_path / "receipts.json"
-    relabelled.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    code = main(
-        ["verify", "--config", str(BASELINE / "report.toml"), "--receipts", str(relabelled)]
-    )
+    relabeled = tmp_path / "receipts.json"
+    relabeled.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+    code = main(["verify", "--config", str(BASELINE / "report.toml"), "--receipts", str(relabeled)])
     assert code == EXIT_VERIFY_FAIL
 
 

@@ -70,7 +70,7 @@ def test_make_verify_uses_the_digest_pinned_container_scan() -> None:
         # for that reason. `release-version` compares numbers inside the tree;
         # this one builds the wheel and the sdist and reads the metadata PyPI is
         # actually handed, which is the only place a defect like 0.2.2's inlined
-        # licence text is visible.
+        # license text is visible.
         "dist-metadata",
         "i18n",
         "security",

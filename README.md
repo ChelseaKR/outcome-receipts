@@ -223,7 +223,7 @@ role, approver and timestamp, and `provenance.approved_by` names every approver
 so a reader that only knows that field still reads a complete answer.
 `receipts verify --bundle` re-reads the policy from the spec, so a bundle stops
 verifying if the policy later gains a role or an approval is edited out of the
-manifest. `restate`, `contract-check` and `equity-review` honour the same
+manifest. `restate`, `contract-check` and `equity-review` honor the same
 policy. A spec with no `[approval]` section behaves exactly as it did before.
 
 ### Minimal report specification

@@ -317,7 +317,7 @@ class TestPayload:
         assert entry["text"] == "rose"
         assert entry["metric_ids"] == ["exits"]
 
-    def test_the_payload_is_json_serialisable(self) -> None:
+    def test_the_payload_is_json_serializable(self) -> None:
         json.dumps(audit_payload(audit_claims("Exits rose.", (DirectionEvidence("e", DECREASE),))))
 
 

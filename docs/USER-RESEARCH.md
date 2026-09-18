@@ -6,7 +6,7 @@
 > said any of this. The panel exists to pressure-test `outcome-receipts` from
 > every stakeholder angle at once. It is not evidence of demand and does not
 > substitute for real discovery. Treat every "quote" as a hypothesis to validate,
-> not a finding. This labelling matches how the repo labels its synthetic eval
+> not a finding. This labeling matches how the repo labels its synthetic eval
 > fixtures (see [`eval/report.md`](../eval/report.md): seeded synthetic data,
 > zero real personal data).
 >

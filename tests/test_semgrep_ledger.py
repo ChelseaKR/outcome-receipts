@@ -334,7 +334,7 @@ def test_the_documented_scan_scope_matches_the_code() -> None:
 
 
 def test_a_suppression_outside_the_scan_scope_is_not_claimed_to_be_caught() -> None:
-    """The gap the prose now admits, pinned as behaviour rather than left implicit.
+    """The gap the prose now admits, pinned as behavior rather than left implicit.
 
     A suppression under `eval/` passes this check. That is the limitation, and
     it is a test so that closing the gap later is a deliberate edit here rather
