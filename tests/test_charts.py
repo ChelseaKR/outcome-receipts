@@ -170,7 +170,7 @@ def test_a_withheld_bar_and_a_true_zero_bar_are_not_the_same_shape() -> None:
     # a small value either.
     assert float(withheld[3]) > 0.0
     assert float(withheld[1]) < float(zero[1])
-    # And it is visibly not a bar: not the data colour, and outlined dashed.
+    # And it is visibly not a bar: not the data color, and outlined dashed.
     assert "#2b6cb0" not in withheld[4]
     assert "stroke-dasharray" in withheld[4]
     assert "url(#mixed-withheld)" in withheld[4]

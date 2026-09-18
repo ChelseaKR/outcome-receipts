@@ -294,10 +294,10 @@ def test_a_version_only_failure_does_not_blame_the_data(
     capsys.readouterr()
     exported = json.loads((out / "receipts.json").read_text(encoding="utf-8"))
     exported["schema_version"] = "3.0"
-    relabelled = tmp_path / "receipts.json"
-    relabelled.write_text(json.dumps(exported, indent=2, sort_keys=True), encoding="utf-8")
+    relabeled = tmp_path / "receipts.json"
+    relabeled.write_text(json.dumps(exported, indent=2, sort_keys=True), encoding="utf-8")
 
-    assert main(["verify", "--config", str(HOUSING), "--receipts", str(relabelled)]) == 1
+    assert main(["verify", "--config", str(HOUSING), "--receipts", str(relabeled)]) == 1
     captured = capsys.readouterr()
 
     assert "verify: FAIL" in captured.err

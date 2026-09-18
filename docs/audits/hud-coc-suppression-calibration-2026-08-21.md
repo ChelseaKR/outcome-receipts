@@ -173,7 +173,7 @@ than an unvalidated placeholder — with the calibration finding recorded
 plainly rather than left silent.** Three things support this:
 
 1. There is no HUD-published numeric small-cell rule to adopt instead; CMS's
-   is the closest documented analogue for HMIS-derived aggregate reporting,
+   is the closest documented analog for HMIS-derived aggregate reporting,
    and this repository already cites it as such.
 2. Applied to real subpopulation-shaped data, the threshold is neither inert
    (it withholds a majority of granular cells) nor absurd (whole-program

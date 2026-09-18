@@ -620,7 +620,7 @@ def test_security_declaration_ignores_an_expired_dependency_waiver() -> None:
 # The two waiver linters have to agree on what a waiver may be. They did not.
 # `scripts/check_npm_audit.py` accepts a Node dependency advisory only from a
 # waiver whose kind is exactly its `KIND`; `VALID_KINDS` here did not list that
-# string, so the only kind the npm gate could honour was one this gate rejected.
+# string, so the only kind the npm gate could honor was one this gate rejected.
 # A registry holding the fixture above -- the one four §F tests are written
 # against -- failed `waiver_failures` with "unknown kind", which means the
 # `npm-audit` arm of DEPENDENCY_ADVISORY_KINDS could never fire against a
@@ -662,7 +662,7 @@ def test_the_npm_audit_fixture_registry_is_one_the_waiver_lint_accepts(tmp_path:
 def test_the_waiver_lint_still_rejects_a_near_miss_of_the_local_kind(tmp_path: Path) -> None:
     # Accepting `npm-audit` must not have turned the kind check into a rubber
     # stamp: an underscore instead of a hyphen is still an unknown kind, and
-    # check_npm_audit.py would not honour it either.
+    # check_npm_audit.py would not honor it either.
     registry = tmp_path / "waivers.yml"
     registry.write_text(
         _waivers_with_live_npm_audit_waiver().replace("kind: npm-audit", "kind: npm_audit"),
@@ -1120,7 +1120,7 @@ def _perf_fixture(
 
 
 def test_perf_claim_failures_catches_a_figure_that_drifted_from_the_baseline() -> None:
-    # The row is labelled AUTO, which says a gate checks it. Before this check,
+    # The row is labeled AUTO, which says a gate checks it. Before this check,
     # the ROADMAP could publish 0.42 while perf/baseline.json recorded 1.0 and
     # every gate stayed green.
     root = Path(tempfile.mkdtemp())

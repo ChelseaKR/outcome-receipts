@@ -441,7 +441,7 @@ def test_reverting_to_verifying_our_own_artifact_is_caught() -> None:
 def test_the_published_digests_are_compared_with_the_attested_manifest() -> None:
     """Agreeing with SHA256SUMS is agreeing with what Sigstore signed.
 
-    The manifest travelled with the attested artifact, so a digest comparison
+    The manifest traveled with the attested artifact, so a digest comparison
     against it is a comparison against the signed bytes -- and it is what
     catches a file PyPI serves that this repository never built.
     """

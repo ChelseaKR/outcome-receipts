@@ -23,7 +23,7 @@ collapse across data that was withheld on purpose. A withheld point is therefore
 drawn as an explicit absence:
 
 - a bar becomes a full-height hatched slot with a dashed outline in the muted
-  grey used for the axis, never the data colour, labelled with the same
+  gray used for the axis, never the data color, labeled with the same
   ``[SUPPRESSED]`` marker the rest of the report uses;
 - a line breaks. The polyline is emitted once per run of consecutive drawable
   points, so no segment spans a withheld one, and the withheld position gets a
@@ -226,9 +226,9 @@ def _bar_svg_body(points: Sequence[ChartPoint], hatch_id: str) -> list[str]:
     body: list[str] = []
     for i, point in enumerate(points):
         x = left + slot * i + (slot - bar_w) / 2
-        centre = x + bar_w / 2
+        center = x + bar_w / 2
         if point.withheld:
-            # A full-height hatched, dashed slot in the axis grey. It occupies
+            # A full-height hatched, dashed slot in the axis gray. It occupies
             # the position without asserting a magnitude, and it is visibly not
             # a bar: a zero-height rectangle on the baseline said "nobody",
             # which is the one thing the report refuses to say here.
@@ -240,8 +240,8 @@ def _bar_svg_body(points: Sequence[ChartPoint], hatch_id: str) -> list[str]:
                 "small-cell suppression policy; this is not a value of zero"
                 "</title></rect>"
             )
-            body.append(_withheld_label(centre, top, point.display))
-            body.append(_axis_label(centre, top, height, point.label))
+            body.append(_withheld_label(center, top, point.display))
+            body.append(_axis_label(center, top, height, point.label))
             continue
         value = point.value or 0.0
         bar_h = (value / scale) * height if value > 0 else 0.0
@@ -251,10 +251,10 @@ def _bar_svg_body(points: Sequence[ChartPoint], hatch_id: str) -> list[str]:
             f'fill="#2b6cb0"><title>{_esc(point.label)}: {_esc(point.display)}</title></rect>'
         )
         body.append(
-            f'<text x="{centre:.1f}" y="{y - 6:.1f}" text-anchor="middle" '
+            f'<text x="{center:.1f}" y="{y - 6:.1f}" text-anchor="middle" '
             f'font-size="13" fill="#1a202c">{_esc(point.display)}</text>'
         )
-        body.append(_axis_label(centre, top, height, point.label))
+        body.append(_axis_label(center, top, height, point.label))
     return body
 
 
@@ -334,7 +334,7 @@ def _line_svg_body(points: Sequence[ChartPoint]) -> list[str]:
 def _hatch_defs(hatch_id: str) -> str:
     """The diagonal hatch used to fill a withheld slot.
 
-    Deliberately not the data colour: a reader scanning the chart has to be able
+    Deliberately not the data color: a reader scanning the chart has to be able
     to tell at a glance that nothing was plotted there. The id is namespaced by
     chart so several SVGs can be inlined into one document without colliding.
     """

@@ -378,7 +378,7 @@ jobs:
       # The published bytes are the attested bytes. A digest that PyPI serves
       # and the build job never produced is the substitution this job exists to
       # catch, and comparing against the attested manifest is what makes the
-      # comparison meaningful: SHA256SUMS travelled with the Sigstore-attested
+      # comparison meaningful: SHA256SUMS traveled with the Sigstore-attested
       # artifact, so agreeing with it is agreeing with what was signed.
       - name: The published digests match the attested manifest
         run: |

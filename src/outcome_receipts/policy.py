@@ -17,7 +17,7 @@ policy. So there is no second *cited* policy to register. Inventing a
 what this module exists to prevent.
 
 An operator who wants to see the consequences of a different number therefore
-supplies it directly, and gets an `ad_hoc_policy` that is labelled uncited and
+supplies it directly, and gets an `ad_hoc_policy` that is labeled uncited and
 carries no citation. That distinction is the point: a preview may explore any
 threshold, but only a registered policy claims a source.
 """
@@ -39,7 +39,7 @@ class UnknownPolicyError(ValueError):
     """Raised when a policy id is not in the registry.
 
     Fails closed by name. Silently falling back to the default would let a spec
-    pin `cms-small-cell-v2`, get `v1`'s behaviour, and record the wrong policy
+    pin `cms-small-cell-v2`, get `v1`'s behavior, and record the wrong policy
     id in every receipt it produced.
     """
 

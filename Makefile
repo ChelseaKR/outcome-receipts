@@ -24,7 +24,7 @@ VERIFY_GATES := lint type test hygiene example-manifests release-version dist-me
 # pyproject.toml. Bump `project.version` and leave uv.lock behind and
 # `uv sync --frozen` still exits 0, having installed the previous version --
 # which is exactly the drift a release creates, so the one change guaranteed to
-# desynchronise the lock was the one change this step could not see. Every
+# desynchronize the lock was the one change this step could not see. Every
 # release since would have verified against a stale editable install. `uv lock
 # --check` re-resolves and exits 1 when the lock no longer matches the
 # manifest; npm's half of the pair (`npm ci`, not `npm install`) already fails

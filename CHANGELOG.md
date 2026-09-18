@@ -67,7 +67,7 @@ than in an earlier one.
   gone. `Repository`, `Issues` and `Changelog` were added alongside the two
   `Project-URL` labels the artifact already carried.
 - **Nothing read the metadata the release actually publishes.** `0.2.2` shipped
-  on 2026-09-13 with that licence field and every gate green, because every
+  on 2026-09-13 with that license field and every gate green, because every
   gate reads `pyproject.toml` and PyPI reads the artifact. `make dist-metadata`
   and a step in `release.yml`'s `build` job now build the wheel and the sdist
   and check thirteen fields in the metadata itself, before anything is
@@ -258,7 +258,7 @@ than in an earlier one.
   with `--tag` the tag must name what the tree declares. An unreadable
   declaration — no `project.version`, no dated section, `## [0.2.1]` with the
   date dropped — is unmeasurable and fails; a malformed newest heading is not
-  skipped in favour of the release below it, which would report agreement
+  skipped in favor of the release below it, which would report agreement
   reached by ignoring the release under test. It runs as its own `make` gate
   rather than a fourth line of `hygiene`, so a source-hygiene failure cannot
   take it down with it, and again in `release.yml` with the tag.
@@ -387,15 +387,15 @@ than in an earlier one.
   verifier that accepts anything accepts a released artifact too, so those rows
   were carrying less weight than they appeared to. `tests/test_release_compatibility.py`
   now exercises the same frozen artifacts with one field changed and asserts that
-  each refusal is *attributable*: a `v0.1.0` manifest relabelled to a manifest
+  each refusal is *attributable*: a `v0.1.0` manifest relabeled to a manifest
   major nothing implements fails on `schema_version` while all four of its
   receipts still re-derive, so the refusal is the declared version and not the
   data; a `v0.1.0` manifest with one figure edited by hand — one client added to a
   count, small enough to be plausible — fails as drift on that metric by name; and
-  a `v0.2.0` spec relabelled to a report-spec major nothing implements is refused
+  a `v0.2.0` spec relabeled to a report-spec major nothing implements is refused
   before any figure is computed, with the error naming both the version it was
   handed and the one this package implements, and with the `--out` directory left
-  empty. The last of those is asserted by pointing the relabelled spec's
+  empty. The last of those is asserted by pointing the relabeled spec's
   `[data] path` at a CSV that does not exist: if the version check ever moved to
   after the read, the missing file would raise first and the test would say so
   rather than passing for the wrong reason. Three rows added to the compatibility
@@ -692,7 +692,7 @@ than in an earlier one.
   the same `Check` type as a receipt and counted alongside them, with `metric_id`
   as their only label. So the housing demo's **four**-receipt manifest printed
   `receipts checked: 6 (re-derived 6, drift 0)`, the `--json` payload's `n_ok`
-  and `drift` carried the same inflation, and a manifest relabelled to a schema
+  and `drift` carried the same inflation, and a manifest relabeled to a schema
   major nothing implements failed with `verify: FAIL — a receipt does not match
   the data` and `drift 1` while every one of its receipts re-derived cleanly.
   In a repository whose premise is that every reported number carries a receipt,
@@ -705,7 +705,7 @@ than in an earlier one.
   `checks`. `n_ok` and `drift` are unchanged and still span both kinds, so
   existing scripts keep working — they were never wrong as totals, only as the
   receipt counts they were printed as. `tests/test_verify.py` asserted
-  `n_ok == len(figures) + 2`, which pinned the conflation as intended behaviour;
+  `n_ok == len(figures) + 2`, which pinned the conflation as intended behavior;
   it now also asserts the receipt-only counts against the manifest's own receipt
   list. Two docstrings corrected in the same pass, including `verify_manifest`'s
   claim that an unsupported schema fails "before any per-receipt re-derivation is
@@ -790,7 +790,7 @@ than in an earlier one.
   `cancelled` with zero jobs — and `portfolio standards conformance` is a
   *required* status check on `main`, so a required check has no result on that
   commit. `cancel-in-progress: false` is not protection: it governs the running
-  run, and `scorecard.yml` had it set and was cancelled anyway. All three now use
+  run, and `scorecard.yml` had it set and was canceled anyway. All three now use
   the same key `ci.yml` does. `codeql.yml` has never lost a run — §11e dropped its
   `push` trigger — and is changed for one idiom rather than two, which its comment
   says rather than implying a loss it did not have.
@@ -939,7 +939,7 @@ than in an earlier one.
   `schema_version_failures` is what keeps them agreeing, and fails closed when
   the sentence stops being readable.
 - `scripts/check_conformance.py` allowed no waiver kind that
-  `scripts/check_npm_audit.py` could honour. The npm gate accepts a Node
+  `scripts/check_npm_audit.py` could honor. The npm gate accepts a Node
   dependency advisory only from a waiver whose `kind` is `npm-audit`, and
   `VALID_KINDS` did not list that string, so granting one would make
   `make security-npm` accept the advisory while `make hygiene` rejected the
@@ -1123,7 +1123,7 @@ contract change is described in full under **Changed** below.
   bumping `project.version` without re-locking still exits 0 — proven by doing
   exactly that: `uv sync --frozen` returned 0 with `pyproject.toml` at `0.2.0`
   and `uv.lock` at `0.1.0`, while `uv lock --check` returned 1 on the same tree.
-  The one change guaranteed to desynchronise the lock was the one change the
+  The one change guaranteed to desynchronize the lock was the one change the
   gate could not see, and every release re-verified against a stale editable
   install. `make install` now runs `uv lock --check` first and fails closed,
   matching what `npm ci` (as opposed to `npm install`) already did for the
@@ -1182,14 +1182,14 @@ contract change is described in full under **Changed** below.
   it, inventing a collapse and a recovery across data withheld on purpose; and
   `_scale_max` let the hidden cell scale the bars that were drawn, as a zero.
   `Figure.value` is now `None` for a withheld figure, a withheld bar is a
-  hatched dashed full-height slot in the axis grey, a line breaks rather than
+  hatched dashed full-height slot in the axis gray, a line breaks rather than
   interpolating, and withheld figures take no part in the axis scale. The
   absence is announced as well as drawn, in the marker's `<title>` and the
   chart's `<desc>`. The end-to-end artifact search now covers the chart SVGs,
   closing the gap ADR 0004's consequences left. Recorded in
   [ADR 0010](docs/decisions/0010-withheld-cells-are-drawn-as-an-absence.md).
   ([#78](https://github.com/ChelseaKR/outcome-receipts/issues/78))
-- A suppressed cell serialised as a zero. `_redact` wrote `value: 0.0`,
+- A suppressed cell serialized as a zero. `_redact` wrote `value: 0.0`,
   `row_count: 0`, and the all-zero slice-hash sentinel — byte-identical, in
   every field the manifest schema constrains, to a figure that is genuinely
   zero. The prose said `[SUPPRESSED]`; the numbers said nobody, and every

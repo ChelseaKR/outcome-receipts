@@ -1439,7 +1439,7 @@ def _cmd_mcp(args: argparse.Namespace) -> int:
     ``_publishable_and_hidden`` split that ``audit`` uses, rather than from a
     second one that could come to disagree with it.
 
-    ``--reproducible`` is honoured so a client can pin ``computed_at``; the
+    ``--reproducible`` is honored so a client can pin ``computed_at``; the
     figures are recomputed per call rather than cached, because a cache would
     answer from data the file no longer holds.
     """

@@ -96,7 +96,7 @@ with no scripts, no stylesheets and no third-party requests, that *is* what "fas
 for a funder" reduces to; the timing score was only ever a proxy for it.
 
 The score is still collected every run, still recorded in `baseline.json`, and
-still printed by `make perf` — labelled "observed, not scored", with the reason.
+still printed by `make perf` — labeled "observed, not scored", with the reason.
 `scripts/check_perf_baseline.py` declares the exclusion in `OBSERVED_NOT_GATED`
 rather than achieving it by quietly not measuring the metric, so a reader can
 tell the difference between a number nobody scores and a number nobody noticed
@@ -129,7 +129,7 @@ inline one.
 the numbers were measured at, so they can be re-verified), `metrics` (the
 measured values, with an explicit `null` for each metric this project has no
 route to measure, never a silent absence) and `direction` (so the comparison is
-mechanical rather than a judgement each time).
+mechanical rather than a judgment each time).
 
 `total_kb_gzip` is 2.4111328125 — the 2469 transferred bytes of the generated
 trace, which reproduced exactly on every run and every machine tried. It is the

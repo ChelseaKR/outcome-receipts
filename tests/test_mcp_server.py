@@ -109,7 +109,7 @@ def test_audit_over_mcp_matches_the_cli_json_payload_exactly(
     """One contract, two implementations, held equal by this assertion.
 
     ``mcp.py`` deliberately does not import the CLI's private payload builders
-    (that would be an import cycle), so the two serialisations are separate
+    (that would be an import cycle), so the two serializations are separate
     code. This is what stops them drifting: the CLI's own JSON is the expected
     value, so a field added on one side and not the other turns this red.
     """
@@ -524,7 +524,7 @@ def test_a_malformed_request_is_refused_with_a_named_reason(
 def test_a_malformed_tools_call_notification_still_gets_no_response() -> None:
     """No id means no reply, even when the call itself is unanswerable.
 
-    Replying to a notification desynchronises a client that is counting
+    Replying to a notification desynchronizes a client that is counting
     responses, and an error reply is no more welcome than a result.
     """
 

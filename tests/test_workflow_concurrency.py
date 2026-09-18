@@ -16,7 +16,7 @@ lost theirs to the identical mechanism on commit `abde41c` -- and
 
 `cancel-in-progress: false` does not protect against this. It governs the
 running run; the eviction happens to the pending one. `scorecard.yml` had it set
-and was cancelled anyway.
+and was canceled anyway.
 
 So the rule is mechanical: a workflow that declares a concurrency group must key
 non-pull-request events on the commit. Exemptions are declared here, with their
@@ -47,7 +47,7 @@ _GROUP_RE = re.compile(r"^[ \t]+group:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
 #: burst of pushes for a pending run to be evicted by.
 EXEMPT = {
     "release.yml": (
-        "one global `release` group serialises publication; dispatch-only, so no "
+        "one global `release` group serializes publication; dispatch-only, so no "
         "push burst can evict a pending run"
     ),
 }

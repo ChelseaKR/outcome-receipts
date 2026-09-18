@@ -418,7 +418,7 @@ def test_verify_bundle_fails_when_the_manifest_records_a_policy_the_spec_dropped
 
 
 # --------------------------------------------------------------------------
-# The workflow commands honour the same policy. Without this, a two-role spec
+# The workflow commands honor the same policy. Without this, a two-role spec
 # could be packaged as contract evidence with one signature -- which is the
 # bypass the policy exists to close.
 # --------------------------------------------------------------------------

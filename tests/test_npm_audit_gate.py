@@ -169,12 +169,12 @@ def test_a_report_shape_the_gate_cannot_read_fails_closed(tmp_path: Path) -> Non
 def test_a_semgrep_waiver_cannot_accept_a_dependency_advisory(tmp_path: Path) -> None:
     """Waiver kinds are not interchangeable."""
 
-    mislabelled = tmp_path / "waivers.yml"
-    mislabelled.write_text(
+    mislabeled = tmp_path / "waivers.yml"
+    mislabeled.write_text(
         WAIVERS.read_text(encoding="utf-8").replace("    kind: npm-audit\n", "    kind: semgrep\n"),
         encoding="utf-8",
     )
-    assert _gate(tmp_path, _report(_advisory(WAIVED_ADVISORY, WAIVED_PACKAGE)), mislabelled) == 1
+    assert _gate(tmp_path, _report(_advisory(WAIVED_ADVISORY, WAIVED_PACKAGE)), mislabeled) == 1
 
 
 def test_every_security_scanner_is_its_own_gate() -> None:
