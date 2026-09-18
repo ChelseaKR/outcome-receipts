@@ -582,7 +582,7 @@ def _equity_suppression_limit_check(artifact: Mapping[str, Any], groups: object)
     """An equity review with a withheld group must say so in its limits.
 
     This artifact is read by people looking for exactly the small groups
-    suppression hides, so an unlabelled withheld group is the one most likely to
+    suppression hides, so an unlabeled withheld group is the one most likely to
     be read as an empty one. If any group's receipt is withheld, the artifact has
     to carry the suppression interpretation limit; a reader must not have to
     notice it themselves.

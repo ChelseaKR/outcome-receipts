@@ -4,7 +4,7 @@ Triage of the eight open pull requests as of 2026-08-28, against `origin/main`
 at `80ee14d` ("docs(changelog): record the three fail-closed fixes merged as
 \#112-\#114 (#115)").
 
-Read-only triage. Nothing here was merged, closed, commented on, relabelled or
+Read-only triage. Nothing here was merged, closed, commented on, relabeled or
 re-run. Every claim below is marked VERIFIED or ON TRUST in the last section.
 
 ## Method
@@ -13,11 +13,11 @@ re-run. Every claim below is marked VERIFIED or ON TRUST in the last section.
   `git diff` per head to establish topology and staleness.
 * `gh pr diff` and `gh pr checks` for all eight, then the raw job logs
   (`gh api .../actions/jobs/<id>/logs`) for every red check. No verdict below
-  rests on a check's colour alone.
+  rests on a check's color alone.
 * `git merge-tree --write-tree` against `main` for each head, and pairwise
   across all 28 head pairs. Because every head's merge base is `main` itself,
   a pairwise `merge-tree` is exactly the sequential-merge test.
-* Merged trees were materialised into a scratch directory with `git archive`
+* Merged trees were materialized into a scratch directory with `git archive`
   and the repository's own `.venv` ruff, mypy and conformance code was run
   over them. The working tree was not touched.
 
@@ -80,7 +80,7 @@ Two refinements to the standing description of this failure:
 * Correctness: the central claims hold. `scripts/check_npm_audit.py` really does
   define `KIND = "npm-audit"` while `main`'s `VALID_KINDS` omitted it, and
   `DEPENDENCY_ADVISORY_KINDS` really does contain `"npm-audit"`, so the only
-  kind the npm gate could honour was a kind the waiver lint rejected. That arm
+  kind the npm gate could honor was a kind the waiver lint rejected. That arm
   could not fire. The fix is real. `check_semgrep_waivers.py` is careful work:
   it refuses an unqualified `nosemgrep`, tokenizes Python so a directive quoted
   in a docstring is not counted, and over-reports rather than under-reports on
@@ -247,7 +247,7 @@ Two refinements to the standing description of this failure:
   only print `figure.display`, so signed geometry would have no signed text
   equivalent for a screen-reader user) is recorded in the module docstring and
   the ADR. The tests use `pytest.raises`, so they fail in the pre-fix state;
-  the zero-value control is explicitly labelled as passing in both states.
+  the zero-value control is explicitly labeled as passing in both states.
 * **Recommendation: merge.**
 
 ### #123 fix(eval): score every exported narrative, and refuse a pass over nothing (#118)
@@ -294,7 +294,7 @@ Two refinements to the standing description of this failure:
   is necessary and does not disturb the others: they are only reachable at a
   position starting with a digit, and the new one requires a separator there.
   The tests assert the span text is `.75`, so they fail in the pre-fix state
-  where it was `75`; the `0.75` positive control is labelled as passing in
+  where it was `75`; the `0.75` positive control is labeled as passing in
   both states.
 * **Recommendation: merge.** Merge it first.
 
@@ -411,7 +411,7 @@ to by #130, #129, #128 and #125, and `scripts/check_conformance.py` by #130,
 #128, #127 and #125. No two heads introduce a colliding function or constant
 name, and the pairs that would merge silently do not produce duplicate
 definitions. To confirm rather than assume, merged trees of #130 with each of
-#127, #128, #125 and #122 were materialised and the repository's own tooling
+#127, #128, #125 and #122 were materialized and the repository's own tooling
 was run over them:
 
 ```
@@ -517,7 +517,7 @@ and both worth an issue:
 * Every changelog hunk in all eight lands inside `[Unreleased]`; section
   boundaries read from `origin/main:CHANGELOG.md`.
 * #122 plus #125 produces a failing conformance gate. Reproduced by
-  materialising the merged tree and running `benchmark_claim_failures` over it.
+  materializing the merged tree and running `benchmark_claim_failures` over it.
 * Benchmark counts: 132/66/66/66 on `main` and on #125, 136/68/68/68 on #122.
   Computed from the files.
 * `ruff check`, `ruff format --check` and `mypy --strict scripts` all pass on

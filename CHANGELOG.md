@@ -8,54 +8,96 @@ Version `0.1.0` is the first beta release. It includes the deterministic core
 and the privacy, verification, mapping, localization, optional drafting, and
 release-hardening work completed before the first public tag.
 
+Two versions below were never published, and they failed in different places.
+`0.2.0` is a signed GitHub release whose PyPI upload was never approved.
+`0.2.1` never got a release run past its gates at all: the tag names a commit
+where `pyproject.toml` still read `0.2.0` and this file carried no `[0.2.1]`
+section. Its four attempted runs died in three different places, and only one
+of them on a version check -- two failed in `authorize`, where the tag named a
+commit unreachable from `main`, and one on a container-security gate over CVEs
+published after the tag was cut.
+
+Coherent trees for `0.2.1` do exist: `3c7b90e` and `627cf24` both satisfy
+`scripts/check_release_version.py`. They are simply not the tree the tag names,
+and by the time they existed a fresh `[Unreleased]` section had already opened
+above them. The only repair would be moving a published ref onto a tree it was
+not cut from, so `0.2.1` is left exactly where it is and `0.2.2` cuts forward
+instead. Both sections below are left as they were written: they record what
+those releases claimed, and a correction belongs in a later section rather
+than in an earlier one.
+
 ## [Unreleased]
 
-### Security
-- **`js-yaml` 3.15.1 -> 3.15.2 and 4.3.1 -> 4.3.2 (`GHSA-2883-XCG3-V3HH`,
-  high), which is what `make security-npm` was refusing.** The advisory was
-  published 2026-09-08 at 21:24 UTC; `verify` last passed on `main` at
-  `228a51f` at 02:32 UTC the same day, against this same `package-lock.json`.
-  The gate went red on the advisory database moving, not on a commit, which is
-  why it was found by an unrelated documentation PR (#188) rather than by the
-  change that caused it -- there was none.
-  - **Both copies are development-only and neither reads untrusted input**, and
-    that is worth writing down rather than assuming, because it is the question
-    that decides whether a waiver would have been defensible. `js-yaml@3` is
-    reached through `@lhci/utils` <- `@lhci/cli`, and this repository configures
-    Lighthouse CI with `lighthouserc.cjs` -- JavaScript, not YAML. `js-yaml@4`
-    is reached through `cosmiconfig` <- `puppeteer`, which searches for a
-    `.puppeteerrc` this repository does not have. The advisory is CPU
-    exhaustion on a hostile document; nothing in the `a11y` gate hands either
-    parser a document it did not author.
-  - The fix is six lines of `package-lock.json`, so no waiver was warranted and
-    none was added. `waivers.yml` still holds no `npm-audit` entry.
-  - **Only the two `js-yaml` entries moved.** `npm update js-yaml
-    --package-lock-only` also prunes 24 stale `puppeteer`/`puppeteer-core`
-    proxy-agent nodes, and a plain `npm install --package-lock-only` on
-    unmodified `main` prunes exactly the same 24 -- so that churn is
-    pre-existing lock drift, unrelated to this advisory, and is left for a
-    change that can be reviewed on its own terms.
+### Added
+- **`make example-manifests` validates every committed example manifest
+  against the published schema.** It is part of `make verify` and runs a
+  pinned Draft 2020-12 validator (`jsonschema` 4.26.0) in an isolated
+  environment, since `docs/decisions/0005` keeps that package out of the
+  project's own. `docs/adr/0007` (Proposed) records the gate and the warning. It
+  finds the manifests under `examples/` itself, prints two numbers, validated
+  and committed, and fails when they differ or when it found none.
+- **`receipts verify` warns on a schema 1.0 withheld figure that carries
+  numbers.** A 1.0 receipt displaying `[SUPPRESSED]` beside `value: 0.0` and
+  `row_count: 0` was reported only as `[ok] re-derived, matches`, which is true
+  of the placeholders and says nothing about a reader being unable to tell them
+  from a true zero. Each such receipt now also gets a `[warn]` line naming it,
+  and `--json` output (manifest mode, bundle mode, and the MCP `verify` tool)
+  carries a `warnings` array that is empty when there is nothing to report. A
+  warning never changes `ok` or the exit code, so every manifest that verified
+  before still verifies.
 
 ### Fixed
-- **The Semgrep waiver cross-check was described as scanning the tree, and scans
-  four directories.** `scripts/check_semgrep_waivers.py` reads `SCAN_DIRS =
-  ("src", "tests", "scripts", ".github")` over seven suffixes; `make
-  security-semgrep` scans the whole repository. So a suppression added under
-  `eval/`, `docs/`, `examples/` or at the repository root is invisible to the
-  cross-check, while `docs/RESPONSIBLE-TECH-AUDITS.md` said the comparison ran
-  "against the tree in both directions" — a stated scope wider than the code's,
-  which is the shape that makes a gate read as covering something it never
-  opened. The audit note now names the four directories and the suffixes, and
-  says which paths are outside them.
-  - Three tests pin it, so the sentence and the constants cannot drift apart
-    again: the documented scope must equal `SCAN_DIRS`/`SCAN_SUFFIXES`, a
-    suppression placed outside the scanned set must not be reported as caught,
-    and the file the scope exception exists for must still exist — an exception
-    for a file that has since been deleted is an exemption that exempts nothing
-    and only obscures the list.
-  - The `[0.2.1]` entry below is left as written. It is the record of what that
-    release claimed; the correction belongs here rather than in a section that
-    has shipped.
+- **The example the reusable action is verified against published three
+  withheld figures as zeros (#198).** `examples/housing-demo/receipts.json` was
+  last written under manifest schema 1.0, before 2.0 made a withheld figure
+  `suppressed: true` with null numerics, and it failed
+  `docs/schema/receipts.schema.json` with five errors while `dogfood-action`
+  stayed green. It is regenerated at 2.0 with `receipts run --reproducible
+  --approved-by CI`. Its figures are unchanged. The `report.md` and
+  `trace.html` digests it records moved, because those files are rebuilt by
+  each run, are not committed beside it, and have changed since July. The copy
+  inside the published `0.2.2` sdist is still the 1.0 file; only a new release
+  replaces it.
+- **The PyPI `License` field was the whole Apache 2.0 text.** `license` was
+  declared as `{ file = "LICENSE" }`, which hatchling resolves by inlining the
+  file, so the published `0.2.2` metadata carries a 201-line, 12,914-character
+  `License:` field and PyPI renders every line of it on the project page. It is
+  now the PEP 639 expression `Apache-2.0` with `license-files`, and the
+  superseded `License :: OSI Approved :: Apache Software License` classifier is
+  gone. `Repository`, `Issues` and `Changelog` were added alongside the two
+  `Project-URL` labels the artifact already carried.
+- **Nothing read the metadata the release actually publishes.** `0.2.2` shipped
+  on 2026-09-13 with that license field and every gate green, because every
+  gate reads `pyproject.toml` and PyPI reads the artifact. `make dist-metadata`
+  and a step in `release.yml`'s `build` job now build the wheel and the sdist
+  and check thirteen fields in the metadata itself, before anything is
+  attested or uploaded. Published metadata is immutable, so `0.2.2` keeps its
+  8/13 for as long as it exists on the index; the next release carries 13/13.
+- **`verify-published` now verifies the package PyPI serves, rather than the
+  one this repository built.** The job is the last line of the release and its
+  name makes one claim -- that the published artifact is the attested one --
+  which it could not support: it ran `gh attestation verify` over the `build`
+  job's own uploaded artifact, so a green run meant "the wheel we attested is
+  attested". A wheel substituted on PyPI's side would have passed. It now
+  downloads what PyPI actually serves and checks *those* bytes three ways:
+  every published digest against the Sigstore-attested `SHA256SUMS` manifest,
+  every published file against its GitHub attestation, and then the smoke test.
+  Both loops refuse to pass over an empty directory, because a loop with no
+  iterations exits 0 having verified nothing.
+- **The release smoke test no longer races PyPI's index.** PyPI's index is a
+  CDN and does not serve a new version the instant the upload returns 200;
+  `uvx --refresh` clears uv's cache, not PyPI's. On `v0.2.2` the smoke test ran
+  13 seconds after two successful uploads and failed with "there is no version
+  of outcome-receipts==0.2.2" while the release was published and correct. The
+  job now waits for the index, bounded at five minutes so a genuine
+  non-appearance still fails.
+- **The digest comparison tolerates both manifest path markers.** This
+  repository's `SHA256SUMS` writes `./name` while `sha256sum --binary` writes
+  `*name`; an exact match on the filename field would have reported the real,
+  correct `0.2.2` wheel as a file the manifest never named -- a false
+  substitution alarm on a good release.
+
+## [0.2.2] - 2026-09-13
 
 ### Added
 - **`receipts run --format docx` writes `report.docx` beside `report.md`, and the
@@ -152,6 +194,58 @@ release-hardening work completed before the first public tag.
   one.
 
 ### Fixed
+- **`0.2.1` was tagged onto a tree in which `0.2.1` does not exist, and the
+  trees where it does exist are not the ones the tag names.** The bump and the
+  promotion landed one commit apart and in the wrong order: `f7f8b9f` promoted
+  `[Unreleased]` to `## [0.2.1] - 2026-09-07` while `pyproject.toml` still read
+  `0.2.0`, and `3c7b90e` moved `pyproject.toml`, `CITATION.cff` and `uv.lock`
+  afterwards — by which point a fresh `[Unreleased]` had already opened above
+  the `[0.2.1]` section and was accumulating entries. The tag itself points at
+  `dae3e8e`, earlier than both, where `pyproject.toml` reads `0.2.0`, there is
+  no `[0.2.1]` section at all, and `scripts/check_release_version.py` — the
+  guard written to catch exactly this — does not yet exist, because a tag is a
+  frozen tree and a guard added after it cannot run at it.
+
+  Running that guard over each of those trees says it plainly: it fails at
+  `dae3e8e` and at `f7f8b9f`, and passes at `3c7b90e` and on current `main`.
+  So the problem is not that no coherent tree exists; it is that the coherent
+  trees are not the tagged one, the `[0.2.1]` section does not describe them,
+  and the only repair for that shape is moving a published ref. `v0.2.1` is
+  left exactly where it is. It is wrong, and a visibly bad tag is better than a
+  moved one. `0.2.2` is cut from `main` instead, which needs no tag to move,
+  and the CHANGELOG preamble now states that neither `0.2.0` nor `0.2.1` is
+  installable rather than leaving the sequence to be inferred.
+- **The release checklist's exhaustive file list was missing the lines that
+  `0.2.1`'s promotion had already had to come back for, and the one field in it
+  that no gate can check was not flagged as such.** `docs/RELEASING.md` named
+  six files; the CHANGELOG's link definitions at the foot of the file are a
+  seventh, unchecked by anything, and `f7f8b9f` re-pointed two of them in the
+  same commit that the table does not mention. The checklist now names them.
+  It also now says what `make release-version` does and does not prove about
+  the release date: it requires `CITATION.cff`'s `date-released` to equal the
+  CHANGELOG section's date, but it compares two declarations to each other and
+  neither to a calendar, so a release prepared one day and tagged the next
+  passes green while stating a date that never happened.
+- **The Semgrep waiver cross-check was described as scanning the tree, and scans
+  four directories.** `scripts/check_semgrep_waivers.py` reads `SCAN_DIRS =
+  ("src", "tests", "scripts", ".github")` over seven suffixes; `make
+  security-semgrep` scans the whole repository. So a suppression added under
+  `eval/`, `docs/`, `examples/` or at the repository root is invisible to the
+  cross-check, while `docs/RESPONSIBLE-TECH-AUDITS.md` said the comparison ran
+  "against the tree in both directions" — a stated scope wider than the code's,
+  which is the shape that makes a gate read as covering something it never
+  opened. The audit note now names the four directories and the suffixes, and
+  says which paths are outside them.
+  - Three tests pin it, so the sentence and the constants cannot drift apart
+    again: the documented scope must equal `SCAN_DIRS`/`SCAN_SUFFIXES`, a
+    suppression placed outside the scanned set must not be reported as caught,
+    and the file the scope exception exists for must still exist — an exception
+    for a file that has since been deleted is an exemption that exempts nothing
+    and only obscures the list.
+  - The `[0.2.1]` entry below is left as written. It is the record of what that
+    release claimed; the correction belongs here rather than in a section that
+    has shipped.
+
 - **The release checklist named three of the six files that carry the version,
   and the three it omitted are the ones that drifted.** `docs/RELEASING.md`
   step 1 read *"Update `pyproject.toml`, `CHANGELOG.md`, and generated
@@ -189,7 +283,7 @@ release-hardening work completed before the first public tag.
   with `--tag` the tag must name what the tree declares. An unreadable
   declaration — no `project.version`, no dated section, `## [0.2.1]` with the
   date dropped — is unmeasurable and fails; a malformed newest heading is not
-  skipped in favour of the release below it, which would report agreement
+  skipped in favor of the release below it, which would report agreement
   reached by ignoring the release under test. It runs as its own `make` gate
   rather than a fourth line of `hygiene`, so a source-hygiene failure cannot
   take it down with it, and again in `release.yml` with the tag.
@@ -224,6 +318,32 @@ release-hardening work completed before the first public tag.
   passed. It now fails closed."*). This is the same defect in the second
   checker. No document in the tree is currently in either state; every stamp is
   a well-formed past date, so this changes no current verdict.
+
+### Security
+- **`js-yaml` 3.15.1 -> 3.15.2 and 4.3.1 -> 4.3.2 (`GHSA-2883-XCG3-V3HH`,
+  high), which is what `make security-npm` was refusing.** The advisory was
+  published 2026-09-08 at 21:24 UTC; `verify` last passed on `main` at
+  `228a51f` at 02:32 UTC the same day, against this same `package-lock.json`.
+  The gate went red on the advisory database moving, not on a commit, which is
+  why it was found by an unrelated documentation PR (#188) rather than by the
+  change that caused it -- there was none.
+  - **Both copies are development-only and neither reads untrusted input**, and
+    that is worth writing down rather than assuming, because it is the question
+    that decides whether a waiver would have been defensible. `js-yaml@3` is
+    reached through `@lhci/utils` <- `@lhci/cli`, and this repository configures
+    Lighthouse CI with `lighthouserc.cjs` -- JavaScript, not YAML. `js-yaml@4`
+    is reached through `cosmiconfig` <- `puppeteer`, which searches for a
+    `.puppeteerrc` this repository does not have. The advisory is CPU
+    exhaustion on a hostile document; nothing in the `a11y` gate hands either
+    parser a document it did not author.
+  - The fix is six lines of `package-lock.json`, so no waiver was warranted and
+    none was added. `waivers.yml` still holds no `npm-audit` entry.
+  - **Only the two `js-yaml` entries moved.** `npm update js-yaml
+    --package-lock-only` also prunes 24 stale `puppeteer`/`puppeteer-core`
+    proxy-agent nodes, and a plain `npm install --package-lock-only` on
+    unmodified `main` prunes exactly the same 24 -- so that churn is
+    pre-existing lock drift, unrelated to this advisory, and is left for a
+    change that can be reviewed on its own terms.
 
 ## [0.2.1] - 2026-09-07
 
@@ -292,15 +412,15 @@ release-hardening work completed before the first public tag.
   verifier that accepts anything accepts a released artifact too, so those rows
   were carrying less weight than they appeared to. `tests/test_release_compatibility.py`
   now exercises the same frozen artifacts with one field changed and asserts that
-  each refusal is *attributable*: a `v0.1.0` manifest relabelled to a manifest
+  each refusal is *attributable*: a `v0.1.0` manifest relabeled to a manifest
   major nothing implements fails on `schema_version` while all four of its
   receipts still re-derive, so the refusal is the declared version and not the
   data; a `v0.1.0` manifest with one figure edited by hand — one client added to a
   count, small enough to be plausible — fails as drift on that metric by name; and
-  a `v0.2.0` spec relabelled to a report-spec major nothing implements is refused
+  a `v0.2.0` spec relabeled to a report-spec major nothing implements is refused
   before any figure is computed, with the error naming both the version it was
   handed and the one this package implements, and with the `--out` directory left
-  empty. The last of those is asserted by pointing the relabelled spec's
+  empty. The last of those is asserted by pointing the relabeled spec's
   `[data] path` at a CSV that does not exist: if the version check ever moved to
   after the read, the missing file would raise first and the test would say so
   rather than passing for the wrong reason. Three rows added to the compatibility
@@ -597,7 +717,7 @@ release-hardening work completed before the first public tag.
   the same `Check` type as a receipt and counted alongside them, with `metric_id`
   as their only label. So the housing demo's **four**-receipt manifest printed
   `receipts checked: 6 (re-derived 6, drift 0)`, the `--json` payload's `n_ok`
-  and `drift` carried the same inflation, and a manifest relabelled to a schema
+  and `drift` carried the same inflation, and a manifest relabeled to a schema
   major nothing implements failed with `verify: FAIL — a receipt does not match
   the data` and `drift 1` while every one of its receipts re-derived cleanly.
   In a repository whose premise is that every reported number carries a receipt,
@@ -610,7 +730,7 @@ release-hardening work completed before the first public tag.
   `checks`. `n_ok` and `drift` are unchanged and still span both kinds, so
   existing scripts keep working — they were never wrong as totals, only as the
   receipt counts they were printed as. `tests/test_verify.py` asserted
-  `n_ok == len(figures) + 2`, which pinned the conflation as intended behaviour;
+  `n_ok == len(figures) + 2`, which pinned the conflation as intended behavior;
   it now also asserts the receipt-only counts against the manifest's own receipt
   list. Two docstrings corrected in the same pass, including `verify_manifest`'s
   claim that an unsupported schema fails "before any per-receipt re-derivation is
@@ -695,7 +815,7 @@ release-hardening work completed before the first public tag.
   `cancelled` with zero jobs — and `portfolio standards conformance` is a
   *required* status check on `main`, so a required check has no result on that
   commit. `cancel-in-progress: false` is not protection: it governs the running
-  run, and `scorecard.yml` had it set and was cancelled anyway. All three now use
+  run, and `scorecard.yml` had it set and was canceled anyway. All three now use
   the same key `ci.yml` does. `codeql.yml` has never lost a run — §11e dropped its
   `push` trigger — and is changed for one idiom rather than two, which its comment
   says rather than implying a loss it did not have.
@@ -844,7 +964,7 @@ release-hardening work completed before the first public tag.
   `schema_version_failures` is what keeps them agreeing, and fails closed when
   the sentence stops being readable.
 - `scripts/check_conformance.py` allowed no waiver kind that
-  `scripts/check_npm_audit.py` could honour. The npm gate accepts a Node
+  `scripts/check_npm_audit.py` could honor. The npm gate accepts a Node
   dependency advisory only from a waiver whose `kind` is `npm-audit`, and
   `VALID_KINDS` did not list that string, so granting one would make
   `make security-npm` accept the advisory while `make hygiene` rejected the
@@ -1028,7 +1148,7 @@ contract change is described in full under **Changed** below.
   bumping `project.version` without re-locking still exits 0 — proven by doing
   exactly that: `uv sync --frozen` returned 0 with `pyproject.toml` at `0.2.0`
   and `uv.lock` at `0.1.0`, while `uv lock --check` returned 1 on the same tree.
-  The one change guaranteed to desynchronise the lock was the one change the
+  The one change guaranteed to desynchronize the lock was the one change the
   gate could not see, and every release re-verified against a stale editable
   install. `make install` now runs `uv lock --check` first and fails closed,
   matching what `npm ci` (as opposed to `npm install`) already did for the
@@ -1087,14 +1207,14 @@ contract change is described in full under **Changed** below.
   it, inventing a collapse and a recovery across data withheld on purpose; and
   `_scale_max` let the hidden cell scale the bars that were drawn, as a zero.
   `Figure.value` is now `None` for a withheld figure, a withheld bar is a
-  hatched dashed full-height slot in the axis grey, a line breaks rather than
+  hatched dashed full-height slot in the axis gray, a line breaks rather than
   interpolating, and withheld figures take no part in the axis scale. The
   absence is announced as well as drawn, in the marker's `<title>` and the
   chart's `<desc>`. The end-to-end artifact search now covers the chart SVGs,
   closing the gap ADR 0004's consequences left. Recorded in
   [ADR 0010](docs/decisions/0010-withheld-cells-are-drawn-as-an-absence.md).
   ([#78](https://github.com/ChelseaKR/outcome-receipts/issues/78))
-- A suppressed cell serialised as a zero. `_redact` wrote `value: 0.0`,
+- A suppressed cell serialized as a zero. `_redact` wrote `value: 0.0`,
   `row_count: 0`, and the all-zero slice-hash sentinel — byte-identical, in
   every field the manifest schema constrains, to a figure that is genuinely
   zero. The prose said `[SUPPRESSED]`; the numbers said nobody, and every
@@ -1425,7 +1545,8 @@ contract change is described in full under **Changed** below.
   suppressed, every percent figure is suppressed with it, documented as such in
   the module docstring.
 
-[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ChelseaKR/outcome-receipts/releases/tag/v0.1.0

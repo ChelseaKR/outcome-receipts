@@ -95,6 +95,18 @@ class Check:
 
 
 @dataclass(frozen=True)
+class VerifyWarning:
+    """Something verify reports about one receipt without failing on it.
+
+    A warning never enters :attr:`VerifyResult.ok`, so it never changes the exit
+    code of ``receipts verify`` or of the reusable action that runs it.
+    """
+
+    metric_id: str
+    detail: str
+
+
+@dataclass(frozen=True)
 class VerifyResult:
     """Every check run against the manifest, and whether it verified as a whole.
 
@@ -104,6 +116,9 @@ class VerifyResult:
     """
 
     checks: tuple[Check, ...]
+    #: Reported beside the checks and never failed on: ``ok`` reads ``checks``
+    #: alone. See ``_legacy_withheld_warnings``.
+    warnings: tuple[VerifyWarning, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -250,6 +265,59 @@ def _compare(stored: Mapping[str, Any], figure: Figure) -> list[str]:
     return drifts
 
 
+def _is_number(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _legacy_withheld_warnings(receipts: Sequence[Mapping[str, Any]]) -> tuple[VerifyWarning, ...]:
+    """A warning for each 1.0-shaped receipt that displays the redaction marker but carries numbers.
+
+    Schema 1.0 wrote a withheld figure as ``display: "[SUPPRESSED]"`` beside
+    ``value: 0.0``, ``row_count: 0`` and the all-zero slice-hash sentinel. Verify
+    reconstructs that rendering and reports the receipt as re-derived, which is
+    true: the placeholders do still hold. It is also silent about the defect
+    schema 2.0 exists to fix, because a reader of the numeric fields cannot tell
+    those zeros from a true zero. ``examples/housing-demo/receipts.json`` sat in
+    exactly this shape under a green dogfood run until #198.
+
+    It warns rather than fails on purpose. Every manifest written by 0.2.0 or
+    earlier is 1.0, the reusable action installs v0.2.0 by default, and
+    docs/SPEC-STABILITY.md promises that verify reads 1.0; a failure here would
+    turn those runs red with nothing in their data changed. Whether it should
+    ever fail is an open question (#198).
+
+    The test is per receipt, as in ``_compare``: a receipt with no ``suppressed``
+    key is read as 1.0 whatever the envelope declares.
+    """
+
+    warnings: list[VerifyWarning] = []
+    for stored in receipts:
+        if "suppressed" in stored or stored.get("display") != REDACTED_DISPLAY:
+            continue
+        carried = [
+            f"{field}={stored[field]!r}"
+            for field in ("value", "row_count")
+            if _is_number(stored.get(field))
+        ]
+        slice_hash = stored.get("slice_hash")
+        if isinstance(slice_hash, str):
+            carried.append(
+                "the all-zero slice_hash sentinel"
+                if slice_hash == EMPTY_SLICE_HASH
+                else f"slice_hash={slice_hash!r}"
+            )
+        if not carried:
+            continue
+        detail = (
+            f"schema 1.0 receipt displays {REDACTED_DISPLAY} but carries {', '.join(carried)}. "
+            "Those are the placeholders 1.0 wrote for a withheld figure, not a count of zero, "
+            f"and nothing in the numeric fields says so. Re-export at schema {SCHEMA_VERSION}, "
+            "which writes suppressed: true and null numerics."
+        )
+        warnings.append(VerifyWarning(str(stored.get("metric_id", "")), detail))
+    return tuple(warnings)
+
+
 def verify_manifest(figures: Sequence[Figure], manifest: Mapping[str, Any]) -> VerifyResult:
     """Check each manifest receipt against the figure re-derived from the data.
 
@@ -288,7 +356,7 @@ def verify_manifest(figures: Sequence[Figure], manifest: Mapping[str, Any]) -> V
     for metric_id in sorted(by_id):
         if metric_id not in seen:
             checks.append(Check(metric_id, False, "figure has no receipt in the manifest"))
-    return VerifyResult(tuple(checks))
+    return VerifyResult(tuple(checks), warnings=_legacy_withheld_warnings(receipts))
 
 
 @dataclass(frozen=True)

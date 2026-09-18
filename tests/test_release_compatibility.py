@@ -19,7 +19,12 @@ from outcome_receipts.cli import EXIT_VERIFY_FAIL, main
 from outcome_receipts.clock import FixedClock
 from outcome_receipts.config import SPEC_SCHEMA_VERSION, load_spec
 from outcome_receipts.engine import compute_figures, read_csv
-from outcome_receipts.models import SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS, Figure
+from outcome_receipts.models import (
+    REDACTED_DISPLAY,
+    SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
+    Figure,
+)
 from outcome_receipts.suppression import suppress_figures
 from outcome_receipts.verify import verify_manifest
 
@@ -133,8 +138,8 @@ def test_v020_baseline_names_immutable_source_commit() -> None:
     assert "byte-for-byte copies" in source
 
 
-def _relabelled_baseline_spec(tmp_path: Path, schema_version: str) -> Path:
-    """The frozen v0.2.0 spec, relabelled to a schema major, with unreadable data.
+def _relabeled_baseline_spec(tmp_path: Path, schema_version: str) -> Path:
+    """The frozen v0.2.0 spec, relabeled to a schema major, with unreadable data.
 
     The data path is deliberately pointed at a CSV that does not exist. If the
     loader refuses the declared version *before* computation, that missing file is
@@ -144,15 +149,15 @@ def _relabelled_baseline_spec(tmp_path: Path, schema_version: str) -> Path:
     """
 
     source = (BASELINE_V020 / "report.toml").read_text(encoding="utf-8")
-    relabelled = source.replace(
+    relabeled = source.replace(
         f'schema_version = "{SPEC_SCHEMA_VERSION}"', f'schema_version = "{schema_version}"'
     )
-    assert f'schema_version = "{schema_version}"' in relabelled, "the version line did not move"
-    relabelled = relabelled.replace('path = "services.csv"', 'path = "no-such-data.csv"')
-    assert 'path = "no-such-data.csv"' in relabelled, "the data path did not move"
+    assert f'schema_version = "{schema_version}"' in relabeled, "the version line did not move"
+    relabeled = relabeled.replace('path = "services.csv"', 'path = "no-such-data.csv"')
+    assert 'path = "no-such-data.csv"' in relabeled, "the data path did not move"
 
     spec_path = tmp_path / "report.toml"
-    spec_path.write_text(relabelled, encoding="utf-8")
+    spec_path.write_text(relabeled, encoding="utf-8")
     assert not (tmp_path / "no-such-data.csv").exists()
     return spec_path
 
@@ -173,7 +178,7 @@ def test_a_future_major_spec_is_refused_before_computation_and_writes_nothing(
     """
 
     out = tmp_path / "out"
-    spec_path = _relabelled_baseline_spec(tmp_path, "2.0")
+    spec_path = _relabeled_baseline_spec(tmp_path, "2.0")
 
     with pytest.raises(ValueError) as raised:
         main(
@@ -200,7 +205,7 @@ def test_a_future_major_spec_is_refused_before_computation_and_writes_nothing(
     assert not out.exists() or not list(out.iterdir())
 
 
-def test_the_current_verifier_refuses_a_frozen_manifest_relabelled_to_a_future_major(
+def test_the_current_verifier_refuses_a_frozen_manifest_relabeled_to_a_future_major(
     tmp_path: Path,
 ) -> None:
     """Issue 65: the intentionally incompatible half of the old-artifact exercise.
@@ -233,11 +238,9 @@ def test_the_current_verifier_refuses_a_frozen_manifest_relabelled_to_a_future_m
     assert all(check.ok for check in receipts)
 
     # And it fails closed at the CLI boundary, not only in the library.
-    relabelled = tmp_path / "receipts.json"
-    relabelled.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    code = main(
-        ["verify", "--config", str(BASELINE / "report.toml"), "--receipts", str(relabelled)]
-    )
+    relabeled = tmp_path / "receipts.json"
+    relabeled.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+    code = main(["verify", "--config", str(BASELINE / "report.toml"), "--receipts", str(relabeled)])
     assert code == EXIT_VERIFY_FAIL
 
 
@@ -266,3 +269,46 @@ def test_an_edited_frozen_receipt_is_reported_as_drift_not_quietly_accepted() ->
     drifted = [check for check in result.checks if not check.ok]
     assert [check.metric_id for check in drifted] == ["clients_served"]
     assert "value" in drifted[0].detail
+
+
+@pytest.mark.parametrize("baseline", [BASELINE, BASELINE_V020], ids=["v0.1.0", "v0.2.0"])
+def test_a_released_1_0_manifest_warns_on_its_withheld_zeros_without_failing(
+    baseline: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """#198: "re-derived, matches" is true of 1.0's placeholders and silent about them.
+
+    Every receipt a 1.0 manifest renders as [SUPPRESSED] carries value 0.0 and
+    row_count 0. Verify has to say so and name each one, and it has to leave the
+    result and the exit code exactly where they were: these released manifests
+    verified before the warning existed, and a warning that failed them would
+    break every downstream run still verifying a 1.0 manifest.
+    """
+
+    manifest = json.loads((baseline / "receipts.json").read_text(encoding="utf-8"))
+    records = manifest["receipts"]
+    withheld = sorted(r["metric_id"] for r in records if r["display"] == REDACTED_DISPLAY)
+    published = [r["metric_id"] for r in records if r["display"] != REDACTED_DISPLAY]
+    assert withheld, "the baseline no longer carries a 1.0 withheld figure to warn on"
+    assert published, "nor a published figure to show the warning is not blanket"
+
+    result = verify_manifest(_rederive(baseline), manifest)
+
+    assert result.ok
+    assert sorted(warning.metric_id for warning in result.warnings) == withheld
+    for warning in result.warnings:
+        assert "value=0.0" in warning.detail
+        assert "row_count=0" in warning.detail
+
+    config = str(baseline / "report.toml")
+    receipts = str(baseline / "receipts.json")
+    assert main(["verify", "--config", config, "--receipts", receipts]) == 0
+    text = capsys.readouterr().out
+    assert f"warnings: {len(withheld)} (reported, not failed on)" in text
+    for metric_id in withheld:
+        assert f"  [warn] {metric_id}: schema 1.0 receipt displays {REDACTED_DISPLAY}" in text
+    assert "verify: PASS" in text
+
+    assert main(["verify", "--config", config, "--receipts", receipts, "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert sorted(entry["metric_id"] for entry in payload["warnings"]) == withheld

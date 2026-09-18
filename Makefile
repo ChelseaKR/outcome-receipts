@@ -1,5 +1,5 @@
 .PHONY: install install-security install-smoke verify lint type test hygiene security i18n compat \
-	release-version \
+	release-version dist-metadata example-manifests \
 	security-pip security-npm security-osv security-secrets security-semgrep security-workflows \
 	a11y perf build-html cards benchmark eval eval-check mutation run container-build \
 	container-smoke container-scan container-verify container-demo clean
@@ -13,8 +13,8 @@
 # exits non-zero if any of them failed. Nothing is muted; nothing is skipped.
 SECURITY_GATES := security-pip security-npm security-osv security-secrets \
 	security-semgrep security-workflows
-VERIFY_GATES := lint type test hygiene release-version i18n security a11y perf cards \
-	eval-check compat container-verify
+VERIFY_GATES := lint type test hygiene example-manifests release-version dist-metadata i18n security \
+	a11y perf cards eval-check compat container-verify
 
 # Reproduce the full local toolchain. CI mirrors `make verify` byte for byte.
 # `uv lock --check` first, because `uv sync --frozen` cannot fail on drift. The
@@ -24,7 +24,7 @@ VERIFY_GATES := lint type test hygiene release-version i18n security a11y perf c
 # pyproject.toml. Bump `project.version` and leave uv.lock behind and
 # `uv sync --frozen` still exits 0, having installed the previous version --
 # which is exactly the drift a release creates, so the one change guaranteed to
-# desynchronise the lock was the one change this step could not see. Every
+# desynchronize the lock was the one change this step could not see. Every
 # release since would have verified against a stale editable install. `uv lock
 # --check` re-resolves and exits 1 when the lock no longer matches the
 # manifest; npm's half of the pair (`npm ci`, not `npm install`) already fails
@@ -84,6 +84,18 @@ hygiene:
 	.venv/bin/python scripts/check_conformance.py
 	.venv/bin/python scripts/check_semgrep_waivers.py
 
+# Every committed example manifest, validated against the published receipts
+# schema by a real Draft 2020-12 validator. `receipts verify` re-derives figures
+# and never reads the schema, so the manifest dogfood-action verifies stayed at
+# schema 1.0 after 2.0 shipped and published three withheld figures as zeros
+# under green runs (#198). docs/decisions/0005 keeps jsonschema out of the project
+# environment, so it runs isolated at a pinned version, as Semgrep and zizmor
+# do, and uv.lock is untouched. Its own gate rather than a line of `hygiene`,
+# for the reason `release-version` below gives.
+example-manifests:
+	uv run --isolated --no-project --python 3.12 --with jsonschema==4.26.0 \
+		python scripts/check_example_manifests.py
+
 # Its own gate rather than a fourth line of `hygiene`, for the reason the
 # comment above SECURITY_GATES gives: make stops a recipe at its first failing
 # line, so a source-hygiene failure would take this one with it and the release
@@ -92,6 +104,16 @@ hygiene:
 # release can make.
 release-version:
 	.venv/bin/python scripts/check_release_version.py
+
+# The artifact-level counterpart to `release-version`. That one compares numbers
+# inside the tree; this one builds the wheel and the sdist and reads the metadata
+# PyPI would actually be handed. `python3` rather than `.venv/bin/python` on
+# purpose: release.yml's build job runs this identical command against the exact
+# artifacts it is about to upload, and that job has no project environment.
+dist-metadata:
+	@rm -rf dist
+	uv build
+	python3 scripts/check_dist_metadata.py dist
 
 # Keep ephemeral Python tools on the same interpreter as the locked project. In
 # particular, Semgrep's macOS source distribution does not carry semgrep-core.

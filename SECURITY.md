@@ -45,7 +45,7 @@ If you want an encrypted channel, say so in a first low-detail email and we will
 
 | Stage                    | Target                                                            |
 |--------------------------|-------------------------------------------------------------------|
-| Acknowledgement & triage | within **72 hours** of receipt                                    |
+| Acknowledgment & triage | within **72 hours** of receipt                                    |
 | Severity assessment      | CVSS-based, shared with you in the triage reply                   |
 | Fix or mitigation plan   | communicated after triage, prioritized by severity               |
 | Coordinated disclosure   | by mutual agreement; default embargo up to 90 days               |
@@ -73,7 +73,7 @@ long-lived token). The CI token is least-privilege and does not persist credenti
 Semgrep, and zizmor. Each is a separate target and every one runs on every
 commit, whatever the others did: they were once six lines of a single recipe,
 and make stops a recipe at its first failure, so one unfixable advisory in a
-development dependency silently cancelled the four scanners after it. Any
+development dependency silently canceled the four scanners after it. Any
 finding a scanner reports still blocks merge; accepted findings are recorded,
 dated, owned and expiring, in [`waivers.yml`](waivers.yml), and a finding with
 no live waiver naming its exact advisory id, package, and severity fails the

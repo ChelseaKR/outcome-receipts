@@ -214,7 +214,7 @@ def test_malformed_metric_raises() -> None:
 # An earlier revision coerced a NULL scalar to 0.0. Nothing downstream could
 # recover it: suppression reads value == 0 as a *true zero* and publishes it,
 # verify re-derives the same 0.0 and agrees, and the export renders "0"/"0%"/
-# "0 days". These pin the fail-closed behaviour; each one fails on that revision.
+# "0 days". These pin the fail-closed behavior; each one fails on that revision.
 
 
 def test_null_scalar_fails_closed_instead_of_becoming_zero() -> None:

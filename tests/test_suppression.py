@@ -1389,7 +1389,7 @@ def _three_state_figures() -> list[Figure]:
 
 
 class TestSuppressedAbsentAndZeroAreThreeStates:
-    """Merge-blocking (issue #77): a withheld cell must never serialise as a zero.
+    """Merge-blocking (issue #77): a withheld cell must never serialize as a zero.
 
     Under the previous redaction a suppressed receipt carried ``value: 0.0``,
     ``row_count: 0``, and the all-zero slice hash -- byte-identical, in every

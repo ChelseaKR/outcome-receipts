@@ -186,13 +186,13 @@ def _redact(figure: Figure) -> Figure:
     the receipt that carries the raw count is replaced here.
 
     They are replaced with ``None``, not with zero, and the receipt is stamped
-    ``suppressed=True``. Zeroing them was the earlier behaviour and it made a
+    ``suppressed=True``. Zeroing them was the earlier behavior and it made a
     withheld cell byte-identical to a true zero in every field the manifest
     schema constrains: ``value: 0.0``, ``row_count: 0``, and the all-zero
     ``EMPTY_SLICE_HASH`` are exactly what a figure of genuinely zero produces.
     The prose said ``[SUPPRESSED]``; the numbers said nobody. Every machine
     consumer -- the manifest, the trace view, the six evidence workflows -- read
-    the numbers. ``None`` serialises as JSON ``null``, so a consumer that sums or
+    the numbers. ``None`` serializes as JSON ``null``, so a consumer that sums or
     plots the field fails loudly instead of silently counting a withheld group as
     zero, and ``suppressed`` gives it a field to branch on.
 

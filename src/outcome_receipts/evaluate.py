@@ -53,7 +53,7 @@ class EvalReport:
         denominator the honest answer is no, so it passes. That is the right
         answer for the export path: a narrative with no numbers has no number to
         invent, and ``receipts run`` exports it. It is not an answer about the
-        gate's behaviour, because the gate was never exercised. Keeping the two
+        gate's behavior, because the gate was never exercised. Keeping the two
         apart is what lets a caller say "the gate passed" and "this run is not
         evidence that it works" at the same time, both truthfully.
         """

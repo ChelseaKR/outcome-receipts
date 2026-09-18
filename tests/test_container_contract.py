@@ -58,10 +58,20 @@ def test_make_verify_uses_the_digest_pinned_container_scan() -> None:
         "type",
         "test",
         "hygiene",
+        # Static like `hygiene`, and its own entry for the reason given below.
+        # It validates every committed example manifest against the published
+        # schema, which nothing did while the dogfood example sat at 1.0.
+        "example-manifests",
         # Its own entry rather than a fourth line of `hygiene`'s recipe: make
         # stops a recipe at its first failing line, so a source-hygiene failure
         # would take the release-version check down with it.
         "release-version",
+        # The artifact-level counterpart to `release-version`, and it follows it
+        # for that reason. `release-version` compares numbers inside the tree;
+        # this one builds the wheel and the sdist and reads the metadata PyPI is
+        # actually handed, which is the only place a defect like 0.2.2's inlined
+        # license text is visible.
+        "dist-metadata",
         "i18n",
         "security",
         "a11y",

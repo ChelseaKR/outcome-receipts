@@ -120,6 +120,13 @@ jobs:
           enable-cache: false # signing/publish path: no cache poisoning surface
       - name: Build wheel + sdist
         run: uv build
+      # The `verify` job proved the tree is right. This proves the artifact is,
+      # which is a different claim: `gauntlet-evals` 0.2.0 shipped with no
+      # Project-URL lines at all while its default branch declared four, because
+      # the release built from a tag cut before that change merged. Runs before
+      # anything is attested, uploaded or spent.
+      - name: The metadata this wheel would publish is the metadata intended
+        run: python3 scripts/check_dist_metadata.py dist
       - name: Attest build provenance (signed via Sigstore)
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
@@ -301,18 +308,123 @@ jobs:
       contents: read
       attestations: read # verify the published wheel's GitHub attestation
     steps:
+      # The attested manifest from the build job. Nothing below verifies these
+      # files; they are the *expectation* this job holds PyPI's copy against.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: dist-attested
-          path: dist
+          path: dist-built
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with:
           version: "0.11.19"
           enable-cache: false
-      - name: Verify Sigstore-backed GitHub attestation
+
+      # PyPI's index is a CDN: it does not serve a new version the instant the
+      # upload call returns 200. `uvx --refresh` clears uv's own cache, not
+      # PyPI's, so the smoke test below used to race the index -- on v0.2.2 it
+      # ran 13 seconds after two successful uploads and failed with "there is
+      # no version of outcome-receipts==0.2.2" while the release was, in fact,
+      # published and correct. Bounded so a genuine non-appearance still fails.
+      - name: Wait for the PyPI index to serve this version
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          for attempt in $(seq 1 30); do
+            if curl -fsS -H 'Cache-Control: no-cache' \
+                 "https://pypi.org/pypi/outcome-receipts/${version}/json" >/dev/null 2>&1; then
+              echo "PyPI serves ${version} (attempt ${attempt})"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error title=index never served::PyPI did not serve ${version} within 5 minutes"
+          exit 1
+
+      # Fetch what PyPI actually hands a consumer. Everything after this step
+      # reads THESE bytes. This job previously ran `gh attestation verify` over
+      # the artifact the build job produced, which cannot establish the only
+      # claim the job's name makes: a green run then meant "the wheel we built
+      # is attested", never "the wheel the public installs is the attested
+      # one". Re-verifying our own artifact is a tautology; PyPI is the party
+      # whose copy is unverified.
+      - name: Download the published distributions from PyPI
+        run: |
+          set -euo pipefail
+          mkdir -p dist-published
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          url = f"https://pypi.org/pypi/outcome-receipts/{version}/json"
+          request = urllib.request.Request(url, headers={"Cache-Control": "no-cache"})
+          with urllib.request.urlopen(request) as response:
+              payload = json.load(response)
+
+          files = payload["urls"]
+          if not files:
+              raise SystemExit(f"PyPI lists no files for {version}")
+
+          out = pathlib.Path("dist-published")
+          for entry in files:
+              destination = out / entry["filename"]
+              urllib.request.urlretrieve(entry["url"], destination)
+              print(f"fetched {entry['filename']} ({entry['size']} bytes)")
+          PY
+          ls -l dist-published
+
+      # The published bytes are the attested bytes. A digest that PyPI serves
+      # and the build job never produced is the substitution this job exists to
+      # catch, and comparing against the attested manifest is what makes the
+      # comparison meaningful: SHA256SUMS traveled with the Sigstore-attested
+      # artifact, so agreeing with it is agreeing with what was signed.
+      - name: The published digests match the attested manifest
+        run: |
+          set -euo pipefail
+          cd dist-published
+          matched=0
+          for published in *; do
+            # SHA256SUMS writes paths as `./name`; `sha256sum --binary` would
+            # write `*name`. Strip either marker before comparing, or a correct
+            # artifact reads as one the manifest never named.
+            expected="$(awk -v name="$published" '{ f = $2; sub(/^\*/, "", f); sub(/^\.\//, "", f); if (f == name) print $1 }' ../dist-built/SHA256SUMS)"
+            if [ -z "$expected" ]; then
+              echo "::error title=unattested file on PyPI::$published is served by PyPI but absent from the attested manifest"
+              exit 1
+            fi
+            actual="$(sha256sum "$published" | cut -d' ' -f1)"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error title=published bytes differ::$published on PyPI is $actual, attested $expected"
+              exit 1
+            fi
+            echo "$published matches the attested manifest ($actual)"
+            matched=$((matched + 1))
+          done
+          if [ "$matched" -eq 0 ]; then
+            echo "::error title=nothing compared::no published file was checked, so this step proved nothing"
+            exit 1
+          fi
+          echo "$matched published file(s) matched the attested manifest"
+
+      # Sigstore verification over the files PyPI served, not over ours.
+      - name: Verify Sigstore-backed GitHub attestation of the published files
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh attestation verify dist/*.whl --repo "$GITHUB_REPOSITORY"
+        run: |
+          set -euo pipefail
+          verified=0
+          for published in dist-published/*; do
+            gh attestation verify "$published" --repo "$GITHUB_REPOSITORY"
+            verified=$((verified + 1))
+          done
+          if [ "$verified" -eq 0 ]; then
+            echo "::error title=nothing verified::no published file was attested-checked"
+            exit 1
+          fi
+          echo "$verified published file(s) carry a verified attestation"
+
       - name: Pull the published version from PyPI and smoke-test it
         run: |
           set -euo pipefail
