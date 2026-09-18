@@ -208,3 +208,35 @@ def test_markdown_emphasis_does_not_split_a_percent_off_its_digits() -> None:
     plain = ground("served **12** clients", [figure])
     assert plain.ok
     assert [span.text for span in plain.bound] == ["12"]
+
+
+def test_markdown_markup_before_a_number_keeps_raw_offsets() -> None:
+    # find_numbers scans the unwrapped reader text, but callers slice the raw
+    # string. Offsets must stay in raw coordinates or redact_unbound lands in
+    # the markers and leaves the digits.
+    text = "**Note:** the program served 15 families."
+    result = ground(text, [])
+    assert not result.ok
+    assert len(result.unbound) == 1
+    span = result.unbound[0]
+    assert span.text == "15"
+    assert text[span.start : span.end] == "15"
+
+    redacted = redact_unbound(text, result)
+    assert "15" not in redacted
+    assert "[UNVERIFIED]" in redacted
+    assert redacted == "**Note:** the program served [UNVERIFIED] families."
+
+    emphasized = "served **12**% of its clients"
+    percent = ground(emphasized, [])
+    assert [span.text for span in percent.unbound] == ["12%"]
+    for span in percent.unbound:
+        assert "12" in emphasized[span.start : span.end]
+    assert "12" not in redact_unbound(emphasized, percent)
+
+    coded = "served `12`% of its clients"
+    coded_result = ground(coded, [])
+    assert [span.text for span in coded_result.unbound] == ["12%"]
+    for span in coded_result.unbound:
+        assert "12" in coded[span.start : span.end]
+    assert "12" not in redact_unbound(coded, coded_result)
