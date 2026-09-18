@@ -27,7 +27,7 @@ The XML is read with the standard library's expat parser, driven directly with
 the refusals ``defusedxml`` installs: a document type declaration is refused
 before anything inside it is processed, so no entity can be declared, expanded,
 or fetched, and an undeclared one is a parse error. This package has no runtime
-dependencies, which is why that defence is written here rather than imported.
+dependencies, which is why that defense is written here rather than imported.
 
 Charts are not embedded. Rasterizing the SVG needs a native dependency this
 package does not take, so each chart's image line becomes one sentence naming its
@@ -275,7 +275,7 @@ def document_blocks(report_text: str, *, locale: str) -> tuple[Block, ...]:
     It reads the Markdown ``render_report`` writes -- a title, ``##`` and ``###``
     headings, paragraphs, pipe tables, ``-`` bullets one level deep, ``**bold**``
     and ``code`` spans, and one image line per chart -- and keeps every other line
-    as text, so a line it does not recognise is shown as written rather than
+    as text, so a line it does not recognize is shown as written rather than
     dropped. Only markup is removed: heading hashes, bullet dashes, table pipes and
     separator rows, and matched emphasis markers. An image line becomes a
     sentence naming the chart's file, because the image is not embedded, and its
@@ -439,7 +439,7 @@ _SECTION = (
 # The XML 1.0 `Char` production, as code points rather than as a character class:
 # tab, newline, carriage return, then three ranges. Written this way because a
 # regex class saying the same thing has to spell the surrogate and astral bounds,
-# which reads as a suspicious range to a static analyser and is harder for a
+# which reads as a suspicious range to a static analyzer and is harder for a
 # person to check against the specification.
 _XML_RANGES = ((0x20, 0xD7FF), (0xE000, 0xFFFD), (0x10000, 0x10FFFF))
 _XML_SINGLES = frozenset({0x9, 0xA, 0xD})

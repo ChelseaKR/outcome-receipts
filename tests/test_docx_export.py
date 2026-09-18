@@ -861,7 +861,7 @@ def test_the_reader_refuses_by_declared_size_before_reading(
         read_docx(demo_document)
 
 
-# --- the renderer never drops what it does not recognise -------------------------------------
+# --- the renderer never drops what it does not recognize -------------------------------------
 
 _LINES = st.one_of(
     st.sampled_from(
