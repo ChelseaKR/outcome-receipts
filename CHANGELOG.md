@@ -52,9 +52,9 @@ than in an earlier one.
   - `export --from out/` is not built. Adding a document to a sealed bundle means
     rewriting the manifest the export ledger recorded; ADR 0014 says why that is
     left open.
-  - The document can refuse a narrative the Markdown gate passes: a template
-    reading `**{metric}**%` binds `12` in `report.md` and says `12%` in the
-    document. Issue #191 records the Markdown half.
+  - The Markdown gate reads the same two wraps the document renders (`**...**`
+    and backticks), so a template reading `**{metric}**%` is refused at the
+    Markdown stage, before a document is written (#191, under Fixed).
 - **Every Spanish artifact says it is machine-translated (owner decision,
   2026-09-18).** The Spanish fixed copy has had no human review, and ships labeled as
   such rather than waiting for one. A `--locale es` `report.md` carries two
@@ -136,6 +136,20 @@ than in an earlier one.
 
 
 ### Fixed
+- **The Markdown gate bound the `12` in `**12**%`, and every Markdown viewer shows
+  `12%` (#191, #194).** `find_numbers` scanned the raw text, where `*` bounds
+  every number pattern, so a template or a drafting model that wrote `**12**%`
+  bound a count of 12 and never saw the percent. It now scans the text a reader
+  sees: the markers of matched `**...**` pairs and single-backtick spans are
+  removed before numbers are found, so that narrative reads `12%`, binds to no
+  count receipt, and the run is refused at the Markdown gate. `NumericSpan.text`
+  is the reader-visible form; `start` and `end` stay in raw-text coordinates, so
+  `redact_unbound` still slices the original string. Only those two wraps are
+  read. The other forms a Markdown viewer renders as emphasis (`*12*%`,
+  `_12_%`, `__12__%`, `***12***%`, `~~12~~%`, `<b>12</b>%`, double-backtick
+  spans) still read as their bare digits, and that is left open. ADR 0014's
+  Consequences paragraph, which records the Markdown gate passing this narrative,
+  describes the state before this change. Contributed by @team-humaki.
 - **The example the reusable action is verified against published three
   withheld figures as zeros (#198).** `examples/housing-demo/receipts.json` was
   last written under manifest schema 1.0, before 2.0 made a withheld figure
