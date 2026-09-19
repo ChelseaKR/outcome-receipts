@@ -31,7 +31,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from outcome_receipts.copy import ReportCopy, get_copy, normalize_locale
+from outcome_receipts.copy import (
+    ReportCopy,
+    get_copy,
+    machine_translation_notice_html,
+    normalize_locale,
+)
 from outcome_receipts.models import REDACTED_DISPLAY
 
 #: The batch record ``portfolio`` writes and ``portfolio-verify`` reads back.
@@ -417,6 +422,7 @@ def render_index_html(
         "</head>",
         "<body>",
         "<main>",
+        *([] if (notice := machine_translation_notice_html(selected)) is None else [notice]),
         f"<h1>{_esc(copy.portfolio_title)}</h1>",
         f'<p class="muted">{_esc(copy.portfolio_intro)}</p>',
         "<p>"

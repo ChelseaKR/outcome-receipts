@@ -1,3 +1,6 @@
+# Spanish catalog for outcome-receipts report artifacts.
+# Machine-translated, not reviewed by a person: ships labeled as such (owner decision,
+# 2026-09-18). Every Spanish artifact carries copy.MACHINE_TRANSLATION_NOTICE; see docs/I18N.md.
 msgid ""
 msgstr ""
 "Project-Id-Version: outcome-receipts 0.1.0\n"

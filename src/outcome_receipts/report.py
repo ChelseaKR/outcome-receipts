@@ -13,7 +13,7 @@ from typing import Any
 
 from outcome_receipts.charts import Chart
 from outcome_receipts.comparison import ComparisonResult, ReconciliationResult
-from outcome_receipts.copy import Locale, get_copy
+from outcome_receipts.copy import Locale, get_copy, machine_translation_notice_markdown
 from outcome_receipts.coverage import (
     STATUS_ANSWERED,
     STATUS_UNANSWERABLE,
@@ -348,7 +348,11 @@ def render_report(
     """
 
     copy = get_copy(locale)
-    lines = [f"# {title}", "", narrative.strip()]
+    lines = [f"# {title}", ""]
+    notice = machine_translation_notice_markdown(locale)
+    if notice is not None:
+        lines.extend([notice, ""])
+    lines.append(narrative.strip())
     if comparison is not None:
         lines.extend(["", render_comparison_table(comparison, locale=locale)])
     if reconciliation is not None:
