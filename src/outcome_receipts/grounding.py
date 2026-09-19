@@ -159,20 +159,14 @@ def _unwrap_markers(
 def _reader_visible_mapped(text: str) -> tuple[str, list[int]]:
     """Reader-visible Markdown plus a visible-index → raw-index map.
 
-    Matched ``**…**`` pairs are unwrapped first, then backtick spans, matching
-    ``_reader_visible``. ``vis_to_raw[i]`` is the raw offset of ``visible[i]``.
+    Matched ``**…**`` pairs are unwrapped first, then backtick spans (the two
+    wraps ``outcome_receipts.docx`` renders as runs). ``vis_to_raw[i]`` is the raw
+    offset of ``visible[i]``.
     """
 
     identity = list(range(len(text)))
     visible, vis_map = _unwrap_markers(text, _MD_STRONG, identity)
     return _unwrap_markers(visible, _MD_CODE, vis_map)
-
-
-def _reader_visible(text: str) -> str:
-    """Markdown as a reader sees it: drop matched ``**…**`` pairs and backtick wraps."""
-
-    visible, _ = _reader_visible_mapped(text)
-    return visible
 
 
 def _single_separator_is_thousands(body: str, sep: str) -> bool:
