@@ -611,15 +611,8 @@ def test_a_spanish_export_is_a_spanish_document(tmp_path: Path) -> None:
     assert "Gráfico no incrustado en este documento" in read.text
 
 
-def test_the_document_gates_the_number_a_reader_sees_where_markup_changed_it(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """``**12**%`` is ``12`` to a scan of raw Markdown and ``12%`` to anyone reading it.
-
-    The document is what the funder reads, so its reading is the one gated, and a
-    count published as a percent binds to no receipt. Issue 191 records that the
-    Markdown gate reads the raw ``12`` instead.
-    """
+def _housing_spec_with_narrative(tmp_path: Path, replacement: str) -> Path:
+    """A copy of the housing demo whose one figure sentence reads ``replacement``."""
 
     spec_dir = tmp_path / "spec"
     spec_dir.mkdir()
@@ -627,14 +620,47 @@ def test_the_document_gates_the_number_a_reader_sees_where_markup_changed_it(
     spec = HOUSING.read_text(encoding="utf-8")
     old = "served {clients_served} clients"
     assert spec.count(old) == 1
-    marked_up = spec.replace(old, "served **{clients_served}**% of its clients")
-    (spec_dir / "report.toml").write_text(marked_up, encoding="utf-8")
+    (spec_dir / "report.toml").write_text(spec.replace(old, replacement), encoding="utf-8")
+    return spec_dir / "report.toml"
+
+
+def test_markup_that_turns_a_count_into_a_percent_is_refused_before_any_document_exists(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``**12**%`` reads as ``12%`` to anyone reading it, and no receipt says 12%.
+
+    ``clients_served`` is a count, so a percent made from it binds to nothing. The
+    Markdown gate reads the number a reader sees (issue 191), so it refuses the run
+    on its own, before ``report.md`` or ``report.docx`` is written and before the
+    Word stage is ever asked to gate anything. The refusal is therefore the
+    Markdown gate's and carries no ``document`` section: the two gates agree on
+    this narrative, and the first one to see it stops the run.
+    """
+
+    config = _housing_spec_with_narrative(tmp_path, "served **{clients_served}**% of its clients")
 
     capsys.readouterr()
     out = tmp_path / "out"
-    assert _run(spec_dir / "report.toml", out, "--format", "docx", "--json") == EXIT_GATE_FAIL
-    document = json.loads(capsys.readouterr().out)["document"]
-    assert [span["text"] for span in document["grounding"]["unbound"]] == ["12%"]
+    assert _run(config, out, "--format", "docx", "--json") == EXIT_GATE_FAIL
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["templates"]["report"] == {"total": 1, "bound": 0, "unbound": 1}
+    assert [span["text"] for span in payload["unbound"]] == ["12%"]
+    # Refused at the Markdown stage: the Word stage never ran, and nothing was written.
+    assert "document" not in payload
+    assert not (out / DOCX_NAME).exists()
+    assert not (out / "report.md").exists()
+
+
+def test_the_same_markup_around_a_bare_count_is_still_exported(tmp_path: Path) -> None:
+    """Positive control: the ``%`` is what is refused above, not the emphasis around a count."""
+
+    config = _housing_spec_with_narrative(tmp_path, "served **{clients_served}** clients")
+
+    out = tmp_path / "out"
+    assert _run(config, out, "--format", "docx") == EXIT_OK
+    assert "served **12** clients" in (out / "report.md").read_text(encoding="utf-8")
+    assert (out / DOCX_NAME).exists()
 
 
 # --- the checks that do not trust the renderer -----------------------------------------------

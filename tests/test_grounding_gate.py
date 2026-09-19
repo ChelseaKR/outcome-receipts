@@ -185,3 +185,82 @@ def test_a_receipted_decimal_written_as_the_receipt_writes_it_still_binds() -> N
     result = ground("The rate was 0.75 per household.", [figure])
     assert result.ok
     assert [span.text for span in result.bound] == ["0.75"]
+
+
+def test_markdown_emphasis_does_not_split_a_percent_off_its_digits() -> None:
+    # ``**12**%`` is one number to a Markdown reader ("12%") and another to a
+    # raw scan ("12", because * is a pattern boundary). A count receipt of 12
+    # must not bind; the reader-visible 12% is unbound until a percent figure
+    # exists. Backticks wrap the same way.
+    figure = _count_figure("clients_served", "SELECT 12")
+    assert figure.display == "12"
+
+    emphasized = ground("served **12**% of its clients", [figure])
+    assert not emphasized.ok
+    assert [span.text for span in emphasized.unbound] == ["12%"]
+    assert emphasized.bound == ()
+
+    coded = ground("served `12`% of its clients", [figure])
+    assert not coded.ok
+    assert [span.text for span in coded.unbound] == ["12%"]
+
+    # Positive control: the same markup around a bare count still binds.
+    plain = ground("served **12** clients", [figure])
+    assert plain.ok
+    assert [span.text for span in plain.bound] == ["12"]
+
+
+def test_markdown_markup_before_a_number_keeps_raw_offsets() -> None:
+    # find_numbers scans the unwrapped reader text, but callers slice the raw
+    # string. Offsets must stay in raw coordinates or redact_unbound lands in
+    # the markers and leaves the digits.
+    text = "**Note:** the program served 15 families."
+    result = ground(text, [])
+    assert not result.ok
+    assert len(result.unbound) == 1
+    span = result.unbound[0]
+    assert span.text == "15"
+    assert text[span.start : span.end] == "15"
+
+    redacted = redact_unbound(text, result)
+    assert "15" not in redacted
+    assert "[UNVERIFIED]" in redacted
+    assert redacted == "**Note:** the program served [UNVERIFIED] families."
+
+    emphasized = "served **12**% of its clients"
+    percent = ground(emphasized, [])
+    assert [span.text for span in percent.unbound] == ["12%"]
+    for span in percent.unbound:
+        assert "12" in emphasized[span.start : span.end]
+    assert "12" not in redact_unbound(emphasized, percent)
+
+    coded = "served `12`% of its clients"
+    coded_result = ground(coded, [])
+    assert [span.text for span in coded_result.unbound] == ["12%"]
+    for span in coded_result.unbound:
+        assert "12" in coded[span.start : span.end]
+    assert "12" not in redact_unbound(coded, coded_result)
+
+
+def test_numbers_around_wrapped_spans_are_each_found_once_at_their_raw_place() -> None:
+    # The unwrapping copies the text in three kinds of runs: what precedes a
+    # match, the match's inner text, and what follows the last match. A number in
+    # any of them that is dropped, repeated, or mapped to the wrong raw offset is
+    # a number the gate misses or a redaction that lands in the wrong place, so
+    # put one in every run and pin every span to the bytes it came from.
+    text = "In 2024 we served **15** families, **7** of them `3`% and 30 more."
+    result = ground(text, [])
+
+    assert [span.text for span in result.unbound] == ["2024", "15", "7", "3%", "30"]
+    # ``3%`` reads across its closing backtick, so its raw slice keeps the marker.
+    assert [text[span.start : span.end] for span in result.unbound] == [
+        "2024",
+        "15",
+        "7",
+        "3`%",
+        "30",
+    ]
+
+    redacted = redact_unbound(text, result)
+    assert not any(character.isdecimal() for character in redacted)
+    assert redacted.count("[UNVERIFIED]") == 5
