@@ -240,3 +240,27 @@ def test_markdown_markup_before_a_number_keeps_raw_offsets() -> None:
     for span in coded_result.unbound:
         assert "12" in coded[span.start : span.end]
     assert "12" not in redact_unbound(coded, coded_result)
+
+
+def test_numbers_around_wrapped_spans_are_each_found_once_at_their_raw_place() -> None:
+    # The unwrapping copies the text in three kinds of runs: what precedes a
+    # match, the match's inner text, and what follows the last match. A number in
+    # any of them that is dropped, repeated, or mapped to the wrong raw offset is
+    # a number the gate misses or a redaction that lands in the wrong place, so
+    # put one in every run and pin every span to the bytes it came from.
+    text = "In 2024 we served **15** families, **7** of them `3`% and 30 more."
+    result = ground(text, [])
+
+    assert [span.text for span in result.unbound] == ["2024", "15", "7", "3%", "30"]
+    # ``3%`` reads across its closing backtick, so its raw slice keeps the marker.
+    assert [text[span.start : span.end] for span in result.unbound] == [
+        "2024",
+        "15",
+        "7",
+        "3`%",
+        "30",
+    ]
+
+    redacted = redact_unbound(text, result)
+    assert not any(character.isdecimal() for character in redacted)
+    assert redacted.count("[UNVERIFIED]") == 5
