@@ -28,6 +28,7 @@ validated before use.
 | Report/bundle/ledger is altered after approval | Artifact digests, optional keyed bundle signature, whole-bundle verification, hash-chained ledger | Low when key and ledger are retained together |
 | A forged aggregate or edited composed query enters a restatement or partner rollup | Complete source-bundle verification, typed `receipt_composed` provenance, canonical input digests, fixed composition queries, `verify-workflow` | Low for structural tamper; source re-derivation still requires the cited bundles |
 | One partner's rows are submitted twice and summed under a `disjoint` rollup declaration | Rollup rejects two partner receipts sharing a non-empty slice hash and refuses a receipt whose non-zero count carries the empty-slice hash; a true zero is exempt and a `not_deduplicated` plan keeps its label (ADR 0004) | Medium: only byte-identical slices are falsifiable, so the same people counted twice under different client identifiers, column names, or any recorded-row difference still passes, as does every partial overlap; `disjoint` remains an operator declaration in each of those cases |
+| A `report.docx` in a bundle is edited, re-saved, or crafted to hide a number from the gate | The reader accepts only the parts, elements and attributes the writer writes, all stored, none repeated or encrypted, and refuses a document type declaration, entity, comment, processing instruction or CDATA section before reading further (ADR 0014); the document read back must say what the attested `report.md` says, carry its digits and redaction markers, and ground | Low for tamper; a re-saved document is refused as a different one |
 | Workflow artifact carries client-level rows | Allowlisted aggregate structures plus recursive rejection of row/client container fields | Low; compatibility and adversarial tests |
 | Signing key is disclosed | Key path supplied explicitly; key not embedded in artifacts; gitleaks plus incident runbook | Medium because local key storage is operator-owned |
 | CI dependency or workflow is compromised | SHA-pinned actions, least privilege, no persisted checkout credentials, lock scans, SAST, Scorecard, OIDC release, no release caches | Low; monthly evidence review still required |
@@ -44,6 +45,9 @@ validated before use.
   `Figure` values and provenance, not loaded tables.
 - An attacker edits one artifact but not the bundle. Whole-bundle verification
   fails on the digest mismatch; changing the ledger also breaks the chain.
+- An attacker edits `report.docx`, rewrites every digest in `receipts.json` and
+  reseals `bundle.json`. The seal then holds, and `verify --bundle` still fails,
+  because the document no longer says what the attested `report.md` says.
 
 ## Review and incident interface
 

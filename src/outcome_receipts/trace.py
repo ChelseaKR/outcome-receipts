@@ -22,7 +22,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from outcome_receipts.comparison import ComparisonResult, ComparisonRow
-from outcome_receipts.copy import ReportCopy, get_copy, normalize_locale
+from outcome_receipts.copy import (
+    ReportCopy,
+    get_copy,
+    machine_translation_notice_html,
+    normalize_locale,
+)
 from outcome_receipts.models import REDACTED_DISPLAY, Figure
 from outcome_receipts.provenance import Provenance
 
@@ -225,6 +230,13 @@ def _figure_detail(figure: Figure, copy: ReportCopy, row: ComparisonRow | None =
     return lines
 
 
+def _notice(locale: str) -> list[str]:
+    """The machine-translation notice, first in ``<main>``, for a machine-translated locale."""
+
+    notice = machine_translation_notice_html(locale)
+    return [] if notice is None else [notice]
+
+
 def render_trace_html(
     title: str,
     figures: Sequence[Figure],
@@ -263,6 +275,7 @@ def render_trace_html(
         "</head>",
         "<body>",
         "<main>",
+        *_notice(selected_locale),
         f"<h1>{_esc(copy.trace_title_template.format(title=title))}</h1>",
         f'<p class="muted">{_esc(copy.trace_intro)}</p>',
     ]

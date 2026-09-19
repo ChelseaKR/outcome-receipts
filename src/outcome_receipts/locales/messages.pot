@@ -256,3 +256,6 @@ msgstr ""
 msgid "portfolio_no_shared_figures"
 msgstr ""
 
+msgid "docx_chart_note_template"
+msgstr ""
+
