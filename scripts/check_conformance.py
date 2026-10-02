@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # tests/test_conformance.py). That is what closes the gap DOC-11 named: a
 # check that only ever compares the README against its own hardcoded
 # expectations reports green even when both have drifted from the real,
-# portfolio index (16 standards as of v3.0.0).
+# portfolio index (16 standards as of v3.0.1).
 #
 # Each display name is a controls.yml standard `title` with a trailing
 # " Standard" suffix stripped (see `_display_name`); the Responsible-Tech
@@ -97,7 +97,7 @@ def standards_index(standards_dir: Path | None) -> set[str]:
     * `standards_dir` exists but has no `controls.yml`: this was the state of
       this repository's own pin until 2026-10-02 -- `.standards-version` was
       `v1.0.1`, and `controls.yml` was not added to the standards repo until
-      FIX-01 (2026-07-11), well after that tag. The pin is now v3.0.0, which
+      FIX-01 (2026-07-11), well after that tag. The pin is now v3.0.1, which
       carries controls.yml. The checkout is real and
       trustworthy; it is simply older than the registry this function reads.
       Failing the build over a pin-staleness gap that issue 98 did not ask

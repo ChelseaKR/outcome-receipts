@@ -149,6 +149,13 @@ than in an earlier one.
   Discovery & Adoption standard, so the vendored fallback list, its frozen
   `controls.yml` snapshot in the tests, and the README conformance table each
   gain that row.
+- **The portfolio standards pin moves from v3.0.0 to v3.0.1.** v3.0.1 is a
+  patch release (re-verified stamps, text corrections, tooling fixes) with no
+  control, threshold, or gate change. The pin moves in all three places it is
+  written: `.standards-version`, the job's checkout `ref:`, and the job's own
+  assertion. The v3.0.1 `controls.yml` standards registry is identical to the
+  v3.0.0 one, so the frozen snapshot in the tests is unchanged; only the comments
+  naming the pinned version move.
 
 ### Fixed
 - **The Markdown gate bound the `12` in `**12**%`, and every Markdown viewer shows
