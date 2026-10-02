@@ -212,6 +212,13 @@ than in an earlier one.
   the assertion it was guarding.
 
 
+### Security
+- WVR-006 (SEC-37, the OpenSSF Scorecard aggregate floor) expired on 2026-09-25, which
+  failed `make hygiene` and `test_the_committed_registry_and_gate_still_agree`. The owner
+  renewed it on 2026-10-01, on the same justification and the same 2026-08-21
+  measurement, to 2026-12-31. `tests/test_scorecard_contract.py` now pins the expiry to
+  that reviewed date, so a further extension has to change the test too.
+
 ## [0.2.2] - 2026-09-13
 
 ### Added
