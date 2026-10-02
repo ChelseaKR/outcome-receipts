@@ -58,7 +58,9 @@ waivers:
       expected to still hold the aggregate under the portfolio's 8.0 target
       after that, so a renewed (not necessarily retired) waiver is the
       expected outcome, not an assumption this reaches 8.0 unassisted.
+      Renewed by the owner on 2026-10-01, on this same justification, to
+      2026-12-31.
     owner: chelseakr
     granted: 2026-08-21
-    expires: 2026-09-25
+    expires: 2026-12-31
     link: docs/audits/openssf-scorecard-2026-08-21.md

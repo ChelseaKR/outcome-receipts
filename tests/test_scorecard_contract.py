@@ -62,15 +62,18 @@ def test_wvr_006_links_to_a_report_dated_on_or_after_its_grant_date() -> None:
     assert (ROOT / link).exists(), f"WVR-006 links a report that does not exist: {link}"
 
 
-def test_wvr_006_expiry_does_not_exceed_the_maintained_score_clear_date() -> None:
+def test_wvr_006_expiry_does_not_exceed_the_owner_renewal_date() -> None:
     # Issue 92: "the honest move may be to shorten it rather than extend
-    # it" -- the waiver's own reason names 2026-09-25 (90 days from the
-    # 2026-06-27 first commit) as the date its Maintained-score premise
-    # stops applying. The waiver should not coast past that date unreviewed.
+    # it" -- the waiver first expired on 2026-09-25 (90 days from the
+    # 2026-06-27 first commit), the date its Maintained-score premise
+    # stopped applying. The owner reviewed it and renewed it on 2026-10-01,
+    # on the same justification, to 2026-12-31. The waiver should not coast
+    # past that reviewed date: extending it again means changing this pin.
     block = _wvr_006_block(WAIVERS.read_text(encoding="utf-8"))
     expires_match = re.search(r"expires:\s*(\d{4}-\d{2}-\d{2})", block)
     assert expires_match is not None
-    assert expires_match.group(1) <= "2026-09-25"
+    assert expires_match.group(1) <= "2026-12-31"
+    assert "Renewed by the owner on 2026-10-01" in block
 
 
 def test_the_measured_scores_are_printed_and_kept_even_when_a_floor_fails() -> None:
