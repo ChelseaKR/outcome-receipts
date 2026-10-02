@@ -12,6 +12,7 @@
   },
   "overrides": {
     "@puppeteer/browsers": "^3.0.2",
+    "basic-ftp": "6.2.1",
     "inquirer": "9.3.8",
     "qs": "6.16.0",
     "tmp": "0.2.7",
