@@ -30,14 +30,14 @@ from scripts.check_conformance import (
 from scripts.check_npm_audit import KIND as NPM_AUDIT_KIND
 
 # A frozen, verbatim copy of the 16 standard-registry lines from the portfolio
-# standards repo's controls.yml at v3.0.0, the version `.standards-version`
+# standards repo's controls.yml at v3.0.1, the version `.standards-version`
 # pins. This is what a real `--standards-dir` checkout looks like; the test
 # below proves the vendored FALLBACK_STANDARDS literal (used by the
 # self-contained `make verify`) agrees with it.
 #
 # Until 2026-10-02 the pin was v1.0.1, which predates controls.yml (it arrived
 # with FIX-01 on 2026-07-11), so the "portfolio standards" CI job warned and
-# fell back to the vendored literal. With the pin at v3.0.0 that job now reads
+# fell back to the vendored literal. With the pin at v3.0.1 that job now reads
 # the pinned checkout's own controls.yml, so the live cross-check runs there.
 # This test still compares two copies in this repository, which catches an edit
 # to one of them and nothing else; the CI job is what catches the registry
