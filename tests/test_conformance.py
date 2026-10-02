@@ -29,28 +29,19 @@ from scripts.check_conformance import (
 )
 from scripts.check_npm_audit import KIND as NPM_AUDIT_KIND
 
-# A frozen, verbatim copy of the 15 standard-registry lines from the portfolio
-# standards repo's controls.yml. This is what a real `--standards-dir` checkout
-# looks like; the test below proves the vendored FALLBACK_STANDARDS literal
-# (used by the self-contained `make verify`) agrees with it.
+# A frozen, verbatim copy of the 16 standard-registry lines from the portfolio
+# standards repo's controls.yml at v3.0.0, the version `.standards-version`
+# pins. This is what a real `--standards-dir` checkout looks like; the test
+# below proves the vendored FALLBACK_STANDARDS literal (used by the
+# self-contained `make verify`) agrees with it.
 #
-# It is not a snapshot of the version this repository pins, and saying so would
-# be worse than saying nothing. `.standards-version` pins v1.0.1, and
-# controls.yml did not exist yet at v1.0.1; it arrived with FIX-01 on
-# 2026-07-11. So this snapshot is of a later registry than the pin names, and
-# the consequence is worth stating where a reader will meet it: the "portfolio
-# standards" CI job checks the pinned ref out and runs
-# `check_conformance.py --standards-dir .standards` against it, that checkout
-# has no controls.yml, and `standards_index` therefore warns and falls back to
-# the vendored literal. The job passes in a few seconds having compared the
-# README against the same hardcoded list DOC-11 set out to stop trusting.
-#
-# Nothing is currently checking either copy against a live registry. This test
-# compares two copies in this repository, which catches an edit to one of them
-# and nothing else, and that is all it can claim. The live cross-check starts
-# working when `.standards-version` moves to a version that carries
-# controls.yml, which is a deliberate portfolio-pin decision with repository-wide
-# scope, recorded in `standards_index`'s own warning text rather than made here.
+# Until 2026-10-02 the pin was v1.0.1, which predates controls.yml (it arrived
+# with FIX-01 on 2026-07-11), so the "portfolio standards" CI job warned and
+# fell back to the vendored literal. With the pin at v3.0.0 that job now reads
+# the pinned checkout's own controls.yml, so the live cross-check runs there.
+# This test still compares two copies in this repository, which catches an edit
+# to one of them and nothing else; the CI job is what catches the registry
+# moving underneath both.
 # `test_the_standards_pin_is_named_the_same_way_in_all_three_places` below keeps
 # the pin's three copies from drifting in the meantime.
 _CONTROLS_YML_STANDARDS_SNAPSHOT = """
@@ -70,6 +61,7 @@ standards:
   IR:   { file: INCIDENT-RESPONSE-STANDARD.md,       title: "Incident Response Standard" }
   DG:   { file: DATA-GOVERNANCE-STANDARD.md,         title: "Data Governance Standard" }
   ADM:  { file: AI-DEVELOPMENT-MEASUREMENT-STANDARD.md, title: "AI-Development Measurement Standard" }
+  DISC: { file: DISCOVERY-AND-ADOPTION-STANDARD.md,   title: "Discovery & Adoption Standard" }
 """
 
 
@@ -184,10 +176,9 @@ def test_fallback_standards_literal_matches_a_frozen_snapshot_of_the_pinned_inde
     #
     # Both copies live in this repository, so this catches an edit to one of
     # them and cannot catch the portfolio registry moving underneath both. See
-    # the note on _CONTROLS_YML_STANDARDS_SNAPSHOT: the job that was meant to
-    # make that comparison live runs against a pinned checkout with no
-    # controls.yml.
-    assert len(FALLBACK_STANDARDS) == 15
+    # the note on _CONTROLS_YML_STANDARDS_SNAPSHOT: the "portfolio standards"
+    # CI job makes that comparison live against the pinned checkout.
+    assert len(FALLBACK_STANDARDS) == 16
     assert {
         "Code Quality",
         "Security & Supply-Chain",
@@ -204,6 +195,7 @@ def test_fallback_standards_literal_matches_a_frozen_snapshot_of_the_pinned_inde
         "Incident Response",
         "Data Governance",
         "AI-Development Measurement",
+        "Discovery & Adoption",
     } == FALLBACK_STANDARDS
 
 
@@ -226,8 +218,8 @@ def test_standards_index_fails_loudly_when_controls_yml_has_no_standards(
 def test_standards_index_falls_back_with_a_warning_when_checkout_predates_controls_yml(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # This is this repository's actual live state: `.standards-version` is
-    # pinned to v1.0.1, and controls.yml was not added to the standards repo
+    # This was this repository's live state until 2026-10-02: `.standards-version`
+    # was pinned to v1.0.1, and controls.yml was not added to the standards repo
     # until FIX-01, after that tag. A present-but-older checkout is not the
     # same failure as a missing one -- it should not turn CI red for a
     # pin-staleness gap this change did not set out to fix, but it must not
