@@ -35,14 +35,14 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           repository: ChelseaKR/portfolio-standards
-          ref: v1.0.1
+          ref: v3.0.0
           ssh-key: ${{ secrets.STANDARDS_DEPLOY_KEY }}
           path: .standards
           persist-credentials: false
       - name: Pin and staleness checks
         run: |
           set -euo pipefail
-          test "$(cat .standards-version)" = "v1.0.1"
+          test "$(cat .standards-version)" = "v3.0.0"
           python3 .standards/automation/check_staleness.py --standards-dir .standards
       - name: Repository declarations and waivers
         run: |

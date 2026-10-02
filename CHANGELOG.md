@@ -135,6 +135,21 @@ than in an earlier one.
     rather than fetching it, so the test does not go green the day it is fixed.
 
 
+### Changed
+- **The portfolio standards pin moves from v1.0.1 to v3.0.0.** The v1.0.1
+  copies of the CI/CD, Code Quality, Quality & Metrics, and Responsible-Tech
+  Framework standards were last verified 2026-06-21 and passed their 92-day
+  recheck, so the "portfolio standards conformance" job failed its staleness
+  step on `main` and on every pull request. v3.0.0 carries the re-verified
+  documents. The pin moves in all three places it is written:
+  `.standards-version`, the job's checkout `ref:`, and the job's own assertion.
+  v3.0.0 also carries `controls.yml`, so `check_conformance.py --standards-dir`
+  now derives the standards list from the pinned checkout instead of warning and
+  falling back to the vendored literal. That registry adds the advisory
+  Discovery & Adoption standard, so the vendored fallback list, its frozen
+  `controls.yml` snapshot in the tests, and the README conformance table each
+  gain that row.
+
 ### Fixed
 - **The Markdown gate bound the `12` in `**12**%`, and every Markdown viewer shows
   `12%` (#191, #194).** `find_numbers` scanned the raw text, where `*` bounds
