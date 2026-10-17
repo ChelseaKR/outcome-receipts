@@ -162,6 +162,17 @@ than in an earlier one.
   `version` input default and the three places `docs/ci-action.md` restates it
   move together, as `scripts/check_conformance.py` requires. A workflow that
   sets `version:` explicitly installs what it pins, as before.
+- **`release reality` exempts `v0.2.0` and `v0.2.1`, each at one link, and
+  nothing else (owner decision, 2026-10-17).** The weekly check had been red on
+  every scheduled run for two breaks that cannot be repaired: `v0.2.0` is a
+  published GitHub release that never reached PyPI, and `v0.2.1` is a tag with
+  no release. [ADR 0008](docs/adr/0008-accept-the-v0.2.0-and-v0.2.1-release-gaps-as-history.md)
+  accepts both as history. `scripts/check_release_reality.py` now carries a
+  dated `EXEMPTIONS` list naming each version, the one link it is excused at,
+  and the ADR. The same version breaking another link still fails, any other
+  version breaking the same link still fails, and an excused break is printed
+  beside its link's `N of M` rather than counted as held. Measured against the
+  live APIs on 2026-10-17, the check exits 0.
 
 ### Fixed
 - **The Markdown gate bound the `12` in `**12**%`, and every Markdown viewer shows

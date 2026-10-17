@@ -141,5 +141,17 @@ followed is the version. And it does not read
 HTTP 200 and a bot-detection page; the simple API returns 404 for a
 distribution that is absent, which is an answer.
 
-It will stay red until every link holds. That is the state it exists to
-report, not a defect in the commit it runs against.
+Two breaks are exempt, each at one link only:
+[ADR 0008](adr/0008-accept-the-v0.2.0-and-v0.2.1-release-gaps-as-history.md)
+accepts `v0.2.0` (a published release that never reached PyPI) and `v0.2.1` (a
+tag with no release) as history that cannot be repaired. The exemptions are
+the `EXEMPTIONS` list in `scripts/check_release_reality.py`, dated and naming
+the ADR, and the run prints each one it applies. The same version breaking
+another link fails, and so does any other version breaking the same link. The
+list is closed: a new entry needs a new ADR, and a release that stalls today is
+repaired with a new version.
+
+Outside those two, it stays red until every link holds. Expect red between a
+release PR merging and that version reaching PyPI, because the dated changelog
+section exists before its tag does. That is the state it exists to report, not
+a defect in the commit it runs against.

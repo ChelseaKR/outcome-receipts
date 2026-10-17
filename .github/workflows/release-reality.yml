@@ -24,10 +24,12 @@ name: release reality
 # commit, and it must never turn a pull request red for a fact that has nothing
 # to do with the diff in it.
 #
-# It is expected to be RED until a release reaches the index. That is the
-# finding, not a defect: `v0.2.0` cannot be re-dispatched (the tagged tree pins
-# a base image with nine HIGH advisories, so its own `verify` job refuses), so
-# the route to the index is a new tag, and cutting one is the maintainer's.
+# `v0.2.0` cannot be re-dispatched (the tagged tree pins a base image with
+# nine HIGH advisories, so its own `verify` job refuses), and `v0.2.1` names a
+# tree that declares 0.2.0. ADR 0008 accepts both as history, and the checker's
+# dated `EXEMPTIONS` list excuses each at its one link only. Any other break is
+# red, including the expected one between a release PR merging and that
+# version reaching the index.
 
 on:
   schedule:
