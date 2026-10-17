@@ -28,6 +28,8 @@ than in an earlier one.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-17
+
 ### Added
 - **`receipts run --format docx` writes `report.docx` beside `report.md`, and the
   grounding gate runs over the document's own bytes (#159).** Funder portals take
@@ -263,6 +265,9 @@ than in an earlier one.
   renewed it on 2026-10-01, on the same justification and the same 2026-08-21
   measurement, to 2026-12-31. `tests/test_scorecard_contract.py` now pins the expiry to
   that reviewed date, so a further extension has to change the test too.
+- **`0.3.x` is now the supported line, and `0.2.x` receives no further security
+  fixes.** `SECURITY.md`'s supported-versions table moves with this release, as
+  it says it will on each minor.
 
 ## [0.2.2] - 2026-09-13
 
@@ -1687,7 +1692,8 @@ contract change is described in full under **Changed** below.
   suppressed, every percent figure is suppressed with it, documented as such in
   the module docstring.
 
-[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.1.0...v0.2.0
