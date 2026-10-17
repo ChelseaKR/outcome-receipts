@@ -136,6 +136,10 @@ than in an earlier one.
 
 
 ### Changed
+- **The repository takes no money, on purpose.** A committed `.github/FUNDING.yml` with every
+  key empty overrides the account-wide Ko-fi default, which this repository had inherited
+  without any document saying so (owner decision 2026-10-17).
+
 - **The portfolio standards pin moves from v1.0.1 to v3.0.0.** The v1.0.1
   copies of the CI/CD, Code Quality, Quality & Metrics, and Responsible-Tech
   Framework standards were last verified 2026-06-21 and passed their 92-day
