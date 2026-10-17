@@ -46,6 +46,18 @@ zero assets is not a failed release: two repositories here publish
 source-only releases on purpose, and a check that assumed assets would report
 both as broken. What is being followed is the version, not the artifact.
 
+## Two exemptions, each for one version at one link
+
+`v0.2.0` stopped at link 3 and `v0.2.1` stopped at link 2, and neither can be
+repaired without moving a published ref or republishing a tree its own gates
+now refuse. The owner accepted both as history on 2026-10-17
+([ADR 0008](../docs/adr/0008-accept-the-v0.2.0-and-v0.2.1-release-gaps-as-history.md)),
+and `EXEMPTIONS` below names them. An exemption matches one version at one
+link: the same version breaking another link fails, and another version
+breaking the same link fails. An exempted break is not counted as held, so
+every link still prints `N of M` over everything it examined, and names what
+it excused.
+
 ## Three outcomes, and the third is the reason for the shape of the code
 
 * **ok** — every link holds. Exit 0, with each link's numbers printed.
@@ -81,6 +93,8 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -122,6 +136,44 @@ SUPPORTED_API_MAJOR = "1"
 
 class Unmeasurable(Exception):
     """This run could not decide. Never a pass, and never a finding either."""
+
+
+#: The two links an exemption can name. Link 1 has none: a dated changelog
+#: section with no tag is always repairable by cutting the tag.
+TAG_HAS_A_RELEASE = "a stable tag has a published release"
+RELEASE_IS_ON_THE_INDEX = "a published release is on the index"
+
+
+@dataclass(frozen=True)
+class Exemption:
+    """One version excused at one link, and the record that decided it."""
+
+    version: str
+    link: str
+    decided: str
+    adr: str
+
+
+_ADR_0008 = "docs/adr/0008-accept-the-v0.2.0-and-v0.2.1-release-gaps-as-history.md"
+
+#: Closed on purpose. Adding an entry needs a new ADR naming the version, the
+#: link and why the gap cannot be repaired; a release that stalls today is
+#: repaired by cutting a new version, not exempted.
+EXEMPTIONS: tuple[Exemption, ...] = (
+    # A published GitHub release whose `pypi-publish` job was never approved
+    # and was canceled on 2026-08-29. Not on PyPI.
+    Exemption("0.2.0", RELEASE_IS_ON_THE_INDEX, "2026-10-17", _ADR_0008),
+    # A signed tag naming `dae3e8e`, which declares 0.2.0. No release run for
+    # it got past its gates, so it has no GitHub release.
+    Exemption("0.2.1", TAG_HAS_A_RELEASE, "2026-10-17", _ADR_0008),
+)
+
+
+def _exempt(version: str, link: str, exemptions: Sequence[Exemption]) -> Exemption | None:
+    for exemption in exemptions:
+        if exemption.version == version and exemption.link == link:
+            return exemption
+    return None
 
 
 def _load(path: Path, what: str) -> Any:
@@ -246,16 +298,29 @@ def release_tags(document: Any, path: Path) -> list[str]:
 
 
 #: One link in the chain: what it is called, how many of its population held,
-#: how many there were, and the ones that did not, spelled out.
+#: how many there were, the ones that did not, spelled out, and the ones that
+#: did not and are excused by a committed exemption. An excused break is not
+#: counted as held.
 class Link:
-    def __init__(self, name: str, held: int, examined: int, broken: list[str]) -> None:
+    def __init__(
+        self,
+        name: str,
+        held: int,
+        examined: int,
+        broken: list[str],
+        exempted: list[str] | None = None,
+    ) -> None:
         self.name = name
         self.held = held
         self.examined = examined
         self.broken = broken
+        self.exempted = exempted or []
 
     def render(self) -> str:
-        return f"{self.held} of {self.examined} {self.name}"
+        line = f"{self.held} of {self.examined} {self.name}"
+        if self.exempted:
+            line += f" ({len(self.exempted)} exempt: {', '.join(self.exempted)})"
+        return line
 
 
 def changelog_has_a_tag(changelog: str, tags: list[str], path: Path) -> Link:
@@ -281,7 +346,9 @@ def changelog_has_a_tag(changelog: str, tags: list[str], path: Path) -> Link:
     return Link("changelog release(s) have a tag", 1 - len(broken), 1, broken)
 
 
-def tags_have_a_release(tags: list[str], releases: list[dict[str, Any]]) -> Link:
+def tags_have_a_release(
+    tags: list[str], releases: list[dict[str, Any]], exemptions: Sequence[Exemption] = ()
+) -> Link:
     """Link 2: a stable tag has a published GitHub release.
 
     A tag is a ref and publishes nothing on its own. `release.yml` here is
@@ -296,16 +363,30 @@ def tags_have_a_release(tags: list[str], releases: list[dict[str, Any]]) -> Link
             f"nothing to examine and must not report that as agreement"
         )
     released = {str(entry["tag_name"]) for entry in releases}
-    broken = [
-        f"tag {tag} exists and no GitHub release was published for it. Pushing a tag "
-        f"starts nothing here; the release is a separate dispatch"
-        for tag in stable
-        if tag not in released
-    ]
-    return Link("stable tag(s) have a release", len(stable) - len(broken), len(stable), broken)
+    missing = [tag for tag in stable if tag not in released]
+    broken: list[str] = []
+    exempted: list[str] = []
+    for tag in missing:
+        exemption = _exempt(version_of(tag), TAG_HAS_A_RELEASE, exemptions)
+        if exemption is not None:
+            exempted.append(f"{tag} per {exemption.adr}")
+            continue
+        broken.append(
+            f"tag {tag} exists and no GitHub release was published for it. Pushing a tag "
+            f"starts nothing here; the release is a separate dispatch"
+        )
+    return Link(
+        "stable tag(s) have a release",
+        len(stable) - len(missing),
+        len(stable),
+        broken,
+        exempted,
+    )
 
 
-def releases_are_on_the_index(releases: list[dict[str, Any]], served: set[str]) -> Link:
+def releases_are_on_the_index(
+    releases: list[dict[str, Any]], served: set[str], exemptions: Sequence[Exemption] = ()
+) -> Link:
     """Link 3: a published GitHub release's version is on the package index.
 
     Assets are deliberately not read. A release with none is not a failed
@@ -314,15 +395,26 @@ def releases_are_on_the_index(releases: list[dict[str, Any]], served: set[str]) 
     artifact.
     """
 
-    broken = [
-        f"{entry['tag_name']} was published as a GitHub release "
-        f"{'(prerelease) ' if entry.get('prerelease') is True else ''}"
-        f"and version {version_of(str(entry['tag_name']))} is not on the index"
-        for entry in releases
-        if version_of(str(entry["tag_name"])) not in served
-    ]
+    missing = [entry for entry in releases if version_of(str(entry["tag_name"])) not in served]
+    broken: list[str] = []
+    exempted: list[str] = []
+    for entry in missing:
+        tag = str(entry["tag_name"])
+        exemption = _exempt(version_of(tag), RELEASE_IS_ON_THE_INDEX, exemptions)
+        if exemption is not None:
+            exempted.append(f"{tag} per {exemption.adr}")
+            continue
+        broken.append(
+            f"{tag} was published as a GitHub release "
+            f"{'(prerelease) ' if entry.get('prerelease') is True else ''}"
+            f"and version {version_of(tag)} is not on the index"
+        )
     return Link(
-        "published release(s) are on the index", len(releases) - len(broken), len(releases), broken
+        "published release(s) are on the index",
+        len(releases) - len(missing),
+        len(releases),
+        broken,
+        exempted,
     )
 
 
@@ -332,13 +424,14 @@ def links(
     tags: list[str],
     releases: list[dict[str, Any]],
     served: set[str],
+    exemptions: Sequence[Exemption] = EXEMPTIONS,
 ) -> list[Link]:
     """Every link, in the order a release travels them."""
 
     return [
         changelog_has_a_tag(changelog, tags, changelog_path),
-        tags_have_a_release(tags, releases),
-        releases_are_on_the_index(releases, served),
+        tags_have_a_release(tags, releases, exemptions),
+        releases_are_on_the_index(releases, served, exemptions),
     ]
 
 
@@ -352,7 +445,7 @@ def _read_text(path: Path, what: str) -> str:
     return text
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, exemptions: Sequence[Exemption] = EXEMPTIONS) -> int:
     parser = argparse.ArgumentParser(
         description="Follow a release from the changelog to the package index."
     )
@@ -389,6 +482,7 @@ def main(argv: list[str] | None = None) -> int:
             release_tags(_load(args.tags, "the tags document"), args.tags),
             published_releases(_load(args.releases, "the releases document"), args.releases),
             index_versions(_load(args.index, "the index document"), args.index),
+            exemptions,
         )
     except Unmeasurable as exc:
         print(f"release reality is unmeasurable: {exc}", file=sys.stderr)
@@ -410,10 +504,11 @@ def main(argv: list[str] | None = None) -> int:
     for line in broken:
         print(f"- {line}", file=sys.stderr)
     print(
-        "\nThis is the state issue #173 records; it is not a defect in this commit. A "
-        "release run that published the GitHub release and then stopped at the `pypi` "
-        "environment's required review leaves exactly this, and the job that would have "
-        "reported it was canceled by the same stop. Tagging and publishing are the "
+        "\nA release stopped at the link named above. This is the shape issue #173 "
+        "records, and it is not a defect in this commit: a release run that published "
+        "the GitHub release and then stopped at the `pypi` environment's required review "
+        "leaves exactly this. The only exemptions are the two historical gaps ADR 0008 "
+        "accepts, and this is not one of them. Tagging and publishing are the "
         "maintainer's; this check only refuses to let a stall be silent.",
         file=sys.stderr,
     )
@@ -429,9 +524,13 @@ if __name__ == "__main__":  # pragma: no cover - exercised through main() in tes
 #: `tests/test_release_reality.py` asserts the two names are the same object
 #: so a second copy cannot appear here unnoticed.
 __all__ = [
+    "EXEMPTIONS",
     "OK",
+    "RELEASE_IS_ON_THE_INDEX",
     "STALLED",
+    "TAG_HAS_A_RELEASE",
     "UNMEASURABLE",
+    "Exemption",
     "Link",
     "Unmeasurable",
     "changelog_has_a_tag",

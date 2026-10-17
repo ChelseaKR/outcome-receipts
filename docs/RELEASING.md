@@ -41,7 +41,7 @@ rationale and history.
 ## Prepare a release
 
 1. Update **every place that carries the version**, in one pull request. This
-   list is exhaustive as of `0.2.2`, and it is written out because a shorter
+   list is exhaustive as of `0.3.0`, and it is written out because a shorter
    version of this step is what produced the `0.2.1` drift: the promotion to
    `0.2.1` moved `CHANGELOG.md` alone, and `pyproject.toml` sat at `0.2.0`
    through a green `make verify`, a green `ci`, and a `release.yml` whose only
@@ -56,17 +56,18 @@ rationale and history.
    | `CITATION.cff` | `version` **and** `date-released` |
    | `README.md` | the status note, and its `Last verified:` stamp |
    | `docs/cards/` | regenerate: `uv run receipts cards --out docs/cards` |
+   | `SECURITY.md` | on a minor bump only: the supported-versions table moves its `Yes` row to the new `X.Y.x` line and the sentence under it names the next minor, as that file's own text requires |
 
-   Three of those seven are now checked against each other by
+   Three of those eight are now checked against each other by
    `make release-version` (`CHANGELOG.md`, `pyproject.toml`, `CITATION.cff`),
    and `uv.lock` is caught by the `uv lock --check` that `make install` runs.
-   The README prose, the CHANGELOG's link definitions and the cards are not
-   machine-checked and are still read by a person. The date matters and no gate
-   can see it: `make release-version` requires `CITATION.cff`'s `date-released`
-   to equal the CHANGELOG section's date, but both are checked for shape, not
-   for truth, so a release prepared on one day and tagged on another passes
-   green while claiming the wrong date. If the tag is not cut the day the
-   promotion is written, move both.
+   The README prose, the CHANGELOG's link definitions, the cards and the
+   supported-versions table are not machine-checked and are still read by a
+   person. The date matters and no gate can see it: `make release-version`
+   requires `CITATION.cff`'s `date-released` to equal the CHANGELOG section's
+   date, but both are checked for shape, not for truth, so a release prepared
+   on one day and tagged on another passes green while claiming the wrong
+   date. If the tag is not cut the day the promotion is written, move both.
 
    **After** the release is published, `action.yml`'s `version` input default
    and the places `docs/ci-action.md` restates it move to the new tag —
@@ -141,5 +142,17 @@ followed is the version. And it does not read
 HTTP 200 and a bot-detection page; the simple API returns 404 for a
 distribution that is absent, which is an answer.
 
-It will stay red until every link holds. That is the state it exists to
-report, not a defect in the commit it runs against.
+Two breaks are exempt, each at one link only:
+[ADR 0008](adr/0008-accept-the-v0.2.0-and-v0.2.1-release-gaps-as-history.md)
+accepts `v0.2.0` (a published release that never reached PyPI) and `v0.2.1` (a
+tag with no release) as history that cannot be repaired. The exemptions are
+the `EXEMPTIONS` list in `scripts/check_release_reality.py`, dated and naming
+the ADR, and the run prints each one it applies. The same version breaking
+another link fails, and so does any other version breaking the same link. The
+list is closed: a new entry needs a new ADR, and a release that stalls today is
+repaired with a new version.
+
+Outside those two, it stays red until every link holds. Expect red between a
+release PR merging and that version reaching PyPI, because the dated changelog
+section exists before its tag does. That is the state it exists to report, not
+a defect in the commit it runs against.

@@ -28,6 +28,8 @@ than in an earlier one.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-17
+
 ### Added
 - **`receipts run --format docx` writes `report.docx` beside `report.md`, and the
   grounding gate runs over the document's own bytes (#159).** Funder portals take
@@ -160,6 +162,23 @@ than in an earlier one.
   assertion. The v3.0.1 `controls.yml` standards registry is identical to the
   v3.0.0 one, so the frozen snapshot in the tests is unchanged; only the comments
   naming the pinned version move.
+- **The reusable action installs `v0.2.2` by default, not `v0.2.0`.** The
+  default names the newest tag a downstream workflow can install, and
+  `v0.2.2` became that when its release published on 2026-09-13. `action.yml`'s
+  `version` input default and the three places `docs/ci-action.md` restates it
+  move together, as `scripts/check_conformance.py` requires. A workflow that
+  sets `version:` explicitly installs what it pins, as before.
+- **`release reality` exempts `v0.2.0` and `v0.2.1`, each at one link, and
+  nothing else (owner decision, 2026-10-17).** The weekly check had been red on
+  every scheduled run for two breaks that cannot be repaired: `v0.2.0` is a
+  published GitHub release that never reached PyPI, and `v0.2.1` is a tag with
+  no release. [ADR 0008](docs/adr/0008-accept-the-v0.2.0-and-v0.2.1-release-gaps-as-history.md)
+  accepts both as history. `scripts/check_release_reality.py` now carries a
+  dated `EXEMPTIONS` list naming each version, the one link it is excused at,
+  and the ADR. The same version breaking another link still fails, any other
+  version breaking the same link still fails, and an excused break is printed
+  beside its link's `N of M` rather than counted as held. Measured against the
+  live APIs on 2026-10-17, the check exits 0.
 
 ### Fixed
 - **The Markdown gate bound the `12` in `**12**%`, and every Markdown viewer shows
@@ -236,6 +255,12 @@ than in an earlier one.
   fails, and a **new workflow with no concurrency block at all** fails too --
   which the count could not see, because a group of `None` is skipped before
   the assertion it was guarding.
+- **The README said funders reject AI-developed *reports*; the evidence behind
+  it is about *applications*.** NIH NOT-OD-25-132, the evidence
+  `docs/USER-RESEARCH.md` gives for funders' skepticism, concerns grant
+  applications "substantially developed by AI". "The problem" now cites the notice, says
+  what it covers, and states the risk to an outcome report as this project's
+  own argument rather than as something the notice says.
 
 
 ### Security
@@ -244,6 +269,9 @@ than in an earlier one.
   renewed it on 2026-10-01, on the same justification and the same 2026-08-21
   measurement, to 2026-12-31. `tests/test_scorecard_contract.py` now pins the expiry to
   that reviewed date, so a further extension has to change the test too.
+- **`0.3.x` is now the supported line, and `0.2.x` receives no further security
+  fixes.** `SECURITY.md`'s supported-versions table moves with this release, as
+  it says it will on each minor.
 
 ## [0.2.2] - 2026-09-13
 
@@ -1668,7 +1696,8 @@ contract change is described in full under **Changed** below.
   suppressed, every percent figure is suppressed with it, documented as such in
   the module docstring.
 
-[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ChelseaKR/outcome-receipts/compare/v0.1.0...v0.2.0

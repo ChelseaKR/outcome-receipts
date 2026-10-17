@@ -26,9 +26,13 @@ from typing import Any
 
 import pytest
 from scripts.check_release_reality import (
+    EXEMPTIONS,
     OK,
+    RELEASE_IS_ON_THE_INDEX,
     STALLED,
+    TAG_HAS_A_RELEASE,
     UNMEASURABLE,
+    Exemption,
     Unmeasurable,
     changelog_has_a_tag,
     index_versions,
@@ -75,6 +79,7 @@ def _run(
     tags: Any = TAGS,
     index: Any = INDEX,
     changelog: Any = CHANGELOG,
+    exemptions: tuple[Exemption, ...] = EXEMPTIONS,
 ) -> int:
     return main(
         [
@@ -86,7 +91,8 @@ def _run(
             str(_write(tmp_path, "index.json", index)),
             "--changelog",
             str(_write(tmp_path, "CHANGELOG.md", changelog)),
-        ]
+        ],
+        exemptions,
     )
 
 
@@ -112,6 +118,9 @@ def test_the_state_this_check_was_written_for_fails(
 
     Reproduced rather than fetched, because a test that fetched would go green
     the moment the maintainer publishes and would then be checking nothing.
+
+    Run with no exemptions: ADR 0008 later excused both of these breaks, and
+    this test is the proof that the check itself still sees them.
     """
 
     assert (
@@ -120,6 +129,7 @@ def test_the_state_this_check_was_written_for_fails(
             tags=[{"name": "v0.2.1"}, *TAGS],
             index={"meta": {"api-version": "1.1"}, "versions": ["0.1.0"]},
             changelog="# Changelog\n\n## [Unreleased]\n\n## [0.2.1] - 2026-09-07\n\n- A thing.\n",
+            exemptions=(),
         )
         == STALLED
     )
@@ -139,6 +149,118 @@ def test_the_three_exit_codes_are_three_different_numbers() -> None:
     read report a finding, or a finding report as an unreadable document."""
 
     assert len({OK, STALLED, UNMEASURABLE}) == 3
+
+
+# -- ADR 0008: two historical gaps, each exempt at one link -------------------
+
+#: The live state on 2026-10-17, as literals: four stable tags, three published
+#: releases, and an index serving 0.1.0 and 0.2.2. `v0.2.1` has no release and
+#: `v0.2.0` is not on the index.
+LIVE_TAGS: list[dict[str, Any]] = [
+    {"name": "v0.2.2"},
+    {"name": "v0.2.1"},
+    {"name": "v0.2.0"},
+    {"name": "v0.1.0"},
+]
+LIVE_RELEASES: list[dict[str, Any]] = [
+    {"tag_name": "v0.2.2", "draft": False, "prerelease": False},
+    {"tag_name": "v0.2.0", "draft": False, "prerelease": False},
+    {"tag_name": "v0.1.0", "draft": False, "prerelease": False},
+]
+LIVE_INDEX: dict[str, Any] = {"meta": {"api-version": "1.4"}, "versions": ["0.1.0", "0.2.2"]}
+LIVE_CHANGELOG = "# Changelog\n\n## [Unreleased]\n\n## [0.2.2] - 2026-09-13\n\n- A thing.\n"
+
+
+def _live(tmp_path: Path, **override: Any) -> int:
+    documents: dict[str, Any] = {
+        "releases": LIVE_RELEASES,
+        "tags": LIVE_TAGS,
+        "index": LIVE_INDEX,
+        "changelog": LIVE_CHANGELOG,
+    }
+    documents.update(override)
+    return _run(tmp_path, **documents)
+
+
+def test_the_committed_exemptions_are_exactly_the_two_adr_0008_accepts() -> None:
+    """Closed on purpose: a third entry has to change this test and cite a new ADR."""
+
+    assert {(e.version, e.link) for e in EXEMPTIONS} == {
+        ("0.2.0", RELEASE_IS_ON_THE_INDEX),
+        ("0.2.1", TAG_HAS_A_RELEASE),
+    }
+    for exemption in EXEMPTIONS:
+        assert exemption.decided == "2026-10-17"
+        assert exemption.adr.startswith("docs/adr/0008-")
+        assert (ROOT / exemption.adr).is_file(), f"{exemption.adr} does not exist"
+
+
+def test_the_two_historical_gaps_pass_and_are_named_as_exempt(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An excused break is not counted as held: the denominators are the
+    population examined, and the line says what it excused."""
+
+    assert _live(tmp_path) == OK
+    reported = capsys.readouterr().out
+    assert "1 of 1 changelog release(s) have a tag" in reported
+    assert "3 of 4 stable tag(s) have a release (1 exempt: v0.2.1 per docs/adr/0008-" in reported
+    assert "2 of 3 published release(s) are on the index (1 exempt: v0.2.0 per docs/adr/0008-" in (
+        reported
+    )
+
+
+def test_another_tag_with_no_release_still_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Same gap as v0.2.1, different version: not exempt."""
+
+    assert _live(tmp_path, tags=[{"name": "v0.2.3"}, *LIVE_TAGS]) == STALLED
+    reported = capsys.readouterr().err
+    assert "3 of 5 stable tag(s) have a release (1 exempt: v0.2.1" in reported
+    assert "tag v0.2.3 exists and no GitHub release was published for it" in reported
+    assert "tag v0.2.1 exists" not in reported
+
+
+def test_another_release_missing_from_the_index_still_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Same gap as v0.2.0, different version: not exempt."""
+
+    releases = [{"tag_name": "v0.2.3", "draft": False, "prerelease": False}, *LIVE_RELEASES]
+    assert _live(tmp_path, releases=releases, tags=[{"name": "v0.2.3"}, *LIVE_TAGS]) == STALLED
+    reported = capsys.readouterr().err
+    assert "2 of 4 published release(s) are on the index (1 exempt: v0.2.0" in reported
+    assert "v0.2.3 was published as a GitHub release and version 0.2.3 is not on the index" in (
+        reported
+    )
+    assert "version 0.2.0 is not on the index" not in reported
+
+
+def test_an_exempt_version_is_exempt_only_at_its_own_link() -> None:
+    """`0.2.0` is excused for not reaching the index, not for having no
+    release; `0.2.1` is excused for having no release, not for a release that
+    missed the index."""
+
+    no_release = tags_have_a_release(["v0.2.0", "v0.1.0"], [RELEASES[1]], EXEMPTIONS)
+    assert no_release.exempted == []
+    assert len(no_release.broken) == 1
+    assert "tag v0.2.0 exists" in no_release.broken[0]
+
+    released_021 = [{"tag_name": "v0.2.1", "draft": False, "prerelease": False}]
+    off_index = releases_are_on_the_index(released_021, {"0.1.0"}, EXEMPTIONS)
+    assert off_index.exempted == []
+    assert len(off_index.broken) == 1
+    assert "version 0.2.1 is not on the index" in off_index.broken[0]
+
+
+def test_an_exemption_that_matches_nothing_changes_nothing(tmp_path: Path) -> None:
+    """If a gap is ever repaired, its entry stops matching and the chain reads
+    exactly as it would without it."""
+
+    assert _run(tmp_path) == OK
+    link = releases_are_on_the_index(RELEASES, {"0.1.0", "0.2.0"}, EXEMPTIONS)
+    assert (link.held, link.examined, link.broken, link.exempted) == (2, 2, [], [])
 
 
 # -- link 1: a dated changelog section must have a tag ------------------------
@@ -417,9 +539,9 @@ def test_the_workflow_fetches_the_distribution_this_project_publishes() -> None:
 def test_the_workflow_does_not_run_on_a_commit() -> None:
     """It is a statement about what has been published, not about a diff.
 
-    It is expected to be red until a release reaches the index, so a
-    `pull_request` or `push` trigger here would turn every branch red for a
-    fact that has nothing to do with it.
+    It is red whenever a release has stopped at a link, which is a fact about
+    the index rather than a diff, so a `pull_request` or `push` trigger here
+    would turn every branch red for something that has nothing to do with it.
     """
 
     text = WORKFLOW.read_text(encoding="utf-8")

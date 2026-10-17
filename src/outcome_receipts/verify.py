@@ -281,10 +281,10 @@ def _legacy_withheld_warnings(receipts: Sequence[Mapping[str, Any]]) -> tuple[Ve
     exactly this shape under a green dogfood run until #198.
 
     It warns rather than fails on purpose. Every manifest written by 0.2.0 or
-    earlier is 1.0, the reusable action installs v0.2.0 by default, and
-    docs/SPEC-STABILITY.md promises that verify reads 1.0; a failure here would
-    turn those runs red with nothing in their data changed. Whether it should
-    ever fail is an open question (#198).
+    earlier is 1.0, the reusable action installed v0.2.0 by default until
+    v0.2.2 was published, and docs/SPEC-STABILITY.md promises that verify reads
+    1.0; a failure here would turn those runs red with nothing in their data
+    changed. Whether it should ever fail is an open question (#198).
 
     The test is per receipt, as in ``_compare``: a receipt with no ``suppressed``
     key is read as 1.0 whatever the envelope declares.

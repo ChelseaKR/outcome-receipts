@@ -50,7 +50,7 @@ and fails the job if the committed manifest has drifted.
 |------------|----------|----------|-------------|
 | `config`   | yes      | —        | Path to the report spec TOML. Mirrors the CLI's `--config`. |
 | `receipts` | yes      | —        | Path to the `receipts.json` manifest to verify. Mirrors the CLI's `--receipts`. |
-| `version`  | no       | `v0.2.0` | Git ref (branch, tag, or commit SHA) of `ChelseaKR/outcome-receipts` to install. |
+| `version`  | no       | `v0.2.2` | Git ref (branch, tag, or commit SHA) of `ChelseaKR/outcome-receipts` to install. |
 
 ## Pinning for supply-chain hardening
 
@@ -65,7 +65,7 @@ Two independent references are worth pinning, and they harden different things:
   ```
 
 - **The `version` input** selects which CLI package the action installs. It
-  defaults to `v0.2.0`, the tag named in [`action.yml`](../action.yml). Pin it
+  defaults to `v0.2.2`, the tag named in [`action.yml`](../action.yml). Pin it
   explicitly to a released tag or, for the narrowest supply-chain trust, a full
   commit SHA so the verifier that runs in CI is itself reproducible:
 
@@ -73,7 +73,7 @@ Two independent references are worth pinning, and they harden different things:
   with:
     config: reports/housing/report.toml
     receipts: reports/housing/receipts.json
-    version: v0.2.0
+    version: v0.2.2
   ```
 
 This mirrors the convention used inside this repository, where third-party
