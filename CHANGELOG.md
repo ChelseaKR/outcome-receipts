@@ -156,6 +156,12 @@ than in an earlier one.
   assertion. The v3.0.1 `controls.yml` standards registry is identical to the
   v3.0.0 one, so the frozen snapshot in the tests is unchanged; only the comments
   naming the pinned version move.
+- **The reusable action installs `v0.2.2` by default, not `v0.2.0`.** The
+  default names the newest tag a downstream workflow can install, and
+  `v0.2.2` became that when its release published on 2026-09-13. `action.yml`'s
+  `version` input default and the three places `docs/ci-action.md` restates it
+  move together, as `scripts/check_conformance.py` requires. A workflow that
+  sets `version:` explicitly installs what it pins, as before.
 
 ### Fixed
 - **The Markdown gate bound the `12` in `**12**%`, and every Markdown viewer shows

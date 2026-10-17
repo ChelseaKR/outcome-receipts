@@ -26,15 +26,15 @@ query, and those are receipt metadata rather than reported figures. Running the
 gate over a whole exported `report.md` reports them as unbound, which is the
 scope working as specified and not a gate failure.
 
-> **Status: Beta.** This tree declares `0.2.2`, prepared for release and not
-> yet tagged. The two versions before it stopped in different places and are
-> worth keeping apart: `v0.2.0` is a published GitHub release whose PyPI upload
-> was never approved, and `v0.2.1` is a signed tag with no release at all —
-> the commit it names still declares `0.2.0`, so it was never coherent, and it
-> is left in place rather than moved. The newest version installable from PyPI
-> is therefore `0.1.0`; the newest GitHub release is `v0.2.0`. What remains is
-> the maintainer's alone and is recorded in
-> [docs/RELEASING.md](docs/RELEASING.md). The default path is
+> **Status: Beta.** The newest release is `0.2.2`: `v0.2.2` is a signed tag
+> and a published GitHub release, and `0.2.2` is on PyPI beside `0.1.0`. This
+> tree still declares `0.2.2` and carries the changes listed under
+> `[Unreleased]` in the changelog. The two versions before `0.2.2` stopped in
+> different places and are worth keeping apart: `v0.2.0` is a published GitHub
+> release whose PyPI upload was never approved, and `v0.2.1` is a signed tag
+> with no release at all. The commit `v0.2.1` names still declares `0.2.0`, so
+> it was never coherent, and it is left in place rather than moved. The release
+> procedure is recorded in [docs/RELEASING.md](docs/RELEASING.md). The default path is
 > deterministic, offline, and tested end to end. The release includes the completed privacy,
 > verification, mapping, localization, multi-template, reconciliation, and
 > optional Bedrock-drafting roadmap work. The v1 implementation package adds
@@ -46,7 +46,7 @@ scope working as specified and not a gate failure.
 > See [CHANGELOG.md](CHANGELOG.md) and
 > [SECURITY.md](SECURITY.md#supported-versions).
 >
-> *Last verified: 2026-09-13 · Recheck cadence: quarterly*
+> *Last verified: 2026-10-17 · Recheck cadence: quarterly*
 
 **Start here:** [run the five-minute synthetic demo](docs/TRY_THE_DEMO.md),
 [inspect the current evaluation](eval/report.md), or
