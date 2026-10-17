@@ -238,6 +238,12 @@ than in an earlier one.
   fails, and a **new workflow with no concurrency block at all** fails too --
   which the count could not see, because a group of `None` is skipped before
   the assertion it was guarding.
+- **The README said funders reject AI-developed *reports*; the evidence behind
+  it is about *applications*.** NIH NOT-OD-25-132, the evidence
+  `docs/USER-RESEARCH.md` gives for funders' skepticism, concerns grant
+  applications "substantially developed by AI". "The problem" now cites the notice, says
+  what it covers, and states the risk to an outcome report as this project's
+  own argument rather than as something the notice says.
 
 
 ### Security

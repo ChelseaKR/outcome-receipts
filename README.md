@@ -87,11 +87,16 @@ and [Usage](#usage) covers the full CLI.
 
 ## The problem
 
-Funders are starting to reject reports that are "substantially AI-developed,"
-because a language model that writes plausible outcome numbers is a liability, not
-a help. The fix is not to ban the model; it is to make the numbers come from the
-data and prove it. The verify-or-flag idea is published, and one commercial tool
-markets deterministic record-cited reporting. The contribution here is the open,
+Funders are starting to set limits on AI-written submissions. NIH, for one,
+will not treat grant applications "substantially developed by AI" as the
+applicant's original ideas
+([NOT-OD-25-132](https://grants.nih.gov/grants/guide/notice-files/NOT-OD-25-132.html)).
+That notice covers applications, not outcome reports. A report carries a
+different risk: a language model that writes plausible outcome numbers into
+one is a liability, not a help. The fix is not to ban the model; it is to make
+the numbers come from the data and prove it. The verify-or-flag idea is
+published, and one commercial tool markets deterministic record-cited
+reporting. The contribution here is the open,
 offline chain — compute with a receipt, draft, fail-closed grounding gate, export
 with a receipts manifest — plus a fail-closed review queue for mapping explicit
 requirements onto schema-variant exports, and a privacy posture (aggregate,
