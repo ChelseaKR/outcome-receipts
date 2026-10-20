@@ -6,7 +6,7 @@ import json
 import re
 import shutil
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -1295,9 +1295,11 @@ def test_ai_dev_measurement_is_silent_against_the_real_committed_roadmap() -> No
 
 
 def test_every_baseline_row_in_the_real_roadmap_will_fail_once_its_date_passes() -> None:
-    # The real ledger read through the real check: on 2026-10-12 every row that
-    # is parked in BASELINE today reports overdue. Without this, "the gate can
-    # fail" would be a claim about a fixture rather than about the document.
+    # The real ledger read through the real check: on the day after the latest
+    # date any row is parked until, every row parked in BASELINE reports overdue.
+    # The date comes from the document, so re-dating the roadmap cannot break this
+    # test, and without it "the gate can fail" would be a claim about a fixture
+    # rather than about the document.
     root = Path(__file__).resolve().parents[1]
     roadmap = (root / "docs" / "ROADMAP.md").read_text(encoding="utf-8")
     parked = [
@@ -1308,8 +1310,15 @@ def test_every_baseline_row_in_the_real_roadmap_will_fail_once_its_date_passes()
         and "BASELINE" in line.split("|")[-2]
     ]
     assert parked, "the ledger records no BASELINE rows, so this test proves nothing"
+    parked_until = [
+        date.fromisoformat(match.group(1))
+        for line in parked
+        if (match := re.search(r"BASELINE until (\d{4}-\d{2}-\d{2})", line))
+    ]
+    assert len(parked_until) == len(parked), "every BASELINE row must name its date"
+    after = max(parked_until) + timedelta(days=1)
 
-    overdue = ai_dev_measurement_failures(root, date(2026, 10, 12))
+    overdue = ai_dev_measurement_failures(root, after)
 
     assert len(overdue) == len(parked)
-    assert all("passed on 2026-10-12" in failure for failure in overdue)
+    assert all(f"passed on {after.isoformat()}" in failure for failure in overdue)
