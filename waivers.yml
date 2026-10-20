@@ -9,9 +9,13 @@ waivers:
       The registry profile applies a Python-below-3.7 compatibility rule to a
       Python-3.12-only package. importlib.resources is the correct standard-
       library API for packaged gettext catalogs; issue 53 owns retirement.
+      Re-verified 2026-10-19: Semgrep 1.168.0 on Linux (python:3.12-slim,
+      p/default and p/python, ERROR severity) over a copy of the repository with
+      the nosemgrep comment removed reports exactly one finding, this rule at
+      copy.py:10, so the waiver is still load-bearing.
     owner: chelseakr
     granted: 2026-07-12
-    expires: 2026-10-12
+    expires: 2027-01-17
     link: https://github.com/ChelseaKR/outcome-receipts/issues/53
 
   - id: WVR-004
