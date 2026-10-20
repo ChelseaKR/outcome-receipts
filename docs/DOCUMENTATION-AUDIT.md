@@ -1,6 +1,6 @@
 # Documentation audit
 
-Reviewed 2026-07-12 against portfolio-standards v1.0.1.
+Reviewed 2026-07-12 against portfolio-standards v1.0.1; re-verified 2026-10-19 against v3.0.1.
 
 ## Result
 
@@ -10,7 +10,7 @@ now includes a canonical `docs/adr/` log, operations and incident runbooks, sour
 and synthetic data cards, generated AI cards, accessibility artifacts, i18n policy
 and review records, threat/DPIA findings, and AI governance artifacts.
 
-The README declares all thirteen standards with an applicable tier or reason. The
+The README declares all sixteen standards with an applicable tier or reason. The
 roadmap records project values rather than restating generic gates. Currency-
 sensitive docs carry a verification date and recheck condition.
 
@@ -28,4 +28,4 @@ suppressions, catalog extraction/parity, and authored UTF-8. Relative Markdown
 links are checked during this remediation and `make verify` gates the executable
 artifacts and generated cards.
 
-*Last verified: 2026-07-12 · Recheck cadence: quarterly, each release, and each standards bump.*
+*Last verified: 2026-10-19 · Recheck cadence: quarterly, each release, and each standards bump.*

@@ -182,7 +182,7 @@ The implemented designs and real-world validation gates are recorded in
 | i18n | 51 EN/ES gettext keys, zero missing/fuzzy entries, placeholder parity | AUTO |
 | Data governance | Three current data cards; L3 input ephemeral, L2 output operator-retained | AUTO + REVIEW |
 | Incident response | 0 recorded incidents; label/postmortem and secret runbook armed | REVIEW |
-| AI-DEV-MEASUREMENT: APPLIES | AI tooling participates in development here, so the delivery and quality-debt metrics below are collected. Diagnostic counters (lines of code, suggestion-acceptance rate, share of AI-written code) are tracked nowhere and gate nothing | BASELINE until 2026-10-11 |
+| AI-DEV-MEASUREMENT: APPLIES | AI tooling participates in development here, so the delivery and quality-debt metrics below are collected. Diagnostic counters (lines of code, suggestion-acceptance rate, share of AI-written code) are tracked nowhere and gate nothing | BASELINE until 2027-01-11 |
 
 ### DORA and quality-debt baseline
 
@@ -194,13 +194,13 @@ becomes an AUTO or REVIEW gate or is retired, and the decision is recorded here.
 
 | Metric | Measured 2026-07-11 | Gate |
 |--------|---------------------|------|
-| Deployment frequency | 2.1 deploy/merge proxies per week; 27 merges; 3.19 PRs per week | BASELINE until 2026-10-11 |
-| Change lead time | 149.8 hours median | BASELINE until 2026-10-11 |
-| Change-fail rate | 0.0, revert-based proxy | BASELINE until 2026-10-11 |
-| Revert rate | zero reverts | BASELINE until 2026-10-11 |
-| Churn ratio | 0.074 | BASELINE until 2026-10-11 |
-| Short-term churn (14 days) | 69% | BASELINE until 2026-10-11 |
-| Unreviewed-merge rate | 100% | BASELINE until 2026-10-11 |
+| Deployment frequency | 2.1 deploy/merge proxies per week; 27 merges; 3.19 PRs per week | BASELINE until 2027-01-11 |
+| Change lead time | 149.8 hours median | BASELINE until 2027-01-11 |
+| Change-fail rate | 0.0, revert-based proxy | BASELINE until 2027-01-11 |
+| Revert rate | zero reverts | BASELINE until 2027-01-11 |
+| Churn ratio | 0.074 | BASELINE until 2027-01-11 |
+| Short-term churn (14 days) | 69% | BASELINE until 2027-01-11 |
+| Unreviewed-merge rate | 100% | BASELINE until 2027-01-11 |
 
 The unreviewed-merge value is the one that matters most here. It is a risk signal
 for a solo-maintained, agent-assisted repository, and it is what the required
@@ -208,8 +208,15 @@ pull-request acknowledgment and the complete automated gate set exist to answer.
 Its graduation decision is not a mechanical one: ADR 0002 holds the ruleset's
 required approving reviews at zero for as long as there is one maintainer, so
 gating on this metric and that ADR cannot both stand. Whichever way it goes on
-2026-10-11 needs a recorded decision, and if the metric graduates, a superseding
+2027-01-11 needs a recorded decision, and if the metric graduates, a superseding
 ADR.
+
+Re-dated 2026-10-19: all eight BASELINE rows above moved from 2026-10-11 to
+2027-01-11, one quarter, the cadence this file already uses. The date passed with
+no decision recorded and the observe-only collection still describes the same
+2026-07-11 window, so the rows were re-dated rather than silently left to lapse.
+No metric graduated and none was retired. The ADR 0002 conflict with the
+unreviewed-merge metric is still open and is not resolved by this change.
 
 Two artifacts the measurement standard asks for are not here and are not claimed:
 the weekly portfolio metrics rollup, which is produced at the portfolio level

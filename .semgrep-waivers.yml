@@ -23,7 +23,7 @@ waivers:
     locations:
       - src/outcome_receipts/copy.py (packaged gettext catalog loading)
     added: 2026-07-12
-    last_reviewed: 2026-08-28
+    last_reviewed: 2026-10-19
     tracking_issue: https://github.com/ChelseaKR/outcome-receipts/issues/53
     reason: >
       The rule protects Python versions below 3.7. This package requires Python
@@ -34,7 +34,10 @@ waivers:
       waiver remains necessary. 2026-08-28 review: repeated with the suppression
       deleted. Semgrep 1.168.0 ran 320 rules over the file and reported this one
       finding, at copy.py:8, so the waiver is still load-bearing and issue 53
-      cannot be closed yet.
+      cannot be closed yet. 2026-10-19 review: repeated on Linux with the
+      suppression deleted (Semgrep 1.168.0 in python:3.12-slim, p/default and
+      p/python, ERROR severity). It reported the same single finding, at
+      copy.py:10, so the waiver is still needed.
   - rule_id: sqlalchemy-execute-raw-query
     locations:
       - src/outcome_receipts/engine.py (load_table, CREATE TABLE)

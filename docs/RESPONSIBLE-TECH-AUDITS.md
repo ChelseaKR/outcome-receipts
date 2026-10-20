@@ -134,7 +134,8 @@ are not inferred from automated results.
   remain unexecuted, and a no-suppression Semgrep 1.168.0 scan still reports the
   obsolete Python 3.7 rule against this Python 3.12-only package. The 2026-08-28
   review repeated both no-suppression scans: each rule still fires, so neither
-  waiver can be retired. `make hygiene` now also runs
+  waiver can be retired. The 2026-10-19 review repeated the Python 3.7 scan on
+  Linux with the suppression removed and it still reports that rule. `make hygiene` now also runs
   `scripts/check_semgrep_waivers.py`, which compares `.semgrep-waivers.yml`
   against `src/`, `tests/`, `scripts/` and `.github/` in both directions, so
   within those four directories a ledger row cannot outlive the suppression it
