@@ -29,4 +29,4 @@ unfair metric definition. Receipts prove derivation, not collection quality or
 fitness for a funder's definition. The operator must review source freshness,
 authority, consent, and metric definitions before approval.
 
-*Last verified: 2026-07-12 · Recheck cadence: on any loader, lineage, or retention change, and at least quarterly.*
+*Last verified: 2026-10-19 · Recheck cadence: on any loader, lineage, or retention change, and at least quarterly.*
